@@ -1,0 +1,42 @@
+{
+  "name": "grok-bot-anywhere",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Grok Bot context delivery for desktop",
+  "author": "RongleCat",
+  "type": "module",
+  "main": "src/main/main.mjs",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "npm run build && electron .",
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "smoke": "npm run build && electron . --smoke-test",
+    "build:native": "node scripts/build-native.mjs",
+    "build:share": "node scripts/build-share.mjs",
+    "smoke:native": "npm run build && npm run build:native && node scripts/smoke-native.mjs",
+    "package": "npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "grok-bot-sdk": "file:vendor/grok-bot-sdk-0.1.0.tgz",
+    "grok-bot-avatar-engine": "file:vendor/grok-bot-avatar-engine-1.0.0.tgz"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.25.12"
+  },
+  "build": {
+    "appId": "dev.ronglecat.grokbotanywhere",
+    "productName": "Grok Bot Anywhere",
+    "directories": { "output": "release" },
+    "files": ["src/**", "out/**", "package.json", "node_modules/**"],
+    "extraResources": [
+      {"from":"native/GrokBotCompanion.app","to":"native/GrokBotCompanion.app","filter":["**/*"]},
+      {"from":"native/GrokBotMenuHost.app","to":"native/GrokBotMenuHost.app","filter":["**/*"]},
+      {"from":"out/native-avatar","to":"native/avatar","filter":["**/*"]}
+    ],
+    "mac": { "category": "public.app-category.productivity", "target": ["dir"], "identity": null },
+    "win": { "target": ["dir"] }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "mode": "fresh-browser-login",
+  "clientVersion": "0.70.2",
+  "steps": [
+    {
+      "name": "account.GetMe",
+      "status": "passed",
+      "httpStatus": 200,
+      "identityPresent": true,
+      "emailPresent": true
+    },
+    {
+      "name": "cloud.ListGrokBotAgents",
+      "status": "passed",
+      "httpStatus": 200,
+      "agentsArrayPresent": true
+    }
+  ],
+  "cloudBotCount": 37,
+  "cloudRoster": {
+    "truncated": false,
+    "avatarMetadataCount": 20,
+    "harnessCounts": {
+      "temporal": 37
+    }
+  }
+}

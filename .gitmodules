@@ -1,0 +1,3 @@
+[submodule "vendor/bloub"]
+	path = vendor/bloub
+	url = https://github.com/jeremy-prt/bloub.git

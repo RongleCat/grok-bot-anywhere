@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-14T16:12:22.718Z",
+  "targetName": "Webhook 测试员",
+  "transport": "Connect JSON server-streaming",
+  "frames": [
+    {
+      "flag": 0,
+      "keys": [
+        "connected"
+      ],
+      "rowCount": 0,
+      "errorPresent": false
+    },
+    {
+      "flag": 0,
+      "keys": [
+        "agentState"
+      ],
+      "rowCount": 0,
+      "errorPresent": false
+    },
+    {
+      "flag": 0,
+      "keys": [
+        "boxState"
+      ],
+      "rowCount": 0,
+      "errorPresent": false
+    },
+    {
+      "flag": 0,
+      "keys": [
+        "agentState"
+      ],
+      "rowCount": 0,
+      "errorPresent": false
+    }
+  ],
+  "credentialsLogged": false,
+  "httpStatus": 200,
+  "contentType": "application/connect+json",
+  "status": "connected-verified"
+}

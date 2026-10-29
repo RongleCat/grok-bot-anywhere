@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-14T16:16:04.635Z",
+  "credentialsLogged": false,
+  "newMessagesSent": 0,
+  "events": [
+    {
+      "type": "connected"
+    },
+    {
+      "type": "entry"
+    },
+    {
+      "type": "entry"
+    },
+    {
+      "type": "message",
+      "replyHasOriginalMarker": false,
+      "replyHasOriginalHash": false
+    },
+    {
+      "type": "message",
+      "replyHasOriginalMarker": true,
+      "replyHasOriginalHash": true
+    }
+  ],
+  "roster": {
+    "count": 35,
+    "truncated": false,
+    "normalizedAvatarCount": 35,
+    "derivedShapeCount": 15,
+    "explicitShapeCount": 20
+  },
+  "target": {
+    "name": "Webhook 测试员",
+    "avatarShape": "cloud",
+    "avatarColor": "brown"
+  },
+  "downstreamContentType": "text/event-stream; charset=utf-8",
+  "replyForwardingVerified": true,
+  "status": "avatar-and-sse-replay-verified"
+}

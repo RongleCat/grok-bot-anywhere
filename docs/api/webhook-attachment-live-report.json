@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-14T15:04:24.450Z",
+  "targetName": "Webhook 测试员",
+  "targetAgentId": "33cf1aae-3a51-452d-b761-34a6ccb62201",
+  "messageId": "814a113e-889b-4b15-a3b8-3d58d8aaf9d9",
+  "baselineSeq": "18",
+  "status": "attachment-read-verified",
+  "sendAttempted": true,
+  "steps": [
+    {
+      "name": "BeginGrokBotAttachmentUpload",
+      "httpStatus": 200,
+      "mode": "GROK_BOT_ATTACHMENT_UPLOAD_MODE_USE_BOX"
+    },
+    {
+      "name": "gateway.uploadAttachment",
+      "httpStatus": 200,
+      "pathPresent": true,
+      "bytes": 30782
+    },
+    {
+      "name": "send-attempt",
+      "messageId": "814a113e-889b-4b15-a3b8-3d58d8aaf9d9"
+    },
+    {
+      "name": "SendGrokBotUserMessage",
+      "httpStatus": 200,
+      "delivery": "accepted-temporal"
+    }
+  ],
+  "attachment": {
+    "filename": "ESP32_调研与文章资料.md",
+    "bytes": 30782,
+    "sha256": "8c9eca9669ed1c88f8c01ce4b2d23bcacaa334af0f936e1bdee466f782f76b1c",
+    "firstHeading": "ESP32：起源、发展、生态与真实案例"
+  },
+  "send": {
+    "messageId": "814a113e-889b-4b15-a3b8-3d58d8aaf9d9",
+    "delivery": "accepted-temporal",
+    "dispatched": true,
+    "attachment": {
+      "filename": "ESP32_调研与文章资料.md",
+      "bytes": 30782,
+      "sha256": "8c9eca9669ed1c88f8c01ce4b2d23bcacaa334af0f936e1bdee466f782f76b1c"
+    }
+  },
+  "observation": {
+    "attempts": 3,
+    "newRows": 4,
+    "kinds": {
+      "send-message": 2,
+      "message": 1,
+      "user-attachment": 1
+    },
+    "bodyOmittedCount": 0
+  },
+  "replies": [
+    {
+      "seq": "22",
+      "id": "t4s1",
+      "text": "验收标记：`MVP-attachment-check:814a113e-889b-4b15-a3b8-3d58d8aaf9d9`\n\n附件我打开读过了。\n\n1. 第一行标题原文是 `# ESP32：起源、发展、生态与真实案例`。\n2. 原始文件是 30782 字节。SHA-256 是 `8c9eca9669ed1c88f8c01ce4b2d23bcacaa334af0f936e1bdee466f782f76b1c`，直接对原始字节计算，没有重新编码。\n3. 文件里只有一个一级标题，就是上面那行。二级标题依次是：先理解它是什么；一、它从哪里来；二、发展时间线：先发布，不等于当时就量产；三、整个芯片系列怎么理解；四、生态不只是开发板多；五、\"开源\"到底开了什么；六、个人玩家可以做什么；七、企业实际怎么使用；八、好玩的案例与选图说明；九、图片素材包说明；十、文章怎么组织更有意思；来源索引。最后一个来源编号是 `[S51]`，对应 FluidNC。\n4. 概要：ESP32 是乐鑫推出的一系列微控制器芯片。乐鑫 2008 年在上海成立，2014 年做出 ESP8266，2016 年发布第一代 ESP32。它把处理器、Wi-Fi、蓝牙和外设控制做进一颗芯片，主要跑 ESP-IDF 和 FreeRTOS，不是用来装 Linux 的。后来芯片按用途分出几条线：S 系列偏屏幕、音频和视觉，C 系列转向 RISC-V 和 Wi-Fi 6，H 系列做 Thread 和 Zigbee，P4 主打算力和视频，E22 是无线协处理器。开发方式有 Arduino、MicroPython、Rust、ESPHome 等，配套还有 LVGL 界面库、ESP-SR 语音和 RainMaker 云服务。个人玩家常用它做 WLED 灯光、小智语音终端、桌面信息屏。商业产品里，Shelly Plus 1 和 Home Assistant Voice 都公开写明用了 ESP32，此外还有安防、电动车充电等使用乐鑫方案的案例。文档也提醒，从个人 Demo 做到量产产品，中间还隔着认证、OTA 和长期供货这些工作。"
+    },
+    {
+      "seq": "21",
+      "id": "t4s0",
+      "text": "好的，我先打开附件读一遍。"
+    }
+  ],
+  "validation": {
+    "hashMatched": true,
+    "byteCountMatched": true,
+    "titleMatched": true,
+    "markerMatched": true,
+    "verified": true
+  }
+}

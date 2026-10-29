@@ -1,0 +1,28 @@
+{
+  "mode": "fresh-browser-login",
+  "clientVersion": "0.70.2",
+  "steps": [
+    {
+      "name": "account.GetMe",
+      "status": "passed",
+      "httpStatus": 200,
+      "identityPresent": true,
+      "emailPresent": true
+    },
+    {
+      "name": "broker.EnsureSandBox(no-wake)",
+      "status": "passed",
+      "httpStatus": 200
+    },
+    {
+      "name": "gateway",
+      "status": "host_not_running"
+    }
+  ],
+  "connection": {
+    "gatewayURLPresent": false,
+    "gatewayTokenPresent": false,
+    "networkTokenPresent": false,
+    "runState": "SAND_BOX_RUN_STATE_HIBERNATED"
+  }
+}

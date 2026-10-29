@@ -1,0 +1,35 @@
+{
+  "name": "grok-bot-client-protocol-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "inventory": "node cli.mjs inventory",
+    "verify": "node cli.mjs verify --desktop"
+  },
+  "description": "Unofficial Grok Bot client protocol SDK with normalized avatars and Connect-to-SSE reply forwarding",
+  "exports": {
+    ".": {
+      "types": "./sdk.d.mts",
+      "import": "./sdk.mjs"
+    },
+    "./avatar": {
+      "types": "./avatar.d.mts",
+      "import": "./avatar.mjs"
+    },
+    "./desktop": {
+      "types": "./desktop.d.mts",
+      "import": "./desktop.mjs"
+    }
+  },
+  "types": "./sdk.d.mts",
+  "files": [
+    "*.mjs",
+    "*.d.mts",
+    "README.md"
+  ]
+}

@@ -1,0 +1,15 @@
+import {execFileSync} from 'node:child_process';
+import {mkdir,cp,writeFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {join} from 'node:path';
+if(process.platform!=='darwin')throw new Error('Build the Mac companion on macOS. Windows companion is not implemented yet.');
+const root=fileURLToPath(new URL('../../',import.meta.url));
+execFileSync('swift',['build'],{cwd:root,stdio:'inherit'});
+const binaryRoot=execFileSync('swift',['build','--show-bin-path'],{cwd:root,encoding:'utf8'}).trim();
+const bundle=join(root,'desktop/native/GrokBotCompanion.app/Contents');
+await mkdir(join(bundle,'MacOS'),{recursive:true});await mkdir(join(bundle,'Resources'),{recursive:true});
+await cp(join(binaryRoot,'TouchBarBot'),join(bundle,'MacOS/TouchBarBot'));
+await cp(join(binaryRoot,'TouchBarBot_TouchBarBotApp.bundle'),join(bundle,'Resources/TouchBarBot_TouchBarBotApp.bundle'),{recursive:true});
+await writeFile(join(bundle,'Info.plist'),`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleName</key><string>Grok Bot Anywhere</string><key>CFBundleIdentifier</key><string>dev.ronglecat.grokbotanywhere.companion</string><key>CFBundleExecutable</key><string>TouchBarBot</string><key>CFBundlePackageType</key><string>APPL</string><key>LSUIElement</key><true/><key>LSMinimumSystemVersion</key><string>14.0</string><key>NSMicrophoneUsageDescription</key><string>录制你主动发送给 Bot 的语音。</string><key>NSSpeechRecognitionUsageDescription</key><string>将语音转成可编辑的文字。</string><key>NSAppleEventsUsageDescription</key><string>把你在 Finder 选中的文件加入输入框。</string></dict></plist>`);
+execFileSync('codesign',['--force','--sign','-',join(root,'desktop/native/GrokBotCompanion.app')],{stdio:'inherit'});
+console.log('Built native Mac companion.');

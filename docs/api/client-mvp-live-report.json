@@ -1,0 +1,42 @@
+{
+  "mode": "desktop-existing-session",
+  "clientVersion": "0.70.2",
+  "steps": [
+    {
+      "name": "account.GetMe",
+      "status": "passed",
+      "httpStatus": 200,
+      "identityPresent": true,
+      "emailPresent": true
+    },
+    {
+      "name": "broker.EnsureSandBox(no-wake)",
+      "status": "passed",
+      "httpStatus": 200
+    },
+    {
+      "name": "gateway.health",
+      "status": "passed",
+      "httpStatus": 200,
+      "reportedOK": true
+    },
+    {
+      "name": "gateway.listAgents",
+      "status": "passed",
+      "httpStatus": 200,
+      "arrayResponse": true
+    }
+  ],
+  "connection": {
+    "gatewayURLPresent": true,
+    "gatewayTokenPresent": true,
+    "networkTokenPresent": true,
+    "runState": "SAND_BOX_RUN_STATE_RUNNING"
+  },
+  "botCount": 37,
+  "rosterMetadata": {
+    "hiddenCount": 0,
+    "groupCount": 2,
+    "avatarCount": 20
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-14T15:32:30.004Z",
+  "clientVersion": "0.70.2",
+  "targetName": "Webhook 测试员",
+  "cloudResponse": {
+    "avatarShapePresent": false,
+    "avatarColorPresent": false,
+    "avatarVersionPresent": false,
+    "avatarUrlPresent": false
+  },
+  "rosterSnapshot": {
+    "records": 35,
+    "shapeCount": 20,
+    "colorCount": 20,
+    "avatarUrlCount": 0
+  },
+  "clientFallback": {
+    "key": "agentId UUID",
+    "shape": "cloud",
+    "color": "brown",
+    "colorHex": "#936439"
+  },
+  "evidence": {
+    "renderSource": "dist/renderer/assets/index-CjjO5fU0.js",
+    "defaultsSource": "dist/renderer/assets/index.eager-platform-DUN5VkaE.js",
+    "bundleExecuted": false,
+    "visualMatch": "此前客户端截图为棕色云朵形"
+  }
+}

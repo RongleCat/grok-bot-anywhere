@@ -1,0 +1,17 @@
+.build/
+.swiftpm/
+dist/
+node_modules/
+.cache/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.xcuserstate
+desktop/out/
+desktop/native/
+desktop/release/
+desktop/release-share/
+desktop/artifacts/
+desktop/release-auto/
+desktop/release-auto2/

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>TouchBarBot</string>
+  <key>CFBundleDisplayName</key><string>Touch Bar Bot</string>
+  <key>CFBundleIdentifier</key><string>dev.local.TouchBarBot</string>
+  <key>CFBundleExecutable</key><string>TouchBarBot</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.2.0</string>
+  <key>CFBundleVersion</key><string>2</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>在你按下录音按钮后，录制发给选中 Bot 的语音输入。</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>在你选择转写时，将录音转成可检查和编辑的文字。</string>
+  <key>NSAppleEventsUsageDescription</key><string>当你从 Finder 唤起输入框时，将选中的文件加入待发送附件；仅在点击发送后上传。</string>
+</dict>
+</plist>

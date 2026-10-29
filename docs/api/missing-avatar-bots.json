@@ -1,0 +1,312 @@
+{
+  "date": "2026-10-14T15:51:21.463Z",
+  "clientAlgorithm": "grok-bot-0.70.2",
+  "request": {
+    "includeTeamAgents": true
+  },
+  "rosterCount": 35,
+  "truncated": false,
+  "missingFieldCount": 15,
+  "rows": [
+    {
+      "name": "林晓宁",
+      "agentId": "cfb992b9-c3c7-40d9-a14d-36be222c6f60",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "hex",
+      "shapeChinese": "六边形",
+      "color": "gray",
+      "colorChinese": "灰色",
+      "baseHex": "#777777",
+      "lightHex": "#959595",
+      "darkHex": "#777777",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "大宝贝儿",
+      "agentId": "27270535-1a1a-496f-9a47-d6db760825b5",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "squircle",
+      "shapeChinese": "方圆形",
+      "color": "red",
+      "colorChinese": "红色",
+      "baseHex": "#FF263C",
+      "lightHex": "#FF3E51",
+      "darkHex": "#E02135",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "本地模型管理员",
+      "agentId": "8cd70013-38f3-4d3f-84f3-71210584c443",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "tablet",
+      "shapeChinese": "圆角长方形",
+      "color": "brown",
+      "colorChinese": "棕色",
+      "baseHex": "#936439",
+      "lightHex": "#A27952",
+      "darkHex": "#855C36",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "飞书知识库维护专员",
+      "agentId": "b5c7750c-8fab-4f5f-b812-f1e52a19b180",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "wedge",
+      "shapeChinese": "楔形",
+      "color": "violet",
+      "colorChinese": "紫色",
+      "baseHex": "#9159FE",
+      "lightHex": "#A97EFE",
+      "darkHex": "#804EE0",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "灵感收集官",
+      "agentId": "1445e72e-ad7c-4e5c-b1a1-3d448b5e70bb",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "squircle",
+      "shapeChinese": "方圆形",
+      "color": "orange",
+      "colorChinese": "橙色",
+      "baseHex": "#FF6700",
+      "lightHex": "#FF781C",
+      "darkHex": "#FF6700",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "Muse 管家",
+      "agentId": "37b52628-e83d-4faa-a864-a33ffdf6cc74",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "hex",
+      "shapeChinese": "六边形",
+      "color": "cyan",
+      "colorChinese": "青色",
+      "baseHex": "#00BCA6",
+      "lightHex": "#1CC3B0",
+      "darkHex": "#00A592",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "额度省省助手",
+      "agentId": "e421125b-b179-4bcd-860e-e3f9aa477fb7",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "tablet",
+      "shapeChinese": "圆角长方形",
+      "color": "yellow",
+      "colorChinese": "黄色",
+      "baseHex": "#FF9800",
+      "lightHex": "#FFAF38",
+      "darkHex": "#FF9800",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "虚拟机服务管家",
+      "agentId": "3173a5a5-5ccc-47e0-a591-caad022dc2c6",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "squircle",
+      "shapeChinese": "方圆形",
+      "color": "violet",
+      "colorChinese": "紫色",
+      "baseHex": "#9159FE",
+      "lightHex": "#A97EFE",
+      "darkHex": "#804EE0",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "邮件管家",
+      "agentId": "f9abaf09-016b-4740-803a-d67dbad40a9b",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "wedge",
+      "shapeChinese": "楔形",
+      "color": "brown",
+      "colorChinese": "棕色",
+      "baseHex": "#936439",
+      "lightHex": "#A27952",
+      "darkHex": "#855C36",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "视频创作助手",
+      "agentId": "8b77d8ad-3e5d-4205-8752-8640824fb93e",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "pebble",
+      "shapeChinese": "圆润卵石",
+      "color": "blue",
+      "colorChinese": "蓝色",
+      "baseHex": "#1084FE",
+      "lightHex": "#2A92FE",
+      "darkHex": "#0E74E0",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "Webhook 测试员",
+      "agentId": "33cf1aae-3a51-452d-b761-34a6ccb62201",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "cloud",
+      "shapeChinese": "云朵",
+      "color": "brown",
+      "colorChinese": "棕色",
+      "baseHex": "#936439",
+      "lightHex": "#A27952",
+      "darkHex": "#855C36",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "飞书应用管家",
+      "agentId": "cf72e039-0576-4f8c-8a17-60a97bde315c",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "hex",
+      "shapeChinese": "六边形",
+      "color": "gray",
+      "colorChinese": "灰色",
+      "baseHex": "#777777",
+      "lightHex": "#959595",
+      "darkHex": "#777777",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "美术编辑",
+      "agentId": "c31fbddb-b97b-40b3-9cb7-9460593513c7",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "teardrop",
+      "shapeChinese": "水滴",
+      "color": "cyan",
+      "colorChinese": "青色",
+      "baseHex": "#00BCA6",
+      "lightHex": "#1CC3B0",
+      "darkHex": "#00A592",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "排版发行",
+      "agentId": "4a74e25b-f716-4dd4-a2a6-64d71bef284c",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "teardrop",
+      "shapeChinese": "水滴",
+      "color": "gray",
+      "colorChinese": "灰色",
+      "baseHex": "#777777",
+      "lightHex": "#959595",
+      "darkHex": "#777777",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    },
+    {
+      "name": "Bot学习站",
+      "agentId": "eecc799a-e4a0-4ed6-991c-695814127a42",
+      "kind": "character",
+      "pictureVersionPresent": false,
+      "pictureUrlPresent": false,
+      "shape": "squircle",
+      "shapeChinese": "方圆形",
+      "color": "cyan",
+      "colorChinese": "青色",
+      "baseHex": "#00BCA6",
+      "lightHex": "#1CC3B0",
+      "darkHex": "#00A592",
+      "sources": {
+        "shape": "id-default",
+        "color": "id-default"
+      },
+      "rawShape": null,
+      "rawColor": null
+    }
+  ]
+}

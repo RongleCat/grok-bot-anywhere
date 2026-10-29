@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-15",
+  "timezone": "Asia/Singapore",
+  "applicationVersion": "0.2.0",
+  "credentialsLogged": false,
+  "newMessagesSent": 0,
+  "roster": {"count": 37, "truncated": false, "normalizedAvatars": 37},
+  "checks": {
+    "nativeWelcomeUI": true,
+    "nativePreviewList": true,
+    "liquidGlassComposer": true,
+    "offlineAvatarVisible": true,
+    "draftPreservedAfterEscape": true,
+    "bundledNodeBridge": true,
+    "swiftModelTests": 5,
+    "nodeAndAvatarTests": 58
+  },
+  "manualChecksRemaining": ["physicalTouchBarScrubbing", "crossApplicationHotkey", "finderPermission", "microphoneAndSpeechPermission", "nativeFreshSendAndReply"]
+}

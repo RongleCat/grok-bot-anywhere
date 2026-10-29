@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'">
+<style>
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+#avatar { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.avatar-frame { position: absolute; inset: 0; }
+.avatar-clip { position: absolute; inset: 0; overflow: hidden; }
+.glyph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transform-origin: center center; }
+.glyph svg { overflow: visible; }
+.avatar-clip > .glyph > * { width: 100%; height: 100%; }
+.main-badge { position: absolute; right: 0; bottom: 0; width: calc(100% * 16 / 60); height: calc(100% * 16 / 60); overflow: visible; pointer-events: none; z-index: 2; }
+#live { position: absolute; left: 0; top: 0; width: 128px; height: 128px; overflow: hidden; }
+#stage { display: none; }
+body.strip #stage { display: block; position: absolute; left: 0; top: 0; background: transparent; }
+body.strip #avatar, body.strip #live { display: none; }
+body.strip .cell { position: relative; overflow: hidden; }
+body.strip .cell .clip { position: absolute; inset: 0; overflow: hidden; }
+body.strip .cell .glyph { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+<div id="avatar"></div>
+<div id="live"></div>
+<div id="stage"></div>
+<script type="module" src="bridge.js"></script>
+</body>
+</html>
