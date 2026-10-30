@@ -16,9 +16,9 @@ const errors={
  PREVIEW_ONLY:['当前是预览，不能发送。','Messages cannot be sent in preview.'],
  RECEIPT_EMPTY:['先写一点内容，或加上文件。','Write something or add a file.'],
  LOGIN_REQUIRED:['请登录后发送。','Sign in to send.'],
- SEND_UNCONFIRMED:['发送结果未确认，请到收件里核对。','Delivery was not confirmed. Check Inbox.'],
- SEND_FAILED:['没有发出去，请到收件里重试。','Delivery failed. Retry it from Inbox.'],
- BOT_SEND_HELD:['这个 Bot 有一条未确认的发送，请先到收件里核对。','This Bot has an unconfirmed send. Check Inbox first.']
+ SEND_UNCONFIRMED:['发送结果未确认，请到发送记录里核对。','Delivery was not confirmed. Check Send history.'],
+ SEND_FAILED:['没有发出去，请到发送记录里重试。','Delivery failed. Retry it from Send history.'],
+ BOT_SEND_HELD:['这个 Bot 有一条未确认的发送，请先到发送记录里核对。','This Bot has an unconfirmed send. Check Send history first.']
 };
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,4000);}
 function svg(path){const node=document.createElementNS('http://www.w3.org/2000/svg','svg');node.setAttribute('viewBox','0 0 16 16');node.setAttribute('width','15');node.setAttribute('height','15');node.setAttribute('aria-hidden','true');const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('fill','currentColor');shape.setAttribute('d',path);node.append(shape);return node;}
@@ -51,10 +51,14 @@ function confirmPick(){
  void api.noteBot(bot.id).catch(()=>{});
  render();
 }
+function mergePaths(paths){
+ for(const path of paths??[]){if(typeof path!=='string'||!path||draft.paths.includes(path)||draft.paths.length+draft.remote.length>=100)continue;draft.paths.push(path);draft.names.push(path.split(/[\\/]/).pop());}
+}
 function applyPayload(data){
  if(!data?.botId)return;
  if(data.id){draft.botId=data.botId;draft.receiptId=data.id;draft.text=data.text??'';draft.remote=data.files??[];draft.paths=[];draft.names=[];}
  else if(data.botId!==draft.botId){draft.botId=data.botId;draft.receiptId=null;draft.remote=[];}
+ if(!data.id)mergePaths(data.localPaths);
  picking=false;focus=true;
 }
 function grow(field){field.style.height='auto';field.style.height=`${Math.min(160,Math.max(22,field.scrollHeight))}px`;}
@@ -197,10 +201,7 @@ function onKey(event){
  }
  if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();if(picking)confirmPick();else void send();}
 }
-function addPaths(paths){
- for(const path of paths??[]){if(!path||draft.paths.includes(path)||draft.paths.length+draft.remote.length>=100)continue;draft.paths.push(path);draft.names.push(path.split(/[\\/]/).pop());}
- render();
-}
+function addPaths(paths){mergePaths(paths);render();}
 async function addPicked(){try{addPaths(await api.pickFiles());}catch(error){toast(errors[error.message]?t(...errors[error.message]):t('没有选到文件。','No file was chosen.'));}}
 async function send(){
  const bot=ordered().find(item=>item.id===draft.botId);

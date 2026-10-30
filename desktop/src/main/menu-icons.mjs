@@ -9,7 +9,9 @@ export async function captureMenuIcons(state,avatarPage){
    const config={agentId:entry.botId,shape:entry.bot.avatarShape,color:entry.bot.avatarColor,main:state.runtime?.mainAgentId===entry.botId};
    icons.push({botId:entry.botId,png:await window.webContents.executeJavaScript(`Promise.race([window.captureMenuAvatar(${JSON.stringify(config)}),new Promise((_,reject)=>setTimeout(()=>reject(new Error('MENU_AVATAR_TIMEOUT')),10000))])`)});
   }
-  return await resolvePictureIcons(state,icons);
+  const resolved=await resolvePictureIcons(state,icons);
+  for(const icon of resolved)icon.png=await window.webContents.executeJavaScript(`window.whiteMenuIcon(${JSON.stringify(icon.png)})`);
+  return resolved;
  }finally{window.destroy();}
 }
 export async function resolvePictureIcons(state,icons){

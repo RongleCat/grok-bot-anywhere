@@ -18,8 +18,8 @@ export function menuEntries(state){
     .sort((a,b)=>a.r.order-b.r.order||a.index-b.index).slice(0,12).map(({r,bot})=>({accountId:state.account.id,botId:bot.id,botName:bot.name||'Bot',sessionId:bot.sessionId??'',mode:r.mode,prefix:r.prefix,
       avatarKey:JSON.stringify([bot.avatarShape,bot.avatarColor,bot.avatar?.picture?.url,bot.avatar?.picture?.version,state.runtime?.mainAgentId===bot.id]),bot}));
 }
-export function menuPlan(state,installed){
-  const desired=menuEntries(state),previous=installed?.entries??[],used=new Set();
+function stickyMenu(desired,previous){
+  const used=new Set();
   let changed=false;
   const assigned=desired.map(entry=>{
     const prior=previous.find(item=>item.accountId===entry.accountId&&item.botId===entry.botId&&item.slot);
@@ -40,6 +40,19 @@ export function menuPlan(state,installed){
     const prior=previous.find(item=>item.slot===entry.slot&&item.botId===entry.botId);
     return prior&&prior.botName===entry.botName&&prior.avatarKey===entry.avatarKey&&(prior.generation??1)===entry.generation;
   });
-  return stable?{rebuild:false,entries:previous,enabledSlots:enabled.map(entry=>entry.slot)}:{rebuild:true,entries:enabled,enabledSlots:enabled.map(entry=>entry.slot)};
+  return {stable,enabled};
+}
+export function menuPlan(state,installed){
+  const desired=menuEntries(state),previous=installed?.entries??[],sticky=stickyMenu(desired,previous);
+  const bySlot=[...sticky.enabled].sort((a,b)=>a.slot-b.slot).map(entry=>entry.botId);
+  const wanted=desired.map(entry=>entry.botId);
+  const ordered=bySlot.length===wanted.length&&bySlot.every((id,index)=>id===wanted[index]);
+  if(ordered)return sticky.stable?{rebuild:false,entries:previous,enabledSlots:sticky.enabled.map(entry=>entry.slot)}:{rebuild:true,entries:sticky.enabled,enabledSlots:sticky.enabled.map(entry=>entry.slot)};
+  const entries=desired.map((entry,index)=>{
+    const prior=previous.find(item=>item.accountId===entry.accountId&&item.botId===entry.botId&&item.slot);
+    const same=!!prior&&prior.botName===entry.botName&&prior.avatarKey===entry.avatarKey;
+    return {...entry,slot:index+1,generation:prior?(same?(prior.generation??1):(prior.generation??1)+1):1};
+  });
+  return {rebuild:true,entries,enabledSlots:entries.map(entry=>entry.slot)};
 }
 export function shareConfiguration(state){return {version:1,accountId:state.accountBusy?null:state.account?.id??null,entries:menuEntries(state).map(({bot,...entry})=>entry)};}

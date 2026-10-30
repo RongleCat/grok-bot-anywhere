@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {ShareMenu} from '../src/main/share-menu.mjs';
 import {menuEntries} from '../src/share/model.mjs';
 import {MenuReconciler} from '../src/share/reconciler.mjs';
-import {captureMenuIcons,resolvePictureIcons} from '../src/main/menu-icons.mjs';
+import {captureMenuIcons} from '../src/main/menu-icons.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const application=process.argv[process.argv.indexOf('--application')+1];
 if(!process.argv.includes('--application')||!application)throw new Error('APPLICATION_PATH_REQUIRED');
@@ -22,7 +22,7 @@ app.whenReady().then(async()=>{try{
  const keepAlive=new BrowserWindow({show:false,webPreferences:{sandbox:true,nodeIntegration:false}});
  const icons=await captureMenuIcons(state,join(root,'out/native-avatar/index.html'));
  const menu=new ShareMenu({root:join(userData,'ShareInbox'),template:join(root,'native/GrokBotMenuHost.app'),applicationsRoot:join(homedir(),'Applications'),applicationPath:resolve(application),locale:app.getLocale()});
- await menu.initialize();const result=await menu.update(state,await resolvePictureIcons(state,icons));
+ await menu.initialize();const result=await menu.update(state,icons);
  console.log(JSON.stringify({menuUpdated:true,registered:result.registered,expected:result.enabled,needsUpdate:result.needsUpdate}));
  if(process.argv.includes('--verify-reconcile')){
   const reconciler=new MenuReconciler({sync:s=>menu.sync(s),publish:s=>menu.sync(s),needsUpdate:()=>menu.status.needsUpdate,update:async(s,isCurrent)=>menu.update(s,await captureMenuIcons(s,join(root,'out/native-avatar/index.html')),{isCurrent})});

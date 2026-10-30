@@ -1,6 +1,6 @@
 import * as sdk from 'grok-bot-sdk';
 import {Delivery} from './delivery.mjs';
-import {DEFAULT_SHORTCUTS,normalizeAccelerator} from '../shortcuts.mjs';
+import {normalizeAccelerator,normalizeShortcutMap} from '../shortcuts.mjs';
 
 export class AccountSession {
   constructor({store,sdk:implementation=sdk,upload,onEvent=()=>{},now=Date.now}) {
@@ -156,17 +156,20 @@ export class AccountSession {
     if(error?.httpStatus===401||error?.httpStatus===403){this.client=null;this.credentials=null;this.stopWatches();this.onEvent({event:'auth.expired',data:{}});this.emit();}
   }
   setTheme(theme){if(!['system','light','dark'].includes(theme))throw new Error('THEME_INVALID');this.store.preference('theme',theme);this.emit();return this.snapshot();}
-  shortcutMap(){
-    const saved=this.store.preference('shortcuts');
-    if(saved&&typeof saved==='object'&&Object.prototype.hasOwnProperty.call(saved,'compose')){
-      if(saved.compose==null||saved.compose==='')return {compose:null};
-      try{return {compose:normalizeAccelerator(saved.compose)};}catch{return {compose:DEFAULT_SHORTCUTS.compose};}
-    }
-    return {compose:DEFAULT_SHORTCUTS.compose};
-  }
+  shortcutMap(){return normalizeShortcutMap(this.store.preference('shortcuts'));}
   setShortcut(slot,accelerator){
-    if(slot!=='compose')throw new Error('SHORTCUT_INVALID');
-    this.store.preference('shortcuts',{compose:normalizeAccelerator(accelerator)});
+    const current=this.shortcutMap();
+    const next=normalizeAccelerator(accelerator);
+    if(slot==='compose'){
+      if(next&&Object.values(current.bots).includes(next))throw new Error('SHORTCUT_UNAVAILABLE');
+      current.compose=next;
+    }else{
+      if(!/^[\w-]{1,80}$/.test(String(slot??'')))throw new Error('SHORTCUT_INVALID');
+      if(!this.bots.some(bot=>bot.id===slot))throw new Error('BOT_NOT_FOUND');
+      if(next&&(current.compose===next||Object.entries(current.bots).some(([id,value])=>id!==slot&&value===next)))throw new Error('SHORTCUT_UNAVAILABLE');
+      if(next)current.bots[slot]=next;else delete current.bots[slot];
+    }
+    this.store.preference('shortcuts',{compose:current.compose,bots:current.bots});
     this.emit();return this.snapshot();
   }
   async logout(){if(this.pending||this.delivery?.active.size||this.delivery?.inflight.size)throw new Error('DELIVERY_IN_PROGRESS');++this.generation;this.transition=false;this.stopWatches();this.client=null;this.credentials=null;this.account=null;this.bots=[];this.runtime={mainAgentId:null,statuses:[]};this.store.preference('lastAccount',null);this.emit();return this.snapshot();}

@@ -34,6 +34,29 @@ export function acceleratorFromEvent(event){
   return [...mods,token].join('+');
 }
 
+const SLOT=/^[\w-]{1,80}$/;
+export function normalizeShortcutMap(saved){
+  const map={compose:DEFAULT_SHORTCUTS.compose,bots:{}};
+  if(!saved||typeof saved!=='object')return map;
+  if(Object.prototype.hasOwnProperty.call(saved,'compose')){
+    if(saved.compose==null||saved.compose==='')map.compose=null;
+    else{try{map.compose=normalizeAccelerator(saved.compose);}catch{map.compose=DEFAULT_SHORTCUTS.compose;}}
+  }
+  const seen=new Set(map.compose?[map.compose]:[]);
+  if(saved.bots&&typeof saved.bots==='object'){
+    for(const [id,value] of Object.entries(saved.bots)){
+      if(!SLOT.test(id)||typeof value!=='string'||!value)continue;
+      try{
+        const accelerator=normalizeAccelerator(value);
+        if(!accelerator||seen.has(accelerator))continue;
+        seen.add(accelerator);
+        map.bots[id]=accelerator;
+      }catch{}
+    }
+  }
+  return map;
+}
+
 export function formatAccelerator(accelerator,platform='darwin'){
   if(!accelerator)return '';
   if(platform!=='darwin')return accelerator;

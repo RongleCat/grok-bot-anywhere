@@ -73,6 +73,21 @@ if(loaded) {
   await new Promise(r=>setImmediate(r));const concurrentCalls=calls;
   const rejected=assert.rejects(queued,/BOT_SEND_HELD/);release();await sending;await rejected;assert.equal(concurrentCalls,1);assert.equal(calls,1);
  });
+ test('a bot shortcut is stored beside the general shortcut and cannot reuse it',async t=>{
+  const {session}=await setup(t);
+  session.bots=[bot];
+  assert.equal(session.shortcutMap().compose,'Ctrl+Alt+Space');
+  session.setShortcut(bot.id,'Alt+A');
+  assert.equal(session.snapshot().shortcuts.compose,'Ctrl+Alt+Space');
+  assert.equal(session.snapshot().shortcuts.bots[bot.id],'Alt+A');
+  assert.throws(()=>session.setShortcut(bot.id,'Ctrl+Alt+Space'),/SHORTCUT_UNAVAILABLE/);
+  assert.throws(()=>session.setShortcut('compose','Alt+A'),/SHORTCUT_UNAVAILABLE/);
+  assert.throws(()=>session.setShortcut('missing-bot','Ctrl+Alt+K'),/BOT_NOT_FOUND/);
+  session.setShortcut(bot.id,'');
+  assert.equal(session.snapshot().shortcuts.bots[bot.id],undefined);
+  session.setShortcut('compose','');
+  assert.equal(session.snapshot().shortcuts.compose,null);
+ });
  async function setup(t,overrides={}) {
   const root=await mkdtemp(join(tmpdir(),'gba-session-'));const store=new InboxStore(root);
   const client={getMe:async()=>({authId:'account-a',email:'person@example.test',secret:'hidden'}),listBots:async()=>({bots:[bot],truncated:false}),sendMessage:async()=>({delivery:'accepted-box'}),...overrides};

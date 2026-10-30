@@ -1,4 +1,6 @@
 import {app,BrowserWindow,ipcMain,utilityProcess,safeStorage,shell,dialog,nativeTheme,Menu,Notification,globalShortcut,screen} from 'electron';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {dirname,join} from 'node:path';
 import {mkdir,writeFile} from 'node:fs/promises';
@@ -13,6 +15,11 @@ import {captureMenuIcons} from './menu-icons.mjs';
 import {MenuReconciler} from '../share/reconciler.mjs';
 import {menuHostTemplate,sharingApplicationPath} from '../share/host-path.mjs';
 import {shareHandoff} from '../share/handoff.mjs';
+import {frontmostFiles} from './selection.mjs';
+import {menuEntries} from '../share/model.mjs';
+import {matchShareTitles} from '../share/order.mjs';
+
+const runProcess=promisify(execFile);
 
 const here=dirname(fileURLToPath(import.meta.url));
 const smoke=process.argv.includes('--smoke-test');
@@ -21,16 +28,18 @@ const backgroundShare=process.argv.includes('--share-intake');
 let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,quitting=false,accountBusy=false;
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
 let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,ipcSender=null;
-let composerPrefs={keepAfterSend:true,dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188};
-const pendingSharedComposers=new Set();let openingSharedComposer=false,shortcutsSuppressed=false,activeShortcut='';
+let composerPrefs={keepAfterSend:true,dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0;
+const pendingSharedComposers=new Set();let openingSharedComposer=false,shortcutsSuppressed=false;
+const registeredShortcuts=new Map();
 const zh=app.getLocale?.().startsWith('zh');
 const notify=(event,data)=>{const payload={event,data};for(const target of [window,floatWindow,avatarWindow,pickerWindow])if(target&&!target.isDestroyed())target.webContents.send('anywhere:event',payload);};
 const publicState=()=>({...latestState,activeBotId,composerPrefs,host:{platform:process.platform,locale:app.getLocale(),material:windowMaterial,companion:!!companion?.ready,preview,issue:hostIssue,menu:shareMenu?.status??{available:false,needsUpdate:true,registered:0}}});
 const update=()=>notify('state',publicState());
-const issue=code=>{hostIssue=code;update();};
+const issue=code=>{if(!code||code==='ACCOUNT_BUSY')return;hostIssue=code;update();};
 const errorCode=error=>/^[A-Z][A-Z0-9_]{1,70}$/.test(error?.message??'')?error.message:'OPERATION_FAILED';
 
 function paintChrome(){if(!window||window.isDestroyed()||process.platform!=='darwin')return;window.setBackgroundColor('#00000000');}
+nativeTheme.on('updated',paintChrome);
 function loadComposerPrefs(){
   try{const parsed=JSON.parse(readFileSync(join(app.getPath('userData'),'composer-prefs.json'),'utf8'));composerPrefs={keepAfterSend:parsed.keepAfterSend!==false,dismissOnOutside:parsed.dismissOnOutside!==false};}
   catch{composerPrefs={keepAfterSend:true,dismissOnOutside:true};}
@@ -41,11 +50,24 @@ function rankedBots(){
   const order=id=>recipients.find(item=>item.botId===id)?.order??0;
   return bots.map((bot,index)=>({bot,index,order:order(bot.id)})).sort((a,b)=>a.order-b.order||a.index-b.index).map(item=>item.bot);
 }
-function shortcutBot(){
-  const bots=rankedBots(),recipient=id=>(latestState.recipients??[]).find(item=>item.botId===id);
-  const preferred=bots.filter(bot=>{const row=recipient(bot.id);return row?.enabled&&row.sources?.shortcuts;});
-  if(activeBotId&&preferred.some(bot=>bot.id===activeBotId))return preferred.find(bot=>bot.id===activeBotId);
-  return preferred[0]??bots.find(bot=>bot.id===activeBotId)??bots[0]??null;
+function lastAwakeBot(){
+  const bots=rankedBots();
+  return bots.find(bot=>bot.id===activeBotId)??bots[0]??null;
+}
+function unregisterShortcuts(){
+  for(const accelerator of registeredShortcuts.keys()){try{globalShortcut.unregister(accelerator);}catch{}}
+  registeredShortcuts.clear();
+}
+function shortcutTargets(map){
+  const wanted=new Map();
+  const compose=typeof map?.compose==='string'?map.compose:'';
+  if(compose)wanted.set(compose,'compose');
+  const known=new Set((latestState.bots??[]).map(bot=>bot.id));
+  for(const [botId,accelerator] of Object.entries(map?.bots??{})){
+    if(!known.has(botId)||typeof accelerator!=='string'||!accelerator||wanted.has(accelerator))continue;
+    wanted.set(accelerator,botId);
+  }
+  return wanted;
 }
 function layoutExtras(){
   if(!floatWindow||floatWindow.isDestroyed()||!floatWindow.isVisible())return;
@@ -90,12 +112,12 @@ function wireFloat(target,label){
 async function ensureFloat(){
   if(floatWindow&&!floatWindow.isDestroyed())return floatWindow;
   const mac=process.platform==='darwin';
-  const common={show:false,frame:false,resizable:false,movable:false,minimizable:false,maximizable:false,fullscreenable:false,skipTaskbar:true,backgroundColor:'#00000000',excludedFromShownWindowsMenu:true,webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false}};
-  floatWindow=new BrowserWindow({...common,width:368,height:120,transparent:mac,hasShadow:true,roundedCorners:true,acceptFirstMouse:true,title:'Grok Bot Anywhere',...(mac?{vibrancy:'popover',visualEffectState:'active'}:{})});
-  avatarWindow=new BrowserWindow({...common,width:88,height:88,transparent:true,hasShadow:false,focusable:false,roundedCorners:false});
-  pickerWindow=new BrowserWindow({...common,width:760,height:188,transparent:mac,hasShadow:true,roundedCorners:true,acceptFirstMouse:true,...(mac?{vibrancy:'popover',visualEffectState:'active'}:{})});
+  const common={show:false,frame:false,resizable:false,movable:false,minimizable:false,maximizable:false,fullscreenable:false,skipTaskbar:true,transparent:true,hasShadow:false,roundedCorners:false,backgroundColor:'#00000000',excludedFromShownWindowsMenu:true,...(process.platform==='win32'?{thickFrame:false}:{}),webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false}};
+  // One CSS corner. Native rounding, vibrancy, or acrylic draws a second outline around the card.
+  floatWindow=new BrowserWindow({...common,width:368,height:120,acceptFirstMouse:true,title:'Grok Bot Anywhere'});
+  avatarWindow=new BrowserWindow({...common,width:88,height:88,focusable:false});
+  pickerWindow=new BrowserWindow({...common,width:760,height:188,acceptFirstMouse:true});
   for(const target of [floatWindow,avatarWindow,pickerWindow]){if(mac)target.setAlwaysOnTop(true,'floating');else target.setAlwaysOnTop(true);try{target.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true,skipTransformProcessType:true});}catch{target.setVisibleOnAllWorkspaces(true);}}
-  if(!mac){for(const target of [floatWindow,pickerWindow]){try{target.setBackgroundMaterial('acrylic');}catch{target.setBackgroundColor('#f4f4f4');}}}
   avatarWindow.setIgnoreMouseEvents(true);
   wireFloat(floatWindow,'Composer');wireFloat(avatarWindow,'Avatar');wireFloat(pickerWindow,'Picker');
   floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat();},120);});
@@ -111,22 +133,49 @@ async function ensureFloat(){
 }
 function applyShortcuts(map){
   if(smoke||preview||shortcutsSuppressed)return;
-  const accelerator=typeof map?.compose==='string'?map.compose:'';
-  if(accelerator===activeShortcut)return;
-  if(activeShortcut){globalShortcut.unregister(activeShortcut);activeShortcut='';}
-  if(!accelerator){if(hostIssue==='SHORTCUT_UNAVAILABLE'){hostIssue=null;update();}return;}
-  let registered=false;
-  try{registered=globalShortcut.register(accelerator,()=>{const bot=shortcutBot();if(!bot){window?.show();window?.focus();return;}void openComposer(bot.id).catch(error=>issue(errorCode(error)));});}catch{registered=false;}
-  if(!registered){issue('SHORTCUT_UNAVAILABLE');return;}
-  activeShortcut=accelerator;
-  if(hostIssue==='SHORTCUT_UNAVAILABLE'){hostIssue=null;update();}
+  const wanted=shortcutTargets(map);
+  let same=wanted.size===registeredShortcuts.size;
+  if(same)for(const [accelerator,slot] of wanted)if(registeredShortcuts.get(accelerator)!==slot)same=false;
+  if(same)return;
+  unregisterShortcuts();
+  let failed=false;
+  for(const [accelerator,slot] of wanted){
+    let registered=false;
+    try{registered=globalShortcut.register(accelerator,()=>{
+      const bot=slot==='compose'?lastAwakeBot():rankedBots().find(item=>item.id===slot);
+      if(!bot){window?.show();window?.focus();return;}
+      void openComposer(bot.id).catch(error=>issue(errorCode(error)));
+    });}catch{registered=false;}
+    if(!registered){failed=true;continue;}
+    registeredShortcuts.set(accelerator,slot);
+  }
+  if(failed)issue('SHORTCUT_UNAVAILABLE');
+  else if(hostIssue==='SHORTCUT_UNAVAILABLE'){hostIssue=null;update();}
+}
+async function readShareOrder(){
+  const current=()=>menuEntries(latestState).map(entry=>entry.botId);
+  if(process.platform==='darwin'){
+    try{
+      const {stdout}=await runProcess('swift',[join(here,'../../scripts/probe-share.swift')],{timeout:25000,maxBuffer:1024*1024});
+      const ids=matchShareTitles(stdout.split('\n'),menuEntries(latestState));
+      if(ids.length)return {ids,source:'wechat'};
+    }catch{}
+    const known=new Set((latestState.bots??[]).map(bot=>bot.id));
+    const ids=(shareMenu?.installed?.entries??[]).filter(entry=>entry.slot>=1&&entry.slot<=12&&known.has(entry.botId)).sort((a,b)=>a.slot-b.slot).map(entry=>entry.botId);
+    if(ids.length)return {ids,source:'installed'};
+  }
+  return {ids:current(),source:'settings'};
 }
 async function openComposer(botId,receipt){
   if(latestState.accountBusy)throw new Error('ACCOUNT_BUSY');
   if(receipt&&(receipt.accountId!==latestState.account?.id||receipt.botId!==botId))throw new Error('RECEIPT_SCOPE_MISMATCH');
   const bot=latestState.bots?.find(item=>item.id===botId);if(!bot)throw new Error('BOT_NOT_FOUND');
+  const generation=++composeGeneration;
+  // Capture before the composer window is created or focused, or Finder/Explorer is no longer frontmost.
+  const localPaths=receipt?[]:await frontmostFiles();
+  if(generation!==composeGeneration)return {ok:true};
   activeBotId=botId;
-  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes})=>({name,bytes})),botName:receipt.botName??bot.name}:{botId,focus:true};
+  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes})=>({name,bytes})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths};
   const float=await ensureFloat();
   placeFloat(368,110);
   floatShownAt=Date.now();
@@ -235,7 +284,8 @@ async function dispatch(method,p){
       if(!shareMenu||preview)throw new Error('MENU_UNAVAILABLE');
       menuReconciler.request(latestState);await menuReconciler.flush({force:true});return shareMenu.status;
     }
-    case 'theme':nativeTheme.themeSource=p.theme;paintChrome();return rpc.call('theme',{theme:p.theme});
+    case 'menuOrder':return readShareOrder();
+    case 'theme':nativeTheme.themeSource=p.theme;return rpc.call('theme',{theme:p.theme});
     case 'setShortcut':return rpc.call('setShortcut',{slot:p.slot,accelerator:p.accelerator});
     case 'setComposerPrefs':{
       composerPrefs={keepAfterSend:typeof p.keepAfterSend==='boolean'?p.keepAfterSend:composerPrefs.keepAfterSend,dismissOnOutside:typeof p.dismissOnOutside==='boolean'?p.dismissOnOutside:composerPrefs.dismissOnOutside};
@@ -257,7 +307,7 @@ async function dispatch(method,p){
     }
     case 'suppressShortcuts':{
       shortcutsSuppressed=!!p.on;
-      if(shortcutsSuppressed){if(activeShortcut){globalShortcut.unregister(activeShortcut);activeShortcut='';}}
+      if(shortcutsSuppressed)unregisterShortcuts();
       else applyShortcuts(latestState.shortcuts);
       return {ok:true};
     }
@@ -282,7 +332,7 @@ async function dispatch(method,p){
 }
 function serviceEvent(message){
   if(message.event==='state'){
-    latestState=message.data;applyShortcuts(latestState.shortcuts);paintChrome();update();
+    latestState=message.data;applyShortcuts(latestState.shortcuts);update();
     if(menuReconciler)menuReconciler.request(latestState);
     if(companion?.ready)void companion.call('state',latestState).catch(()=>{});
     if(pendingSharedComposers.size)void flushSharedComposers();
@@ -360,6 +410,7 @@ if(!app.requestSingleInstanceLock()&&!smoke){app.quit();}else{
     const avatarStats=await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const start=Date.now();const check=()=>{const nodes=[...document.querySelectorAll('.avatar')];if(nodes.length&&nodes.every(n=>n.shadowRoot?.querySelector('svg')))resolve({avatarCount:nodes.length});else if(Date.now()-start>8000)reject(new Error('AVATARS_NOT_PAINTED'));else setTimeout(check,40);};check();})`);
     await writeFile(join(artifactRoot,'bots.png'),(await window.webContents.capturePage()).toPNG());
     await window.webContents.executeJavaScript(`window.anywhere.theme('dark')`);
+    await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const start=Date.now();const check=()=>{const nodes=[...document.querySelectorAll('.avatar')];if(nodes.length&&nodes.every(n=>n.shadowRoot?.querySelector('svg')))resolve(true);else if(Date.now()-start>8000)reject(new Error('AVATARS_NOT_PAINTED'));else setTimeout(check,40);};check();})`);
     await writeFile(join(artifactRoot,'bots-dark.png'),(await window.webContents.capturePage()).toPNG());
     await window.webContents.executeJavaScript(`window.anywhere.theme('light')`);
     const botId=latestState.bots[0].id;
@@ -367,9 +418,9 @@ if(!app.requestSingleInstanceLock()&&!smoke){app.quit();}else{
     const fixture=join(temporaryRoot,'forward.zip');await writeFile(fixture,Buffer.alloc(5*1024*1024,7));
     const receipt=await rpc.call('receive',{botId,source:'drop',files:[fixture],text:'Smoke context'});
     if(receipt.status!=='needs-input'||receipt.files[0].bytes!==5*1024*1024)throw new Error('LOCAL_INTAKE_FAILED');
-    await window.webContents.executeJavaScript(`document.querySelectorAll('.nav-button')[2].click()`);
+    await window.webContents.executeJavaScript(`(async()=>{document.querySelector('.nav-button[data-page="settings"]').click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));})()`);
     await writeFile(join(artifactRoot,'settings.png'),(await window.webContents.capturePage()).toPNG());
-    await window.webContents.executeJavaScript(`document.querySelectorAll('.nav-button')[1].click()`);
+    await window.webContents.executeJavaScript(`(async()=>{document.querySelector('.nav-button[data-page="inbox"]').click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));})()`);
     await writeFile(join(artifactRoot,'inbox.png'),(await window.webContents.capturePage()).toPNG());
     await openComposer(botId,receipt);
     await floatWindow.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const start=Date.now();const tick=()=>{if(document.querySelector('textarea.composer-input')&&document.querySelector('.float-avatar .avatar'))resolve(true);else if(Date.now()-start>8000)reject(new Error('FLOAT_NOT_READY'));else setTimeout(tick,40);};tick();})`);
@@ -389,6 +440,6 @@ if(!app.requestSingleInstanceLock()&&!smoke){app.quit();}else{
 }
 app.on('activate',()=>{window?.show();window?.focus();});
 app.on('window-all-closed',()=>{if(smoke)app.quit();});
-app.on('before-quit',()=>{quitting=true;if(activeShortcut)globalShortcut.unregister(activeShortcut);menuReconciler?.close();companion?.stop();worker?.kill();rpc?.close();});
+app.on('before-quit',()=>{quitting=true;unregisterShortcuts();menuReconciler?.close();companion?.stop();worker?.kill();rpc?.close();});
 // Preview data uses an OS temporary directory. Do not delete Chromium's cache
 // while its helper processes are still shutting down.

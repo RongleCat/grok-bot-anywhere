@@ -23,7 +23,7 @@ export class ShareMenu {
  }
  async initialize(){
   await mkdir(this.root,{recursive:true,mode:0o700});
-  const digest=createHash('sha256').update('per-bot-extension-identity-v5');
+  const digest=createHash('sha256').update('white-background-share-icons-v6');
   for(const file of ['Contents/MacOS/GrokBotMenuHost','Contents/PlugIns/GrokBotShare1.appex/Contents/MacOS/GrokBotShare','Contents/Resources/share.entitlements'])digest.update(await readFile(join(this.template,file)));
   this.templateHash=digest.digest('hex');
   try{this.installed=JSON.parse(await readFile(join(this.root,'menu-state.json'),'utf8'));await access(this.installed.hostPath??join(this.applicationsRoot,'Grok Bot Anywhere Menu.app'));this.electedSlots=await this.readElections(this.installed);this.status.registered=this.electedSlots.length;}

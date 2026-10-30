@@ -9,6 +9,7 @@
   "engines": { "node": ">=22.13" },
   "scripts": {
     "start": "npm run build && electron .",
+    "dev": "npm run build && electron .",
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
     "smoke": "npm run build && electron . --smoke-test",
@@ -36,7 +37,7 @@
       {"from":"native/GrokBotMenuHost.app","to":"native/GrokBotMenuHost.app","filter":["**/*"]},
       {"from":"out/native-avatar","to":"native/avatar","filter":["**/*"]}
     ],
-    "mac": { "category": "public.app-category.productivity", "target": ["dir"], "identity": null },
+    "mac": { "category": "public.app-category.productivity", "target": ["dir"], "identity": null, "extendInfo": { "NSAppleEventsUsageDescription": "把你在 Finder 选中的文件加入输入框。" } },
     "win": { "target": ["dir"] }
   }
 }

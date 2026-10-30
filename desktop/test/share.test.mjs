@@ -41,6 +41,20 @@ if(model&&ShareInbox){
   assert.equal(plan.entries.find(entry=>entry.botId==='bot-1').generation,1);
   assert.equal(model.extensionIdentifier(1,2),'dev.ronglecat.grokbotanywhere.menu.destination01.g2.share');
  });
+ test('changing the relative menu order reassigns slots from the top',()=>{
+  const installed={layoutVersion:4,entries:model.menuEntries(state).slice(0,2).map((entry,index)=>({...entry,slot:index+1,generation:1,extensionId:model.extensionIdentifier(index+1,1)}))};
+  const input=structuredClone(state);
+  input.recipients.forEach((recipient,index)=>{recipient.enabled=index<2;});
+  input.recipients[0].order=1;input.recipients[1].order=0;
+  const plan=model.menuPlan(input,installed);
+  assert.equal(plan.rebuild,true);
+  assert.equal(plan.entries[0].botId,'bot-1');
+  assert.equal(plan.entries[0].slot,1);
+  assert.equal(plan.entries[1].botId,'bot-0');
+  assert.equal(plan.entries[1].slot,2);
+  assert.equal(plan.entries[0].generation,1);
+  assert.equal(plan.entries[1].generation,1);
+ });
  async function setup(t){
   const root=await mkdtemp(join(tmpdir(),'gba-share-'));t.after(()=>rm(root,{recursive:true,force:true}));
   const received=[],seen=new Map();const session={account:{id:'a'},transition:false,bots:state.bots,store:{list:()=>[...seen.values()]},receive:async p=>{received.push(p);const row={id:'receipt',accountId:'a',botId:p.botId,mode:p.policy.mode,status:'needs-input',sourceId:p.sourceId};seen.set(p.sourceId,row);return row;}};

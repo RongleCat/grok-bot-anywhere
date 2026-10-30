@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('anywhere',{
   retry:id=>call('retry',{id}),
   resolve:id=>call('resolve',{id}),
   updateMenu:()=>call('updateMenu'),
+  menuOrder:()=>call('menuOrder'),
   chooseFiles:botId=>call('chooseFiles',{botId}),
   pickFiles:()=>call('pickFiles'),
   setShortcut:(slot,accelerator)=>call('setShortcut',{slot,accelerator}),
