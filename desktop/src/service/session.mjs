@@ -1,5 +1,6 @@
 import * as sdk from 'grok-bot-sdk';
 import {Delivery} from './delivery.mjs';
+import {DEFAULT_SHORTCUTS,normalizeAccelerator} from '../shortcuts.mjs';
 
 export class AccountSession {
   constructor({store,sdk:implementation=sdk,upload,onEvent=()=>{},now=Date.now}) {
@@ -16,7 +17,7 @@ export class AccountSession {
     const accountId=this.account?.id;
     return {account:this.account,connected:!!this.client,accountBusy:this.transition,bots:this.bots,recipients:accountId?this.bots.map(bot=>this.store.recipient(accountId,bot.id)):[],
       inbox:accountId?this.store.list(accountId).map(({files,...item})=>({...item,files:files.map(({name,bytes})=>({name,bytes}))})):[],
-      theme:this.store.preference('theme')??'system',runtime:this.runtime,watchErrors:this.watchErrors,backgroundSending:!!this.delivery?.inflight.size,
+      theme:this.store.preference('theme')??'system',shortcuts:this.shortcutMap(),runtime:this.runtime,watchErrors:this.watchErrors,backgroundSending:!!this.delivery?.inflight.size,
       capabilities:{runtime:typeof this.client?.getRuntimeSettings==='function',statuses:typeof this.client?.listStatuses==='function'}};
   }
   emit(){if(!this.closed)this.onEvent({event:'state',data:this.snapshot()});}
@@ -155,6 +156,19 @@ export class AccountSession {
     if(error?.httpStatus===401||error?.httpStatus===403){this.client=null;this.credentials=null;this.stopWatches();this.onEvent({event:'auth.expired',data:{}});this.emit();}
   }
   setTheme(theme){if(!['system','light','dark'].includes(theme))throw new Error('THEME_INVALID');this.store.preference('theme',theme);this.emit();return this.snapshot();}
+  shortcutMap(){
+    const saved=this.store.preference('shortcuts');
+    if(saved&&typeof saved==='object'&&Object.prototype.hasOwnProperty.call(saved,'compose')){
+      if(saved.compose==null||saved.compose==='')return {compose:null};
+      try{return {compose:normalizeAccelerator(saved.compose)};}catch{return {compose:DEFAULT_SHORTCUTS.compose};}
+    }
+    return {compose:DEFAULT_SHORTCUTS.compose};
+  }
+  setShortcut(slot,accelerator){
+    if(slot!=='compose')throw new Error('SHORTCUT_INVALID');
+    this.store.preference('shortcuts',{compose:normalizeAccelerator(accelerator)});
+    this.emit();return this.snapshot();
+  }
   async logout(){if(this.pending||this.delivery?.active.size||this.delivery?.inflight.size)throw new Error('DELIVERY_IN_PROGRESS');++this.generation;this.transition=false;this.stopWatches();this.client=null;this.credentials=null;this.account=null;this.bots=[];this.runtime={mainAgentId:null,statuses:[]};this.store.preference('lastAccount',null);this.emit();return this.snapshot();}
   stopWatches(){for(const control of this.watches.values())control.abort();this.watches.clear();}
   close(){this.closed=true;++this.generation;this.stopWatches();}

@@ -4,7 +4,7 @@ import {mkdir,readFile,writeFile,rename,rm,cp,access} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {randomUUID,createHash} from 'node:crypto';
-import {menuHostName,menuEntries,menuPlan,shareConfiguration,slotIdentifier,legacySlotIdentifier,destinationPath,slotExtensionPath} from '../share/model.mjs';
+import {menuHostName,menuEntries,menuPlan,shareConfiguration,slotIdentifier,legacySlotIdentifier,destinationPath,slotExtensionPath,extensionIdentifier,pluginIdentifier} from '../share/model.mjs';
 import {plist,extensionInfo,destinationInfo} from '../share/plist.mjs';
 import {registerSlots} from '../share/registration.mjs';
 import {iconResourceName} from '../share/icon-resource.mjs';
@@ -23,13 +23,18 @@ export class ShareMenu {
  }
  async initialize(){
   await mkdir(this.root,{recursive:true,mode:0o700});
-  const digest=createHash('sha256').update('standalone-destination-icons-v4');
+  const digest=createHash('sha256').update('per-bot-extension-identity-v5');
   for(const file of ['Contents/MacOS/GrokBotMenuHost','Contents/PlugIns/GrokBotShare1.appex/Contents/MacOS/GrokBotShare','Contents/Resources/share.entitlements'])digest.update(await readFile(join(this.template,file)));
   this.templateHash=digest.digest('hex');
   try{this.installed=JSON.parse(await readFile(join(this.root,'menu-state.json'),'utf8'));await access(this.installed.hostPath??join(this.applicationsRoot,'Grok Bot Anywhere Menu.app'));this.electedSlots=await this.readElections(this.installed);this.status.registered=this.electedSlots.length;}
   catch{this.installed=null;this.electedSlots=[];}
  }
  async readElections(installed){
+  if((installed?.layoutVersion??0)>=4){
+   const {stdout}=await run('/usr/bin/pluginkit',['-m','-p','com.apple.share-services']);
+   const enabled=new Set(stdout.split('\n').filter(line=>line.startsWith('+')).map(line=>line.trim().split(/\s+/)[1]?.split('(')[0]).filter(Boolean));
+   return (installed.entries??[]).filter(entry=>enabled.has(entry.extensionId??extensionIdentifier(entry.slot,entry.generation??1))).map(entry=>entry.slot);
+  }
   const identifier=installed?.layoutVersion>=2?slotIdentifier:legacySlotIdentifier,slots=[];
   for(let slot=1;slot<=12;slot++){
    const {stdout}=await run('/usr/bin/pluginkit',['-m','-i',identifier(slot)]);
@@ -44,7 +49,7 @@ export class ShareMenu {
   this.configQueue=this.configQueue.catch(()=>{}).then(async()=>{
    await atomicJSON(join(this.root,'configuration.json'),configuration);
    if(this.installed&&!this.busy){
-    const slots=this.allowedSlots(state,this.installed),identifier=this.installed.layoutVersion>=2?slotIdentifier:legacySlotIdentifier;
+    const slots=this.allowedSlots(state,this.installed),identifier=slot=>pluginIdentifier(this.installed,slot);
     if(JSON.stringify(slots)!==JSON.stringify(this.electedSlots)){
      for(let slot=1;slot<=12;slot++)await run('/usr/bin/pluginkit',['-e',slots.includes(slot)?'use':'ignore','-i',identifier(slot)]);
      this.electedSlots=await this.readElections(this.installed);this.status.registered=this.electedSlots.length;
@@ -53,8 +58,19 @@ export class ShareMenu {
   });
   await this.configQueue;
   const current=this.state,entries=menuEntries(current),plan=menuPlan(current,this.installed);
-  this.status={...this.status,enabled:entries.length,needsUpdate:!this.installed||this.installed.layoutVersion!==3||plan.rebuild||this.installed.templateHash!==this.templateHash||this.installed.applicationPath!==this.applicationPath||this.status.registered!==entries.length,busy:this.busy};
+  this.status={...this.status,enabled:entries.length,needsUpdate:!this.installed||this.installed.layoutVersion!==4||plan.rebuild||this.installed.templateHash!==this.templateHash||this.installed.applicationPath!==this.applicationPath||this.status.registered!==entries.length,busy:this.busy};
   this.onChange();
+ }
+ async retire(installed,host){
+  const ids=new Set();
+  for(let slot=1;slot<=12;slot++){
+   ids.add(legacySlotIdentifier(slot));ids.add(slotIdentifier(slot));ids.add(pluginIdentifier(installed,slot));
+   await run('/usr/bin/pluginkit',['-r',slotExtensionPath(host,slot)]).catch(()=>{});
+   if((installed?.layoutVersion??0)>=2)await run(LS,['-u',destinationPath(host,slot)]).catch(()=>{});
+  }
+  for(const entry of installed?.entries??[])if(entry.extensionId)ids.add(entry.extensionId);
+  for(const id of ids)await run('/usr/bin/pluginkit',['-e','ignore','-i',id]).catch(()=>{});
+  await run(LS,['-u',host]).catch(()=>{});
  }
  async unregister(installed,host=this.host){
   const options=layoutOptions(installed),identifier=options.identifier??slotIdentifier,extension=options.extension??slotExtensionPath;
@@ -78,10 +94,10 @@ export class ShareMenu {
    if(exists)previousHost=this.host;
    let previousBuild=this.installed?.build??2;
    if(exists){try{const {stdout}=await run('/usr/bin/plutil',['-extract','CFBundleVersion','raw','-o','-',join(this.host,'Contents/Info.plist')]);previousBuild=Math.max(previousBuild,Number(stdout.trim())||0);}catch{}}
-   const rebuild=plan.rebuild||!exists||this.installed?.layoutVersion!==3||this.installed?.templateHash!==this.templateHash||this.installed?.applicationPath!==this.applicationPath;
+   const rebuild=plan.rebuild||!exists||this.installed?.layoutVersion!==4||this.installed?.templateHash!==this.templateHash||this.installed?.applicationPath!==this.applicationPath;
    const build=rebuild?previousBuild+1:previousBuild;
    if(rebuild){
-    const entries=menuEntries(state).map((entry,i)=>({...entry,slot:i+1}));
+    const entries=plan.entries.filter(entry=>plan.enabledSlots.includes(entry.slot)).map(entry=>({...entry,generation:entry.generation??1,extensionId:extensionIdentifier(entry.slot,entry.generation??1)}));
     await mkdir(work,{recursive:true,mode:0o700});await cp(this.template,staged,{recursive:true});
     const contents=join(staged,'Contents'),entitlements=join(contents,'Resources/share.entitlements');
     await rm(join(contents,'PlugIns'),{recursive:true,force:true});await mkdir(join(contents,'Helpers'),{recursive:true});
@@ -92,6 +108,8 @@ export class ShareMenu {
      await mkdir(join(inside,'MacOS'),{recursive:true});await mkdir(join(inside,'Resources'),{recursive:true});
      await cp(join(this.template,'Contents/MacOS/GrokBotMenuHost'),join(inside,'MacOS/GrokBotMenuHost'));
      await cp(join(this.template,'Contents/PlugIns/GrokBotShare1.appex'),extension,{recursive:true});
+     const executable=`GrokBotShare${slot}`;
+     await rename(join(extension,'Contents/MacOS/GrokBotShare'),join(extension,'Contents/MacOS',executable));
      const cn=entry?`发给 ${entry.botName}`:'Grok Bot',en=entry?`Send to ${entry.botName}`:'Grok Bot',name=this.locale.startsWith('zh')?cn:en;
      let iconFile='AppIcon.icns';
      await writeFile(join(resources,'binding.json'),JSON.stringify(entry?{version:1,slot,accountId:entry.accountId,botId:entry.botId}:{version:1,slot}));
@@ -107,7 +125,7 @@ export class ShareMenu {
       await cp(join(resources,iconFile),join(inside,'Resources',iconFile));
      }
      await writeFile(join(inside,'Info.plist'),plist(destinationInfo(slot,name,this.applicationPath,iconFile,build)));
-     await writeFile(join(extension,'Contents/Info.plist'),plist({...extensionInfo(slot,name,iconFile),CFBundleIdentifier:slotIdentifier(slot),CFBundleVersion:String(build)}));
+     await writeFile(join(extension,'Contents/Info.plist'),plist({...extensionInfo(slot,name,iconFile),CFBundleExecutable:executable,CFBundleIdentifier:entry?.extensionId??extensionIdentifier(slot,0),CFBundleVersion:String(build)}));
      await run('/usr/bin/codesign',['--force','--sign','-','--entitlements',entitlements,extension]);
      await run('/usr/bin/codesign',['--force','--sign','-',destination]);
     }
@@ -115,13 +133,13 @@ export class ShareMenu {
     for(let slot=1;slot<=12;slot++)await run('/usr/bin/codesign',['--verify','--deep','--strict',destinationPath(staged,slot)]);check();
     await mkdir(this.applicationsRoot,{recursive:true});
     let previousExists=false;try{await access(previousHost);previousExists=true;}catch{}
-    if(previousExists){registrationTouched=true;if(previous?.layoutVersion<2)await this.unregister(previous,previousHost);check();await rename(previousHost,backup);backedUp=true;}
+    if(previousExists){registrationTouched=true;await this.retire(previous,previousHost);check();await rename(previousHost,backup);backedUp=true;}
     check();await rename(staged,this.host);swapped=true;check();
     plan.entries=entries;plan.enabledSlots=entries.map(e=>e.slot);
    }
    check();registrationTouched=true;check();
-   const registered=await registerSlots(this.host,plan.enabledSlots,run,undefined,{isCurrent});check();
-   this.installed={layoutVersion:3,hostPath:this.host,entries:plan.entries.map(({bot,...entry})=>entry),enabledSlots:plan.enabledSlots,templateHash:this.templateHash,applicationPath:this.applicationPath,build};
+   const registered=await registerSlots(this.host,plan.enabledSlots,run,undefined,{isCurrent,identifier:slot=>pluginIdentifier({layoutVersion:rebuild?4:this.installed?.layoutVersion,entries:plan.entries},slot)});check();
+   this.installed={layoutVersion:rebuild?4:(previous?.layoutVersion??4),hostPath:this.host,entries:plan.entries.map(({bot,...entry})=>entry),enabledSlots:plan.enabledSlots,templateHash:this.templateHash,applicationPath:this.applicationPath,build};
    this.electedSlots=await this.readElections(this.installed);check();
    await atomicJSON(join(this.root,'menu-state.json'),this.installed);
    this.status={available:true,registered,enabled:plan.enabledSlots.length,needsUpdate:registered!==plan.enabledSlots.length,busy:false};this.onChange();
@@ -133,7 +151,7 @@ export class ShareMenu {
    if(registrationTouched&&previous){
     const allowed=this.allowedSlots(this.state??state,previous);
 
-    await registerSlots(previousHost,allowed,run,undefined,layoutOptions(previous)).catch(()=>{});
+    await registerSlots(previousHost,allowed,run,undefined,{...layoutOptions(previous),identifier:slot=>pluginIdentifier(previous,slot)}).catch(()=>{});
     this.electedSlots=await this.readElections(previous).catch(()=>[]);
    }
    if(error.message==='MENU_SUPERSEDED')return;
@@ -150,7 +168,7 @@ export class ShareMenu {
     await delay(2000);
     const allowed=this.allowedSlots(this.state??state,this.installed);
     for(let attempt=0;attempt<3;attempt++){
-     await registerSlots(this.host,allowed,run);await delay(2000);
+     await registerSlots(this.host,allowed,run,undefined,{identifier:slot=>pluginIdentifier(this.installed,slot)});await delay(2000);
      this.electedSlots=await this.readElections(this.installed);
      if(allowed.every(slot=>this.electedSlots.includes(slot)))break;
     }

@@ -11,13 +11,13 @@
 <body>
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">g</span><span>Grok Bot<br><strong>Anywhere</strong></span></div>
+      <label class="search"><input id="search" type="search" spellcheck="false" autocomplete="off"></label>
+      <div id="grid" class="bot-grid"></div>
       <nav id="navigation" aria-label="Navigation"></nav>
-      <div class="sidebar-bottom"><span class="shortcut">⌃ ⌥ Space</span><span id="shortcut-label"></span></div>
-      <button id="account-nav" class="account-nav"></button>
+      <button id="shortcut-hint" class="shortcut-hint" type="button"></button>
+      <button id="account-nav" class="account-nav" type="button"></button>
     </aside>
     <main>
-      <header><div id="breadcrumb"></div><div id="connection"></div></header>
       <div id="notice" role="status" hidden></div>
       <div id="content"></div>
     </main>

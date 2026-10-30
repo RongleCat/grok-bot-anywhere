@@ -38,6 +38,7 @@ port.on('message',async({data:request})=>{
         case 'composer':result=session.composer(p.id);break;
         case 'resume':result=await session.resume();break;
         case 'theme':result=session.setTheme(p.theme);break;
+        case 'setShortcut':result=session.setShortcut(p.slot,p.accelerator);break;
         case 'watch':session.watch(p.botId,p.sessionId);result={watching:true};break;
         case 'shutdown':clearInterval(shareTimer);session.close();store.close();result={};break;
         default:throw new Error('METHOD_UNKNOWN');

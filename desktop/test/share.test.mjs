@@ -22,6 +22,25 @@ if(model&&ShareInbox){
   const entries=model.menuEntries(state);const renamed=structuredClone(state);renamed.bots[0].name='New name';
   assert.equal(model.menuPlan(renamed,{entries:entries.map((e,i)=>({...e,slot:i+1}))}).rebuild,true);
  });
+ test('a newly enabled Bot keeps the slots already shown to WeChat',()=>{
+  const first=model.menuEntries(state).slice(0,1).map(entry=>({...entry,slot:1,generation:1,extensionId:model.extensionIdentifier(1,1)}));
+  const input=structuredClone(state);input.recipients.forEach((recipient,index)=>recipient.enabled=index<2);
+  const plan=model.menuPlan(input,{layoutVersion:4,entries:first});
+  assert.equal(plan.rebuild,true);
+  assert.equal(plan.entries.find(entry=>entry.botId==='bot-0').slot,1);
+  assert.equal(plan.entries.find(entry=>entry.botId==='bot-0').generation,1);
+  assert.equal(plan.entries.find(entry=>entry.botId==='bot-1').slot,2);
+  assert.equal(plan.entries.find(entry=>entry.botId==='bot-1').generation,1);
+ });
+ test('renaming a Bot changes only that extension generation',()=>{
+  const entries=model.menuEntries(state).slice(0,2).map((entry,index)=>({...entry,slot:index+1,generation:1}));
+  const renamed=structuredClone(state);renamed.bots[0].name='New name';
+  const plan=model.menuPlan(renamed,{layoutVersion:4,entries});
+  assert.equal(plan.entries.find(entry=>entry.botId==='bot-0').slot,1);
+  assert.equal(plan.entries.find(entry=>entry.botId==='bot-0').generation,2);
+  assert.equal(plan.entries.find(entry=>entry.botId==='bot-1').generation,1);
+  assert.equal(model.extensionIdentifier(1,2),'dev.ronglecat.grokbotanywhere.menu.destination01.g2.share');
+ });
  async function setup(t){
   const root=await mkdtemp(join(tmpdir(),'gba-share-'));t.after(()=>rm(root,{recursive:true,force:true}));
   const received=[],seen=new Map();const session={account:{id:'a'},transition:false,bots:state.bots,store:{list:()=>[...seen.values()]},receive:async p=>{received.push(p);const row={id:'receipt',accountId:'a',botId:p.botId,mode:p.policy.mode,status:'needs-input',sourceId:p.sourceId};seen.set(p.sourceId,row);return row;}};
