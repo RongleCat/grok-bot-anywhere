@@ -590,7 +590,6 @@ function renderSettings(content){
    finally{copyLog.disabled=false;}
   });
   diagnose.append(settingRow(t('排查','Troubleshoot'),copyLog,t('复制分享菜单状态、宿主版本和最近一次更新错误。可能包含本机路径，不包含登录凭据。','Copies share-menu status, host build and the latest update error. May include local paths, never credentials.')));
-  diagnose.append(settingRow(t('系统共享菜单','System share menu'),el('span','group-help',t('自动刷新','Automatic')),t('菜单变化后会自动重启访达，让右键共享菜单重新读取入口；不需要再手动刷新。','Finder restarts automatically after a menu change so its Share menu re-reads the entries.')));
   panel.append(wechatPanel,diagnose);
  }
  if(settingsTab==='toolbox'){
