@@ -33,7 +33,7 @@ const smoke=process.argv.includes('--smoke-test');
 const preview=smoke||process.argv.includes('--preview');
 const backgroundShare=process.argv.includes('--share-intake');
 const quietLaunch=backgroundShare||process.argv.includes('--explorer-forward')||process.argv.some(arg=>String(arg).includes('grokbotanywhere://'));
-let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null,suppressActivate=false;
+let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null,suppressActivate=false,composerReadyState=null;
 let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
 let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,ipcSender=null;
@@ -97,6 +97,19 @@ function hideDock(){
 }
 function composerVisible(){
   return [floatWindow,avatarWindow,pickerWindow].some(target=>target&&!target.isDestroyed()&&target.isVisible());
+}
+function waitForComposerReady(generation){
+  return new Promise(resolve=>{
+    const started=Date.now();
+    const tick=()=>{
+      if(generation!==composeGeneration)return resolve(null);
+      const ready=composerReadyState;
+      if(ready?.generation===generation&&ready.card&&ready.avatar)return resolve(ready);
+      if(Date.now()-started>=1200)return resolve(ready?.generation===generation?ready:null);
+      setTimeout(tick,16);
+    };
+    tick();
+  });
 }
 function showMainWindow(){
   if(!window||window.isDestroyed())return;
@@ -413,8 +426,11 @@ async function openComposer(botId,receipt,options={}){
   const draftText=typeof options.text==='string'?options.text:undefined;
   const attachToken=deferFiles?generation:0;
   pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes},index)=>({name,bytes,index})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
+  composerReadyState={generation,card:null,avatar:false};
   const float=await ensureFloat();
+  const entering=!float.isVisible();
   placeFloat(368,110);
+  if(entering){try{float.setOpacity(0);avatarWindow?.setOpacity(0);}catch{}}
   floatShownAt=Date.now();
   float.setIgnoreMouseEvents(false);
   suppressActivate=true;
@@ -423,6 +439,12 @@ async function openComposer(botId,receipt,options={}){
   setTimeout(()=>{suppressActivate=false;},400);
   layoutExtras();
   notify('composer',pendingFloat);
+  const ready=await waitForComposerReady(generation);
+  if(generation!==composeGeneration)return {ok:true};
+  const card=ready?.card??{width:368,height:110};
+  placeFloat(card.width,card.height);
+  notify('composer-show',{});
+  setTimeout(()=>{try{float.setOpacity(1);avatarWindow?.setOpacity(1);}catch{}},20);
   if(prepared){
     const token=attachToken;
     const openedFor=botId;
@@ -648,6 +670,14 @@ async function dispatch(method,p){
     case 'pendingComposer':return pendingFloat;
     case 'hideComposer':hideFloat({clearAttachments:p.clear===true});return {ok:true};
     case 'setHit':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.setIgnoreMouseEvents(!p.hit,{forward:true});return {ok:true};
+    case 'composerReady':{
+      const ready=composerReadyState;
+      if(ready&&ready.generation===composeGeneration){
+       if(p.part==='card'&&Number.isFinite(p.width)&&Number.isFinite(p.height))ready.card={width:Math.max(1,Math.round(p.width)),height:Math.max(1,Math.round(p.height))};
+       if(p.part==='avatar')ready.avatar=true;
+      }
+      return {ok:true};
+    }
     case 'placeComposer':if(p.regions?.part==='picker')placePicker(p.width,p.height);else placeFloat(p.width,p.height);return {ok:true};
     case 'syncPicker':{
       pickerOpen=!!p.open;

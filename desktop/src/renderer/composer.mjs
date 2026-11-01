@@ -27,6 +27,12 @@ const errors={
  BOT_SEND_HELD:['这个 Bot 有一条未确认的发送，请先到发送记录里核对。','This Bot has an unconfirmed send. Check Send history first.']
 };
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,4000);}
+function playEnter(){
+ for(const node of [$('card'),$('avatar')]){
+  if(!node)continue;
+  node.classList.remove('entering');void node.offsetWidth;node.classList.add('entering');
+ }
+}
 function lucide(paths){const node=document.createElementNS('http://www.w3.org/2000/svg','svg');node.setAttribute('viewBox','0 0 24 24');node.setAttribute('width','16');node.setAttribute('height','16');node.setAttribute('fill','none');node.setAttribute('stroke','currentColor');node.setAttribute('stroke-width','2');node.setAttribute('stroke-linecap','round');node.setAttribute('stroke-linejoin','round');node.setAttribute('aria-hidden','true');for(const d of paths){const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('d',d);node.append(shape);}return node;}
 function paintOne(bot,size,reducedMotion,bucket=handles){
  const target=el('div','avatar');target.style.width=target.style.height=`${size}px`;
@@ -115,8 +121,10 @@ function reportSize(){
  const card=$('card');if(!card)return;
  const rect=card.getBoundingClientRect();
  const width=Math.ceil(rect.width),height=Math.ceil(rect.height);
+ if(height<8)return;
+ void api.composerReady({part:'card',width,height}).catch(()=>{});
  const key=`card:${width}x${height}:${picking}:${pickIndex}`;
- if(key===placed||height<8)return;placed=key;
+ if(key===placed)return;placed=key;
  void api.placeComposer(width,height).catch(()=>{});
  void api.syncPicker({open:picking,index:pickIndex}).catch(()=>{});
 }
@@ -164,6 +172,7 @@ function renderAvatar(){
  if(!bot)return;
  draft.botId=bot.id;paintAvatar(bot);
  document.documentElement.dataset.ready='true';
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{if(part==='avatar')void api.composerReady({part:'avatar'}).catch(()=>{});}));
 }
 function renderPickerOnly(){
  if(!state)return;
@@ -271,6 +280,7 @@ async function send(){
 window.addEventListener('resize',()=>reportSize());
 if(part==='avatar'){
  api.onChange(message=>{
+  if(message.event==='composer-show'){playEnter();return;}
   if(message.event==='state')state=message.data;
   if(message.event==='composer'&&message.data?.botId)draft.botId=message.data.botId;
   if(message.event==='state'&&state?.activeBotId)draft.botId=state.activeBotId;
@@ -286,6 +296,7 @@ if(part==='avatar'){
 }else{
  api.onChange(message=>{
   if(message.event==='composer-clear'){draft.paths=[];draft.names=[];draft.remote=[];fileToken=null;queuedFiles=null;if(state)render();return;}
+  if(message.event==='composer-show'){playEnter();return;}
   if(message.event==='composer-files'){acceptComposerFiles(message.data,true);return;}
   if(message.event==='composer'){placed='';applyPayload(message.data);}
   if(message.event==='pick'&&message.data?.botId){const index=ordered().findIndex(bot=>bot.id===message.data.botId);if(index>=0)pickIndex=index;confirmPick();return;}
