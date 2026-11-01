@@ -33,7 +33,7 @@ const smoke=process.argv.includes('--smoke-test');
 const preview=smoke||process.argv.includes('--preview');
 const backgroundShare=process.argv.includes('--share-intake');
 const quietLaunch=backgroundShare||process.argv.includes('--explorer-forward')||process.argv.some(arg=>String(arg).includes('grokbotanywhere://'));
-let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false;
+let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null;
 let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
 let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,ipcSender=null;
@@ -523,10 +523,22 @@ async function copyDiagnostics(){
   return {copied:true,characters:text.length};
 }
 async function refreshFinderMenu(){
-  if(process.platform!=='darwin')throw new Error('MAC_ONLY');
-  try{await runProcess('/usr/bin/killall',['Finder'],{timeout:8000});}
-  catch(error){if(error.code!==1)throw new Error('FINDER_REFRESH_FAILED');}
-  return {ok:true};
+  if(process.platform!=='darwin')return;
+  try{await runProcess('/usr/bin/killall',['Finder'],{timeout:8000});}catch{}
+}
+function scheduleFinderRefresh(delay=1200){
+  if(process.platform!=='darwin'||preview||smoke)return;
+  clearTimeout(finderRefreshTimer);
+  finderRefreshTimer=setTimeout(()=>{finderRefreshTimer=null;void refreshFinderMenu();},delay);
+}
+async function refreshFinderIfStale(){
+  if(process.platform!=='darwin'||preview||smoke||!shareMenu)return;
+  try{
+    const pid=(await runProcess('/usr/bin/pgrep',['-x','Finder'])).stdout.trim().split('\n')[0];
+    const started=Date.parse((await runProcess('/bin/ps',['-o','lstart=','-p',pid])).stdout.trim());
+    const state=await stat(join(shareMenu.root,'menu-state.json'));
+    if(Number.isFinite(started)&&started<state.mtimeMs)scheduleFinderRefresh();
+  }catch{}
 }
 async function nativeRequest(method,p){
   switch(method){
@@ -589,7 +601,6 @@ async function dispatch(method,p){
       return {enabled:explorerMenu===true};
     }
     case 'copyDiagnostics':return copyDiagnostics();
-    case 'refreshFinderMenu':return refreshFinderMenu();
     case 'updateMenu':{
       if(!shareMenu||preview)throw new Error('MENU_UNAVAILABLE');
       menuReconciler.request(latestState);await menuReconciler.flush({force:true});return shareMenu.status;
@@ -750,7 +761,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
       await shareMenu.initialize();
       menuReconciler=new MenuReconciler({
         sync:state=>shareMenu.sync(state),publish:state=>shareMenu.sync(state),needsUpdate:()=>shareMenu.status.needsUpdate,
-        update:async(state,isCurrent,force)=>{const icons=await captureMenuIcons(state,join(here,'../../out/native-avatar/index.html'));if(!isCurrent())return;return shareMenu.update(state,icons,{isCurrent,force});},
+        update:async(state,isCurrent,force)=>{const icons=await captureMenuIcons(state,join(here,'../../out/native-avatar/index.html'));if(!isCurrent())return;const result=await shareMenu.update(state,icons,{isCurrent,force});if(result)scheduleFinderRefresh();return result;},
         onError:error=>{
           if(['MENU_SUPERSEDED','MENU_UPDATE_BUSY','ACCOUNT_BUSY'].includes(error?.message))return;
           shareMenu.status.error='MENU_UPDATE_FAILED';
@@ -772,6 +783,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   latestState=await rpc.call('initialize',{root:join(app.getPath('userData'),'inbox'),shareRoot:shareMenu?.root,preview,locale:app.getLocale()});
   applyShortcuts(latestState.shortcuts);
   if(menuReconciler)menuReconciler.request(latestState);
+  void refreshFinderIfStale();
   nativeTheme.themeSource=latestState.theme;
   ipcMain.handle('anywhere:call',async(event,method,params)=>{
     if(!trusted(event))return {error:'UNTRUSTED_SENDER'};

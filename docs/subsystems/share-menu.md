@@ -12,7 +12,7 @@ macOS 的分享扩展是**签名过的 appex**，不能运行时凭空创建。�
 
 - 第 1–12 个启用的接收 Bot 占用槽 1–12。
 - 第 13 个起仍可当接收单位，用悬浮输入框 / 快捷指令 / 拖放，只是进不了这个菜单。
-- 菜单图标只展示 Bot 头像，不带主 Bot 星标或其他应用内标记；主 Bot 状态变化不重建菜单。
+- 菜单图标只展示 Bot 头像，不带主 Bot 星标或其他应用内标记，并保留透明背景；主 Bot 状态变化不重建菜单。
 - 增加/删除/改名/换头像都需要重新生成宿主、重签、重新注册；只切换已有槽的启用状态可以只改显示。
 
 决策见 [ADR 0002](../decisions/0002-share-menu-slots.md)。
@@ -46,7 +46,7 @@ macOS 的分享扩展是**签名过的 appex**，不能运行时凭空创建。�
 - 同名 Bot 靠头像区分；名字过长由系统截断。
 - 更新后必须重新打开微信的转发菜单；微信会缓存旧菜单，必要时退出微信重开。手动「重新同步」会强制重建，适合应用显示已同步但微信仍是旧名字/旧顺序的情况。
 
-**Finder 的右键共享菜单是另一层缓存。** `pluginkit` 和 `NSSharingService` 已经返回新名字时，Finder 仍可能显示旧入口，直到 Finder 进程重启。设置 → 微信 → **刷新访达菜单** 会重启 Finder（已打开的 Finder 窗口会重新打开）；也可手动 `killall Finder`。
+**Finder 的右键共享菜单是另一层缓存。** `pluginkit` 和 `NSSharingService` 已经返回新名字时，Finder 仍可能显示旧入口，直到 Finder 进程重启。应用在菜单更新成功后会自动重启 Finder；启动时如果发现 Finder 早于 `menu-state.json`，也会刷新一次。仍异常时可手动 `killall Finder`。
 
 ## ShareInbox 契约
 
@@ -84,7 +84,7 @@ Windows 微信没有等价的 share-extension 宿主。当前支持：
 
 ## 排障
 
-- 设置 → 微信 → **复制报错日志**：复制应用与 Electron 版本、菜单状态、宿主 build、`configuration.json`/`menu-state.json` 摘要、最近一次更新错误。可能包含本机路径，不包含登录凭据。
+- 设置 → 分享菜单 → **复制报错日志**：复制应用与 Electron 版本、菜单状态、宿主 build、`configuration.json`/`menu-state.json` 摘要、最近一次更新错误。可能包含本机路径，不包含登录凭据。
 - 失败详情写入 `userData/ShareInbox/menu-update.log`（只含错误码、堆栈和命令 stderr，不含凭据）。
 - 宿主当前版本：`plutil -extract CFBundleVersion raw "$HOME/Applications/Grok Bot Anywhere Menu/Contents/Helpers/Destination01.app/Contents/Info.plist"`。
 - 已注册的分享扩展：`pluginkit -m -p com.apple.share-services | grep grokbotanywhere`。

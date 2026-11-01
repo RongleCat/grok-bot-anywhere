@@ -6,7 +6,7 @@ import {coalBallSvg,confirmAccountStill,confirmCopy,toolboxShareOff} from '../sh
 import {captionGlyph,windowCaptionButtons,windowCaptionLabel} from '../shell/window-chrome.mjs';
 const api=window.anywhere;
 let state,page='bots',selected='',search='',searchOpen=true,grouped=false,avatars=[],busy=false,recordingSlot=null,inboxBot='',inboxFilterController,inboxAvatarObserver,menuReading=false,toastTimer,viewKey='',gridKey='';
-let settingsTab='account',copying=false,confirmState=null,copyOpener=null;
+let settingsTab='general',copying=false,confirmState=null,copyOpener=null;
 try{grouped=localStorage.getItem('gba.grouped')==='1';}catch{}
 const chinese=()=>state?.host?.locale?.startsWith('zh')??navigator.language.startsWith('zh');
 const t=(cn,en)=>chinese()?cn:en;
@@ -482,8 +482,10 @@ function inboxBotFilter(){
  return wrap;
 }
 function settingsTabBar(){
- const tabs=[['account',t('账号','Account')],['appearance',t('外观','Appearance')],['shortcuts',t('快捷键','Shortcuts')],['composer',t('输入框','Composer')],['cli',t('命令行','Command line')],...(state.host?.platform==='darwin'?[['wechat',t('微信','WeChat')]]:[]),['toolbox',t('工具箱','Toolbox')]];
- if(!tabs.some(([id])=>id===settingsTab))settingsTab='account';
+ const tabs=[['general',t('常规','General')],['shortcuts',t('快捷键','Shortcuts')],['composer',t('输入框','Composer')],...(state.host?.platform==='darwin'?[['share',t('分享菜单','Share menu')]]:[]),['toolbox',t('工具箱','Toolbox')]];
+ const aliases={account:'general',appearance:'general',cli:'toolbox',wechat:'share'};
+ if(aliases[settingsTab])settingsTab=aliases[settingsTab];
+ if(!tabs.some(([id])=>id===settingsTab))settingsTab='general';
  const tablist=el('div','settings-tabs');
  tablist.setAttribute('role','tablist');tablist.setAttribute('aria-label',t('设置分组','Settings sections'));
  tabs.forEach(([id,label],index)=>{
@@ -529,13 +531,13 @@ function renderSettings(content){
  else{actions.append(loginButton());if(state.host?.platform==='darwin')actions.append(smallButton(t('本机登录','Local login'),()=>api.desktopLogin()));}
  accountRow.append(name,actions);account.append(accountRow);
  account.append(hostSwitch(t('开机自启动','Launch at login'),t('登录这台电脑后在后台打开。','Opens in the background when you sign in to this computer.'),!!state.host?.openAtLogin,t('开机自启动','Launch at login'),next=>api.setOpenAtLogin(next)));
- if(settingsTab==='account')panel.append(account);
+
  const appearance=el('section','group'),themeRow=el('div','group-row');themeRow.append(el('span','group-label',t('外观','Appearance')));
  const themes=el('div','segment');
  for(const [value,label] of [['system',t('系统','System')],['light',t('白','Light')],['dark',t('黑','Dark')]]){
   const choice=el('button',state.theme===value?'selected':'',label);choice.type='button';choice.addEventListener('click',()=>run(()=>api.theme(value)));themes.append(choice);
  }
- themeRow.append(themes);appearance.append(themeRow);if(settingsTab==='appearance')panel.append(appearance);
+ themeRow.append(themes);appearance.append(themeRow);if(settingsTab==='general')panel.append(account,appearance);
  const keys=el('section','group');
  keys.append(shortcutRow('compose',t('通用快捷键','General shortcut'),t('打开上次用过的 Bot。点按键，再按下组合。Esc 取消。','Opens the Bot you used last. Click the key, then press a combination. Esc cancels.')));
  keys.append(shortcutRow('open',t('在 Grok Bot 中打开','Open in Grok Bot'),t('打开上次选中的 Bot。链接是 grokbot://app/v1/agent?id= 加上这个 Bot 的编号。','Opens the Bot you selected last. The link is grokbot://app/v1/agent?id= plus that Bot id.')));
@@ -562,8 +564,8 @@ function renderSettings(content){
  cliCopy.append(el('div','group-label',t('命令行','Command line')),el('div','group-help',cliHelp));
  const cliSwitch=el('input','switch');cliSwitch.type='checkbox';cliSwitch.checked=!!cli.enabled;cliSwitch.setAttribute('aria-label',t('命令行','Command line'));
  cliSwitch.addEventListener('change',()=>{const next=cliSwitch.checked;run(async()=>{try{await api.setCli(next);}catch(error){cliSwitch.checked=!next;throw error;}});});
- cliRow.append(cliCopy,cliSwitch);cliPanel.append(cliRow);if(settingsTab==='cli')panel.append(cliPanel);
- if(settingsTab==='wechat'&&state.host?.platform==='darwin'){
+ cliRow.append(cliCopy,cliSwitch);cliPanel.append(cliRow);
+ if(settingsTab==='share'&&state.host?.platform==='darwin'){
   const menu=state.host.menu??{},wechatPanel=el('section','group'),row=el('div','group-row'),info=el('div');
   info.append(el('div','group-label',t('微信转发','WeChat')),el('div','group-help',!menu.available?t('这个版本没有分享扩展','Sharing extensions are not in this build'):menu.busy?t('正在同步菜单','Syncing the menu'):menu.needsUpdate?t('设置已保存，需要重新同步','Saved. Sync to update.'):t(`已启用 ${menu.registered??0} 个入口`,`${menu.registered??0} destinations on`)));
   const update=smallButton(t('重新同步','Sync again'),async()=>{update.disabled=true;try{const result=await api.updateMenu();toast(t(`已同步 ${result.registered} 个入口。若微信里没变化，重新打开微信的转发菜单。`,`Synced ${result.registered} destinations. If WeChat still shows the old menu, reopen its forwarding menu.`));}catch{}finally{update.disabled=false;}});
@@ -588,13 +590,7 @@ function renderSettings(content){
    finally{copyLog.disabled=false;}
   });
   diagnose.append(settingRow(t('排查','Troubleshoot'),copyLog,t('复制分享菜单状态、宿主版本和最近一次更新错误。可能包含本机路径，不包含登录凭据。','Copies share-menu status, host build and the latest update error. May include local paths, never credentials.')));
-  const refresh=smallButton(t('刷新访达菜单','Refresh Finder menu'),async()=>{
-   const confirmed=await askConfirm({title:t('重启访达？','Restart Finder?'),body:t('访达会缓存右键共享菜单。重启访达后，已打开的访达窗口会重新打开，再试一次共享菜单。','Finder caches the Share menu. Restarting Finder reopens its windows; try the Share menu again afterwards.'),confirmLabel:t('重启访达','Restart Finder')});
-   if(!confirmed)return;
-   await api.refreshFinderMenu();
-   toast(t('已重启访达，请重新打开右键共享菜单。','Finder restarted. Reopen the Share menu.'));
-  });
-  diagnose.append(settingRow(t('系统共享菜单','System share menu'),refresh,t('修改接收 Bot 后，访达右键的共享菜单可能还显示旧名字。重启访达后才会刷新。','After changing receivers, Finder may still show old names in its Share menu. Restart Finder to refresh it.')));
+  diagnose.append(settingRow(t('系统共享菜单','System share menu'),el('span','group-help',t('自动刷新','Automatic')),t('菜单变化后会自动重启访达，让右键共享菜单重新读取入口；不需要再手动刷新。','Finder restarts automatically after a menu change so its Share menu re-reads the entries.')));
   panel.append(wechatPanel,diagnose);
  }
  if(settingsTab==='toolbox'){
@@ -605,7 +601,7 @@ function renderSettings(content){
   const turnOff=smallButton(t('一键关闭','Turn off all'),disableAllShare,'secondary');
   turnOff.disabled=!plans.length;
   row.append(copy,turnOff);
-  tool.append(row);panel.append(tool);
+  tool.append(row);panel.append(tool,cliPanel);
   if(state.host?.platform==='win32'){
    const menuOn=state.host?.explorerMenu!==false;
    const windows=el('section','group');

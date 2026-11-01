@@ -79,7 +79,7 @@
 
 **系统共享面板和宿主注册是两层缓存，不要把 Finder 的旧列表当成注册失败。**
 - 2026-11-01：`pluginkit` 与 `NSSharingService.sharingServices` 已返回「赛博小晚/杂物总管」，Finder 右键 → 共享仍显示更早的「增长情报/测试 cli」；Finder 进程从 10-26 起未重启，缓存了旧的 share extension 列表。
-- 规则：先看 `pluginkit -m -p com.apple.share-services` 和 live `NSSharingService`，再看 Finder/微信进程；Finder 需要重启（应用设置里的「刷新访达菜单」）才会重新枚举。
+- 规则：先看 `pluginkit -m -p com.apple.share-services` 和 live `NSSharingService`，再看 Finder/微信进程；Finder 需要重启才会重新枚举；应用现在在菜单更新和启动时自动重启 Finder。
 - 证据：`desktop/src/main/main.mjs` 的 `refreshFinderMenu`；宿主 `Destination01/02` 显示名与注册 ID 对比。
 - Seen 1×（2026-11-01）。
 

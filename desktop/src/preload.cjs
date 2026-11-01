@@ -14,7 +14,6 @@ contextBridge.exposeInMainWorld('anywhere',{
   resolve:id=>call('resolve',{id}),
   updateMenu:()=>call('updateMenu'),
   copyDiagnostics:()=>call('copyDiagnostics'),
-  refreshFinderMenu:()=>call('refreshFinderMenu'),
   menuOrder:()=>call('menuOrder'),
   chooseFiles:botId=>call('chooseFiles',{botId}),
   pickFiles:()=>call('pickFiles'),

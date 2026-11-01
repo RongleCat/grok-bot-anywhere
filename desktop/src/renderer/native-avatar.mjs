@@ -77,13 +77,6 @@ window.captureMenuAvatar=async config=>{
  try{return await handle.capture(128);}finally{handle.destroy();}
 };
 
-// Flatten share icons before macOS supplies a material tile for transparency.
-// Live avatars continue using their transparent captures.
-window.whiteMenuIcon=async source=>{
- const image=new Image();
- await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('MENU_AVATAR_MISSING'));image.src=source;});
- const size=Math.max(128,image.naturalWidth||0,image.naturalHeight||0);
- const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
- const context=canvas.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,size,size);context.drawImage(image,0,0,size,size);
- return canvas.toDataURL('image/png');
-};
+// Share-menu icons keep the avatar's transparent background. Finder supplies
+// its own tile behind the icon; baking white into the PNG breaks dark mode.
+window.whiteMenuIcon=async source=>source;
