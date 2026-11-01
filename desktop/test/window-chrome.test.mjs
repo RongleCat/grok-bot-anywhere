@@ -89,6 +89,8 @@ test('shipped window chrome stays on the main Windows window',async()=>{
   assert.doesNotMatch(chrome,/thickFrame/);
   assert.match(main,/mainWindowOptions\(process\.platform\)/);
   assert.match(main,/process\.platform==='win32'\?\{icon:nativeImage\.createFromBuffer\(coalBallAppPng\(256,\{platform:'win32'\}\)\)\}/);
+  assert.match(css,/\.bot-dot\{[^}]*right:-1px;top:-1px[^}]*\}/);
+  assert.doesNotMatch(css,/\.bot-dot\{[^}]*bottom:-1px/);
   assert.match(main,/setBackgroundMaterial\('acrylic'\)/);
   assert.match(main,/bindWindowsEditKeys\(window\.webContents\)/);
   assert.match(main,/bindWindowsEditKeys\(target\.webContents\)/);
