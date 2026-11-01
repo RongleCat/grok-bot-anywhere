@@ -325,7 +325,7 @@ function placePicker(width,height){
   pickerSize={width:Math.round(width)||760,height:Math.round(height)||188};
   layoutExtras();
 }
-function hideFloat({clearAttachments=false}={}){
+function hideFloat({clearAttachments=false,releaseFocus=false}={}){
   suppressActivate=true;
   setTimeout(()=>{suppressActivate=false;},400);
   pickerOpen=false;
@@ -333,6 +333,7 @@ function hideFloat({clearAttachments=false}={}){
   for(const extra of [avatarWindow,pickerWindow])if(extra&&!extra.isDestroyed()&&extra.isVisible())extra.hide();
   if(!floatWindow||floatWindow.isDestroyed()||!floatWindow.isVisible())return;
   floatWindow.hide();
+  if(releaseFocus&&window&&!window.isDestroyed()&&window.isVisible()){try{window.blur();}catch{}}
 }
 function wireFloat(target,label){
   target.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -670,7 +671,7 @@ async function dispatch(method,p){
     }
     case 'noteBot':if(typeof p.botId==='string'){activeBotId=p.botId;update();}return {ok:true};
     case 'pendingComposer':return pendingFloat;
-    case 'hideComposer':hideFloat({clearAttachments:p.clear===true});return {ok:true};
+    case 'hideComposer':hideFloat({clearAttachments:p.clear===true,releaseFocus:true});return {ok:true};
     case 'focusComposer':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.focus();return {ok:true};
     case 'setHit':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.setIgnoreMouseEvents(!p.hit,{forward:true});return {ok:true};
     case 'composerReady':{
