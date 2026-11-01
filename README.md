@@ -17,7 +17,7 @@
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
 
-<sub>macOS 已实机验证 · Windows 已实现，待实机验证 · Linux 暂不支持</sub>
+<sub>macOS 已实机验证 · Windows 部分实机验证（开发模式） · Linux 暂不支持</sub>
 
 </div>
 
@@ -85,7 +85,7 @@ npm run package:mac    # arm64 + x64 DMG，签名 + 公证
 npm run package:win    # 未签名 zip
 ```
 
-产物在 `desktop/release/`，不进入 git。Windows 包尚未在 Windows 实机验证，也未签名。
+产物在 `desktop/release/`，不进入 git。Windows 包是未签名 zip，尚未在 Windows 实机验证。
 
 ## 功能
 
@@ -153,10 +153,10 @@ flowchart LR
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
 | macOS 14+ | ✅ 已实机验证 | 登录、名单、悬浮输入框、12 槽微信菜单、收件与发送、签名公证 DMG |
-| Windows 10/11 | 🟡 已实现，未实机验证 | 无边框窗口、Explorer 右键、悬浮输入框、CLI、URL 协议；微信分享入口不支持 |
+| Windows 10/11 | 🟡 部分实机验证（开发模式） | 启动、主窗口、URL 协议注册、Explorer 级联结构、CLI 已在真机跑过；安装包与右键点击未运行；微信分享入口不支持 |
 | Linux | ⛔ 未支持 | 没有打包目标与平台适配 |
 
-「已实现」只表示代码和单测存在，不等于在 Windows 上跑过。平台细节与未验证项写在对应页面。
+「已实现」只表示代码和单测存在。Windows 的实机结论按项记录在 [Windows](docs/platforms/windows.md)，没跑过的项不写成已验证。
 
 ## 文档
 
@@ -221,7 +221,7 @@ scripts/                  文档校验、跨平台命令启动器、Agent runner
 
 当前是 `0.1.0` 预览版，macOS 主路径可用。还没完成的部分：
 
-- [ ] Windows 实机验证：窗口、托盘、Explorer 右键、悬浮输入框、安装包。
+- [ ] Windows 实机验证（剩余）：安装包首次启动、Explorer 右键点击、悬浮输入框焦点、托盘点击。已跑过的项见 [Windows](docs/platforms/windows.md)。
 - [ ] Windows 微信分享入口：MSIX 稀疏包方案仍在验证，未在 Windows 运行。
 - [ ] Linux 桌面支持：先决定系统集成最低集，再补打包目标。
 - [ ] App Intents、自动更新、公开 Release 页。

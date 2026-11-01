@@ -11,11 +11,11 @@
 
 ## 当前状态（2026-11-01）
 
-- 主产品：`desktop/`（Electron），macOS 已验证，Windows 已实现未实机验证，Linux 未支持。
+- 主产品：`desktop/`（Electron），macOS 已验证，Windows 部分实机验证（2026-11-01，开发模式），Linux 未支持。
 - 原生：`native/macos/`（Swift），仅 macOS。
 - 协议：`packages/client-protocol/`，非官方、实验性。
 - 文档：`docs/` 是唯一事实来源；`docs/history/` 只作背景。
-- 基线（2026-11-01）：desktop 129、client-protocol 60、avatar 1、Swift 8 passed。
+- 基线（2026-11-01）：desktop 130、client-protocol 60、avatar 1、Swift 8 passed。Windows 实机：desktop 128 passed + 2 skipped（POSIX-only 断言）、client-protocol 60 passed。
 - 根命令：`npm run test:all`、`npm run docs:check`、`npm run smoke`。
 
 ## 命令
@@ -48,7 +48,7 @@ desktop/                  Electron 主产品
   src/renderer/           UI（无 Node、无凭据）
   src/share/              macOS 分享槽位与注册
   src/shell/              跨平台纯函数
-  test/                   129 tests
+  test/                   130 tests
 native/macos/             Swift 伴侣 + Bloub 头像
 packages/client-protocol  非官方 SDK/CLI
 docs/                     Wiki（Current / Unverified / Historical）
@@ -83,7 +83,7 @@ vendor/bloub              Bloub 头像引擎 submodule
 ## 平台
 
 - macOS：完整；见 [macOS](docs/platforms/macos.md)。
-- Windows：实现存在、**未实机验证**；微信分享不支持；见 [Windows](docs/platforms/windows.md)。
+- Windows：实现存在、**部分实机验证**（2026-11-01，开发模式；安装包与右键点击未运行）；微信分享不支持；见 [Windows](docs/platforms/windows.md)。
 - Linux：未支持；见 [Linux](docs/platforms/linux.md)。
 - 平台分支集中在 `desktop/src/shell/`、`desktop/src/share/`、`native/`，不要散落。
 

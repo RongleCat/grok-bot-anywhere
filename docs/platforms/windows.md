@@ -1,6 +1,6 @@
 # Windows
 
-状态：Current 代码 + **Unverified 实机**。所有 Windows 行为都在 macOS 上通过单元测试，尚未在 Windows 机器上运行。
+状态：Current 代码 + **部分实机验证**（2026-11-01，Windows 11 开发模式）。窗口、托盘、协议注册、Explorer 级联、CLI 已在真机跑过；见[实机验证结果](#实机验证结果2026-11-01)。安装包、右键点击、悬浮输入框焦点仍**未运行**。
 
 ## 已实现
 
@@ -29,11 +29,13 @@ Windows 微信没有 macOS `GrokBotShare.appex` 等价的宿主。当前**不支
 
 ## 未验证项
 
-- 真实 Windows 11 上的窗口、托盘、快捷键、协议注册。
+- 托盘图标点击与退出菜单。
+- 全局快捷键在真机上按下（注册代码已跑通，未按）。
+- Explorer 右键菜单项的实际点击与 `--explorer-forward` 端到端投递。
 - Explorer 右键在「显示更多选项」中的位置、15 项多选上限。
 - 多标签 Explorer 只返回第一个标签选区。
 - 常驻 PowerShell 选择宿主：企业安全软件可能告警；编译一次后复用。
-- `grok-bot.cmd` 的代码页/Path 中文条目；已在单测覆盖，但无实机。
+- 悬浮输入框的焦点/置顶/点击穿透在多显示器与 DPI 缩放下的表现。
 - 安装 zip 后的首次启动、登录、分享导入、通知。
 - 打包产物无签名，SmartScreen/SAC 可能拦截。
 
@@ -61,6 +63,22 @@ CLI 凭据：`%LOCALAPPDATA%\Grok Bot Anywhere\cli\`。
 4. 设置 → 工具箱 → Windows 菜单 → 重建；在 Explorer 右键验证每个 Bot 一行。
 5. `npm run package:win`，解压到干净目录再启动。
 6. 记录每一步的实际结果；未运行就写“未运行”，不要写“应该可以”。
+
+## 实机验证结果（2026-11-01）
+
+Windows 11、Node v22.22.0、开发模式（`npm run dev`，非 `--preview`）。只记录实际跑过的项。
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| `npm run setup` + `npm run build` | 通过 | 287 包；`desktop/out/` 六个产物 |
+| Electron 启动与主窗口 | 通过 | 无边框窗口渲染出真实 Bot 列表与详情 |
+| `grokbotanywhere://` 注册 | 通过（读取） | `HKCU\Software\Classes\grokbotanywhere\shell\open\command` 指向 electron.exe + app 目录 + `%1` |
+| Explorer 级联注册 | 通过（结构） | 父键 `*\shell\GrokBotAnywhere`（`MUIVerb=Grok Bot`、`ExtendedSubCommandsKey=GrokBotAnywhere.Menu`、`MultiSelectModel=Document`），子键 `01_<botId>` 的 command 形如 `--explorer-forward --bot=<id> -- "%1"`；只注册 enabled 的 Bot |
+| `npm test`（desktop） | 128 通过 / 2 跳过（共 130） | 跳过的两项是 POSIX-only 断言（rc 文件、ENOTDIR） |
+| `npm run test:client` | 60 通过 | — |
+| 随包 `grok-bot.cmd --version` | 通过 | `grok-bot 0.3.0` / `grok-bot-target 0.78.1` / `runtime node v22.22.0` |
+
+实机发现并已修复（见 [LESSONS](../../LESSONS.md)）：`core.autocrlf=true`（Git for Windows 默认）会把 `bin/grok-bot.mjs` 检出成 CRLF，使随包校验失败，**Windows 上 `grok-bot` 的所有调用都以 `CLI_CHECKSUM_MISMATCH` 退出 3**。`.gitattributes` 已把 `desktop/resources/grok-bot-skill/**` 标为 `-text`。
 
 ## 已知风险
 

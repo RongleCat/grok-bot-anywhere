@@ -33,6 +33,21 @@
 
 ## 平台
 
+**带校验和的随包文件必须固定行尾，否则 Windows 检出后校验必败。**
+- 2026-11-01：`grok-bot.ps1` 每次启动先比对 `bin/grok-bot.mjs` 与 `bin/SHA256SUMS`；Git for Windows 默认 `core.autocrlf=true` 把 `.mjs` 检出成 CRLF，哈希不匹配，Windows 上 `grok-bot` 所有命令以 `CLI_CHECKSUM_MISMATCH` 退出 3。
+- 规则：凡是内容被哈希/签名固定的资源（skill bundle、图标、清单），在 `.gitattributes` 里标 `-text` 或 `eol=lf`；改完删掉重检出，再跑一次真实 launcher。
+- Seen 1×（2026-11-01，`.gitattributes` + `desktop/resources/grok-bot-skill/`）。
+
+**跨平台逻辑的分隔符要用目标平台，不能用宿主机。**
+- 2026-11-01：`pathHasDir` 用 `path.delimiter` 切 PATH；在 Windows 上组装 darwin 安装时按 `;` 切含 `:` 的 PATH，永远判不到已有目录。
+- 规则：函数已经有 `platform` 参数时，所有分隔符/大小写/绝对路径判断都从它推导（`;` vs `:`、`win32.isAbsolute` vs `posix`），不读 `process.platform` 的隐式默认。
+- Seen 1×（2026-11-01，`cli-bridge.mjs` `pathHasDir`）。
+
+**测试若硬写 macOS 语义，就会在 Windows 上假失败并掩盖真问题。**
+- 2026-11-01：6 个 desktop 测试在 Windows 上失败，其中只有 1 个是真 bug（sum 校验），5 个是 `0o600`、POSIX rc 文件、路径分隔符等宿主假设；真假失败混在一起，真 bug 差点被当成“平台噪音”。
+- 规则：要么用 `process.platform` 分支或 `{skip: ...}` 写明只测 POSIX，要么按目标平台构造路径；断言分隔符时用 `join()`。
+- Seen 1×（2026-11-01，`cli-bridge` / `menu-host-path` / `delivery` 测试）。
+
 **Electron 第二个实例的 argv 会被 Chromium 重排，不能假设 `--flag value` 相邻。**
 - 2026-10-31：`--explorer-forward --bot <id> -- "%1"` 在应用已运行时，`--bot` 后面常插入 `--allow-file-access-from-files` 等开关，旧解析器把开关当 botId，每次都误报“没有开启接收转发”。
 - 规则：按参数形状解析（`--bot=...` 或跳过 `--` 开关），并用真实 `second-instance` payload 做测试。
