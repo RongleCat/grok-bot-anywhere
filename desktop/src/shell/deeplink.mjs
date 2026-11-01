@@ -1,6 +1,7 @@
 export const BOT_ID=/^[A-Za-z0-9_-]{1,128}$/;
+export const BATCH_ID=/^[a-f0-9]{32}$/i;
 export const TEXT_LIMIT=8000;
-const ACTIONS=new Set(['open','compose','send']);
+const ACTIONS=new Set(['open','compose','send','share']);
 
 function tokenField(key){
   const name=String(key).toLowerCase().replace(/[^a-z0-9]+/g,'');
@@ -31,6 +32,15 @@ export function parseDeeplink(input){
   const bots=params.getAll('bot');
   if(bots.some(value=>!BOT_ID.test(value)))return {ok:false,reason:'bot'};
   if(action==='send'&&!bots.length)return {ok:false,reason:'bot'};
+  // The Windows share helper writes a batch folder and passes its id; the Bot
+  // is chosen in the app, so a share link never carries one.
+  if(action==='share'){
+    const batches=params.getAll('batch');
+    if(batches.length!==1||!BATCH_ID.test(batches[0]))return {ok:false,reason:'batch'};
+    // A share names a batch, never a Bot: the picker decides that.
+    if(bots.length)return {ok:false,reason:'bot'};
+    return {ok:true,action,batch:batches[0],bot:null,text:'',hasText:false};
+  }
   return {ok:true,action,bot:bots[0]??null,text:texts[0]??'',hasText:texts.length>0};
 }
 export function composeLink(botId){

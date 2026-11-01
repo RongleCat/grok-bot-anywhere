@@ -6,6 +6,17 @@ import {fileURLToPath} from 'node:url';
 import {composeLink,deeplinkNotice,parseDeeplink,shortcutSourceAllowed,TEXT_LIMIT} from '../src/shell/deeplink.mjs';
 import {coalBallGeometry,coalBallSample,coalBallTemplatePng,trayIconImages} from '../src/shell/coal-ball.mjs';
 
+test('a Windows share link carries only a batch id',()=>{
+  const batch='7f9104b344314cd7be8836ab7076ab14';
+  const parsed=parseDeeplink(`grokbotanywhere://share?batch=${batch}`);
+  assert.deepEqual(parsed,{ok:true,action:'share',batch,bot:null,text:'',hasText:false});
+  // The Bot is chosen in the app, so a link that names one is not a share.
+  assert.equal(parseDeeplink(`grokbotanywhere://share?batch=${batch}&bot=x`).ok,false);
+  assert.equal(parseDeeplink('grokbotanywhere://share').ok,false);
+  assert.equal(parseDeeplink('grokbotanywhere://share?batch=..%2F..%2Fetc').ok,false);
+  assert.equal(parseDeeplink(`grokbotanywhere://share?batch=${batch}&token=secret`).ok,false);
+});
+
 test('deeplink accepts the three routes and ignores unknown parameters',()=>{
   assert.deepEqual(parseDeeplink('grokbotanywhere://open'),{ok:true,action:'open',bot:null,text:'',hasText:false});
   const compose=parseDeeplink('grokbotanywhere://compose?bot=bot_1&text=hello%20there&extra=1');

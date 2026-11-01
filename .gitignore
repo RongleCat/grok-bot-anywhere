@@ -18,3 +18,7 @@ desktop/release-auto2/
 
 # Local-only references (never committed)
 local/
+
+# Windows native build output (MSVC)
+native/windows/**/out/
+native/windows/**/*.obj
