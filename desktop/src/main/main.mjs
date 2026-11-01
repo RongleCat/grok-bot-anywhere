@@ -1,8 +1,8 @@
-import {app,BrowserWindow,ipcMain,utilityProcess,safeStorage,shell,dialog,nativeTheme,Menu,Notification,globalShortcut,screen} from 'electron';
+import {app,BrowserWindow,ipcMain,utilityProcess,safeStorage,shell,dialog,nativeTheme,Menu,Notification,globalShortcut,screen,Tray,nativeImage,clipboard,TouchBar} from 'electron';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
-import {dirname,join} from 'node:path';
+import {dirname,isAbsolute,join} from 'node:path';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {RpcClient} from './rpc.mjs';
@@ -15,9 +15,16 @@ import {captureMenuIcons} from './menu-icons.mjs';
 import {MenuReconciler} from '../share/reconciler.mjs';
 import {menuHostTemplate,sharingApplicationPath} from '../share/host-path.mjs';
 import {shareHandoff} from '../share/handoff.mjs';
-import {frontmostFiles} from './selection.mjs';
+import {frontmostFiles,prepareExplorerSelection,regularFiles,stopExplorerSelection,warmExplorerSelection} from './selection.mjs';
 import {menuEntries} from '../share/model.mjs';
 import {matchShareTitles} from '../share/order.mjs';
+import {grokBotAgentUrl} from '../grok-link.mjs';
+import {disableCli,enableCli,skillBundleDir,writeCliCredential} from './cli-bridge.mjs';
+import {applyExplorerRegistry,applyLoginItem,createExplorerBatch,createExplorerSync,explorerLogLine,explorerRegistryOps,explorerRejectNotice,floatingComposerTraits,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shouldApplyLoginItem,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction} from '../shell/actions.mjs';
+import {coalBallIcon,coalBallPng,trayIconImages} from '../shell/coal-ball.mjs';
+import {acceptWindowControl,editCommand,mainWindowOptions,maximizedContentInset} from '../shell/window-chrome.mjs';
+import {composeLink,deeplinkNotice,parseDeeplink,shortcutSourceAllowed} from '../shell/deeplink.mjs';
+import {listedBots} from '../renderer/group-avatar.mjs';
 
 const runProcess=promisify(execFile);
 
@@ -25,16 +32,21 @@ const here=dirname(fileURLToPath(import.meta.url));
 const smoke=process.argv.includes('--smoke-test');
 const preview=smoke||process.argv.includes('--preview');
 const backgroundShare=process.argv.includes('--share-intake');
-let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,quitting=false,accountBusy=false;
+const quietLaunch=backgroundShare||process.argv.includes('--explorer-forward')||process.argv.some(arg=>String(arg).includes('grokbotanywhere://'));
+let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false;
+let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
 let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,ipcSender=null;
 let composerPrefs={keepAfterSend:true,dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0;
+let cliStatus={enabled:false,command:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:''};
 const pendingSharedComposers=new Set();let openingSharedComposer=false,shortcutsSuppressed=false;
+const pendingLinks=[];let deeplinkReady=false,deeplinkChain=Promise.resolve();
 const registeredShortcuts=new Map();
 const zh=app.getLocale?.().startsWith('zh');
 const notify=(event,data)=>{const payload={event,data};for(const target of [window,floatWindow,avatarWindow,pickerWindow])if(target&&!target.isDestroyed())target.webContents.send('anywhere:event',payload);};
-const publicState=()=>({...latestState,activeBotId,composerPrefs,host:{platform:process.platform,locale:app.getLocale(),material:windowMaterial,companion:!!companion?.ready,preview,issue:hostIssue,menu:shareMenu?.status??{available:false,needsUpdate:true,registered:0}}});
-const update=()=>notify('state',publicState());
+const cliPublic=()=>({enabled:!!cliStatus.enabled,command:cliStatus.command??'',skillsPath:cliStatus.skillsPath??'',claudeLinked:!!cliStatus.claudeLinked,credential:!!cliStatus.credential,error:cliStatus.error??''});
+const publicState=()=>({...latestState,activeBotId,composerPrefs,host:{platform:process.platform,locale:app.getLocale(),material:windowMaterial,companion:!!companion?.ready,preview,issue:hostIssue,openAtLogin,explorerMenu,touchBarPinned,menu:shareMenu?.status??{available:false,needsUpdate:true,registered:0},cli:cliPublic()}});
+const update=()=>{notify('state',publicState());refreshTouchBar();};
 const issue=code=>{if(!code||code==='ACCOUNT_BUSY')return;hostIssue=code;update();};
 const errorCode=error=>/^[A-Z][A-Z0-9_]{1,70}$/.test(error?.message??'')?error.message:'OPERATION_FAILED';
 
@@ -45,6 +57,189 @@ function loadComposerPrefs(){
   catch{composerPrefs={keepAfterSend:true,dismissOnOutside:true};}
 }
 function saveComposerPrefs(){try{writeFileSync(join(app.getPath('userData'),'composer-prefs.json'),JSON.stringify(composerPrefs));}catch{}}
+function cliConfigDir(){return process.platform==='win32'?join(app.getPath('localAppData'),'Grok Bot Anywhere','cli'):join(app.getPath('userData'),'cli');}
+function loadCliPref(){try{const parsed=JSON.parse(readFileSync(join(app.getPath('userData'),'cli-enabled.json'),'utf8'));return {enabled:parsed.enabled===true,pathSnippet:parsed.pathSnippet===true};}catch{return {enabled:false,pathSnippet:false};}}
+function saveCliPref(pref){try{writeFileSync(join(app.getPath('userData'),'cli-enabled.json'),JSON.stringify({enabled:!!pref.enabled,pathSnippet:!!pref.pathSnippet}));}catch{}}
+function loadShellPrefs(){
+  try{const parsed=JSON.parse(readFileSync(join(app.getPath('userData'),'login-item.json'),'utf8'));loginItemKnown=true;openAtLogin=parsed.enabled===true;}catch{loginItemKnown=false;openAtLogin=false;}
+  try{explorerMenu=JSON.parse(readFileSync(join(app.getPath('userData'),'explorer-menu.json'),'utf8')).enabled!==false;}catch{explorerMenu=true;}
+  try{touchBarPinned=JSON.parse(readFileSync(join(app.getPath('userData'),'touchbar.json'),'utf8')).pinned===true;}catch{touchBarPinned=false;}
+}
+function saveExplorerPref(){try{writeFileSync(join(app.getPath('userData'),'explorer-menu.json'),JSON.stringify({enabled:explorerMenu===true}));}catch{}}
+function saveLoginPref(){try{writeFileSync(join(app.getPath('userData'),'login-item.json'),JSON.stringify({enabled:openAtLogin}));}catch{}}
+function saveTouchPref(){try{writeFileSync(join(app.getPath('userData'),'touchbar.json'),JSON.stringify({pinned:touchBarPinned}));}catch{}}
+let notifyIcon;
+function notificationIcon(){
+  if(process.platform!=='win32')return null;
+  if(!notifyIcon||notifyIcon.isEmpty())notifyIcon=nativeImage.createFromBuffer(coalBallPng(256));
+  return notifyIcon.isEmpty()?null:notifyIcon;
+}
+function systemNotification(payload){
+  const icon=notificationIcon();
+  return new Notification({...payload,...icon?{icon}:{}});
+}
+function trayImage(){
+  const image=nativeImage.createEmpty();
+  const icons=process.platform==='darwin'?trayIconImages('darwin'):[coalBallIcon(16),coalBallIcon(32)].map(icon=>({png:icon.png,size:icon.width,scale:icon.width/16,template:false}));
+  for(const icon of icons)image.addRepresentation({scaleFactor:icon.scale,width:icon.size/icon.scale,height:icon.size/icon.scale,dataURL:`data:image/png;base64,${icon.png.toString('base64')}`});
+  if(icons.some(icon=>icon.template))image.setTemplateImage(true);
+  return image;
+}
+function showMainWindow(){
+  if(!window||window.isDestroyed())return;
+  if(window.isMinimized())window.restore();
+  window.show();
+  window.focus();
+}
+function ensureTray(){
+  if(tray||smoke||preview)return;
+  if(process.platform!=='darwin'&&process.platform!=='win32')return;
+  const image=trayImage();
+  if(!image||image.isEmpty())return;
+  tray=new Tray(image);
+  tray.setToolTip('Grok Bot Anywhere');
+  tray.setContextMenu(Menu.buildFromTemplate(trayMenuModel(app.getLocale?.()??'').map(item=>({label:item.label,click:()=>runTray(trayCommand(item.id))}))));
+  if(process.platform==='win32')tray.on('click',()=>showMainWindow());
+}
+function runTray(action){
+  if(action==='show-main'){showMainWindow();return;}
+  if(action==='open-composer'){const bot=lastAwakeBot();if(bot)void openComposer(bot.id).catch(error=>issue(errorCode(error)));else showMainWindow();return;}
+  if(action==='quit'){quitting=true;app.quit();}
+}
+function refreshTouchBar(){
+  if(process.platform!=='darwin'||smoke||!window||window.isDestroyed()||!TouchBar?.TouchBarScrubber)return;
+  const bots=listedBots(latestState.bots??[]);
+  const key=bots.map(bot=>`${bot.id}\n${bot.name??''}`).join('\0');
+  if(key===touchBarKey)return;
+  touchBarKey=key;
+  const scrubber=new TouchBar.TouchBarScrubber({
+    items:bots.map(bot=>({label:bot.name||'Bot'})),
+    mode:'free',
+    continuous:false,
+    select:index=>{
+      const bot=bots[index];
+      if(!bot)return;
+      const current=touchBarSelection||activeBotId;
+      const choice=touchBarChoice({moved:current!==''&&current!==bot.id,startId:current,selectedId:bot.id});
+      touchBarSelection=bot.id;
+      if(choice.action==='compose')void openComposer(bot.id).catch(error=>issue(errorCode(error)));
+      else if(choice.action==='select'){activeBotId=bot.id;update();}
+    }
+  });
+  window.setTouchBar(new TouchBar({items:[scrubber]}));
+}
+const explorerSync=createExplorerSync();
+function explorerOps(){
+  return explorerRegistryOps({executable:process.execPath,appArgs:app.isPackaged?[]:[app.getAppPath()],bots:latestState.bots??[],recipients:latestState.recipients??[],enabled:explorerMenu!==false});
+}
+function applyExplorer(ops){
+  return applyExplorerRegistry(ops,{platform:process.platform,execFile:(file,args,options)=>runProcess(file,args,{windowsHide:true,...options})});
+}
+function syncExplorer(){
+  if(process.platform!=='win32'||preview)return;
+  void explorerSync.schedule(explorerOps(),applyExplorer).then(result=>{
+    if(result?.applied&&hostIssue==='EXPLORER_SYNC_FAILED'){hostIssue=null;update();}
+  }).catch(()=>issue('EXPLORER_SYNC_FAILED'));
+}
+async function logExplorerReject(argv,botId,reason){
+  try{
+    const dir=join(app.getPath('userData'),'logs');
+    await mkdir(dir,{recursive:true});
+    const file=join(dir,'explorer-forward.log');
+    let previous='';
+    try{previous=readFileSync(file,'utf8');}catch{previous='';}
+    writeFileSync(file,trimExplorerLog(previous,explorerLogLine({at:new Date().toISOString(),argv,botId,state:latestState,reason})));
+  }catch{}
+}
+async function deliverExplorer(forward){
+  if(!forward?.botId)return;
+  const verdict=await resolveExplorerForward({read:()=>({botId:forward.botId,bots:latestState.bots,recipients:latestState.recipients,connected:latestState.connected===true,hasAccount:!!latestState.account,settled:explorerSettled})});
+  if(!verdict.accept){
+    await logExplorerReject(forward.argv??[],verdict.botId||forward.botId,verdict.reason);
+    if(!preview&&Notification.isSupported())systemNotification(explorerRejectNotice(app.getLocale?.()??'',verdict.reason)).show();
+    return;
+  }
+  const appArg=app.isPackaged?'':app.getAppPath();
+  const files=(forward.files??[]).filter(file=>typeof file==='string'&&isAbsolute(file)&&file!==appArg);
+  if(!files.length)return;
+  const item=await rpc.call('receive',{botId:verdict.botId,source:'share',files,manual:true});
+  await openComposer(verdict.botId,item);
+}
+const explorerBatch=createExplorerBatch();
+const launchForward=parseExplorerForward(process.argv);
+if(launchForward){launchForward.argv=process.argv;explorerBatch.push(launchForward);}
+function deeplinkIssue(code){
+  const safe=errorCode({message:code});
+  notify('toast',safe);
+  const visible=!!window&&!window.isDestroyed()&&window.isVisible();
+  if(visible||preview||!Notification.isSupported())return;
+  systemNotification({title:'Grok Bot Anywhere',body:deeplinkNotice(app.getLocale?.()??'',safe)}).show();
+}
+function acceptDeeplink(raw){
+  const text=String(raw??'').trim().replace(/^"(.*)"$/,'$1');
+  if(!text.startsWith('grokbotanywhere:'))return false;
+  if(preview)return true;
+  if(!deeplinkReady){pendingLinks.push(text);return true;}
+  deeplinkChain=deeplinkChain.then(()=>handleDeeplink(text)).catch(error=>deeplinkIssue(errorCode(error)));
+  return true;
+}
+async function handleDeeplink(raw){
+  if(preview)return;
+  const parsed=parseDeeplink(raw);
+  if(!parsed.ok){deeplinkIssue('DEEPLINK_IGNORED');return;}
+  if(parsed.action==='open'){showMainWindow();return;}
+  if(parsed.action==='compose'){
+    const bot=parsed.bot?(latestState.bots??[]).find(item=>item.id===parsed.bot):lastAwakeBot();
+    if(!bot){if(parsed.bot)deeplinkIssue('BOT_NOT_FOUND');else showMainWindow();return;}
+    if(parsed.hasText){
+      if(!latestState.connected){deeplinkIssue('LOGIN_REQUIRED');return;}
+      const recipient=(latestState.recipients??[]).find(item=>item.botId===bot.id);
+      if(!shortcutSourceAllowed(recipient)){deeplinkIssue('SOURCE_DISABLED');return;}
+    }
+    try{await openComposer(bot.id,undefined,{text:parsed.hasText?parsed.text:undefined,captureSelection:!parsed.hasText});}
+    catch(error){deeplinkIssue(errorCode(error));}
+    return;
+  }
+  const bot=(latestState.bots??[]).find(item=>item.id===parsed.bot);
+  if(!latestState.connected){deeplinkIssue('LOGIN_REQUIRED');return;}
+  if(!bot){deeplinkIssue('BOT_NOT_FOUND');return;}
+  const recipient=(latestState.recipients??[]).find(item=>item.botId===bot.id);
+  if(!shortcutSourceAllowed(recipient)){deeplinkIssue('SOURCE_DISABLED');return;}
+  try{
+    const item=await rpc.call('receive',{botId:bot.id,source:'shortcuts',text:parsed.text,manual:true});
+    if(item?.error)deeplinkIssue(item.error);
+    if(item?.mode==='compose')await openComposer(bot.id,item);
+  }catch(error){deeplinkIssue(errorCode(error));}
+}
+if(process.platform!=='darwin')for(const arg of process.argv)if(String(arg).includes('grokbotanywhere://'))acceptDeeplink(arg);
+function cliBundle(){return skillBundleDir({packaged:app.isPackaged,resourcesPath:process.resourcesPath,devRoot:join(here,'../..')});}
+async function syncCliCredential(credentials){
+  if(!cliStatus.enabled||preview)return;
+  cliStatus.credential=await writeCliCredential(cliConfigDir(),credentials);
+  cliStatus.error='';
+}
+async function forgetCliCredential(){
+  if(preview)return;
+  try{await writeCliCredential(cliConfigDir(),null);cliStatus.credential=false;}
+  catch(error){cliStatus.error=errorCode(error);}
+}
+async function setCliEnabled(enabled){
+  if(preview)throw new Error('PREVIEW_ONLY');
+  if(!enabled){
+    const pref=loadCliPref();
+    cliStatus=await disableCli({home:homedir(),platform:process.platform,configDir:cliConfigDir(),removePath:pref.pathSnippet});
+    saveCliPref({enabled:false,pathSnippet:false});
+    update();
+    return cliPublic();
+  }
+  const saved=loadCliPref();
+  let credentials=null;
+  try{credentials=await vault.load();}catch(error){if(error?.message==='CREDENTIAL_STORAGE_UNAVAILABLE')throw error;}
+  cliStatus=await enableCli({home:homedir(),platform:process.platform,pathEnv:process.env.PATH??'',bundleDir:cliBundle(),configDir:cliConfigDir(),runtime:process.execPath,credentials,savedPathSnippet:saved.pathSnippet});
+  saveCliPref({enabled:true,pathSnippet:!!cliStatus.pathSnippet});
+  update();
+  return cliPublic();
+}
 function rankedBots(){
   const bots=latestState.bots??[],recipients=latestState.recipients??[];
   const order=id=>recipients.find(item=>item.botId===id)?.order??0;
@@ -62,10 +257,16 @@ function shortcutTargets(map){
   const wanted=new Map();
   const compose=typeof map?.compose==='string'?map.compose:'';
   if(compose)wanted.set(compose,'compose');
+  const open=typeof map?.open==='string'?map.open:'';
+  if(open&&!wanted.has(open))wanted.set(open,'open');
   const known=new Set((latestState.bots??[]).map(bot=>bot.id));
   for(const [botId,accelerator] of Object.entries(map?.bots??{})){
     if(!known.has(botId)||typeof accelerator!=='string'||!accelerator||wanted.has(accelerator))continue;
     wanted.set(accelerator,botId);
+  }
+  for(const [botId,accelerator] of Object.entries(map?.opens??{})){
+    if(!known.has(botId)||typeof accelerator!=='string'||!accelerator||wanted.has(accelerator))continue;
+    wanted.set(accelerator,`grok:${botId}`);
   }
   return wanted;
 }
@@ -108,16 +309,18 @@ function wireFloat(target,label){
   target.webContents.on('will-navigate',event=>event.preventDefault());
   target.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
   if(smoke)target.webContents.on('console-message',details=>{if(details.level==='error')console.error(`${label}:`,details.message);});
+  bindWindowsEditKeys(target.webContents);
 }
 async function ensureFloat(){
   if(floatWindow&&!floatWindow.isDestroyed())return floatWindow;
   const mac=process.platform==='darwin';
-  const common={show:false,frame:false,resizable:false,movable:false,minimizable:false,maximizable:false,fullscreenable:false,skipTaskbar:true,transparent:true,hasShadow:false,roundedCorners:false,backgroundColor:'#00000000',excludedFromShownWindowsMenu:true,...(process.platform==='win32'?{thickFrame:false}:{}),webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false}};
+  const traits=floatingComposerTraits(process.platform);
+  const common={show:false,frame:false,resizable:false,movable:false,minimizable:false,maximizable:false,fullscreenable:false,skipTaskbar:traits.skipTaskbar,transparent:traits.transparent,hasShadow:false,roundedCorners:false,backgroundColor:'#00000000',excludedFromShownWindowsMenu:true,...(traits.thickFrame===false?{thickFrame:false}:{}),webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false}};
   // One CSS corner. Native rounding, vibrancy, or acrylic draws a second outline around the card.
   floatWindow=new BrowserWindow({...common,width:368,height:120,acceptFirstMouse:true,title:'Grok Bot Anywhere'});
   avatarWindow=new BrowserWindow({...common,width:88,height:88,focusable:false});
   pickerWindow=new BrowserWindow({...common,width:760,height:188,acceptFirstMouse:true});
-  for(const target of [floatWindow,avatarWindow,pickerWindow]){if(mac)target.setAlwaysOnTop(true,'floating');else target.setAlwaysOnTop(true);try{target.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true,skipTransformProcessType:true});}catch{target.setVisibleOnAllWorkspaces(true);}}
+  for(const target of [floatWindow,avatarWindow,pickerWindow]){if(traits.alwaysOnTop){if(mac)target.setAlwaysOnTop(true,'floating');else target.setAlwaysOnTop(true);}try{target.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true,skipTransformProcessType:true});}catch{target.setVisibleOnAllWorkspaces(true);}}
   avatarWindow.setIgnoreMouseEvents(true);
   wireFloat(floatWindow,'Composer');wireFloat(avatarWindow,'Avatar');wireFloat(pickerWindow,'Picker');
   floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat();},120);});
@@ -142,9 +345,11 @@ function applyShortcuts(map){
   for(const [accelerator,slot] of wanted){
     let registered=false;
     try{registered=globalShortcut.register(accelerator,()=>{
-      const bot=slot==='compose'?lastAwakeBot():rankedBots().find(item=>item.id===slot);
-      if(!bot){window?.show();window?.focus();return;}
-      void openComposer(bot.id).catch(error=>issue(errorCode(error)));
+      const grok=slot.startsWith('grok:')?slot.slice(5):'';
+      const bot=slot==='compose'||slot==='open'?lastAwakeBot():rankedBots().find(item=>item.id===(grok||slot));
+      if(!bot){showMainWindow();return;}
+      const action=slot==='open'||grok?openInGrokBot(bot.id):openComposer(bot.id);
+      void action.catch(error=>issue(errorCode(error)));
     });}catch{registered=false;}
     if(!registered){failed=true;continue;}
     registeredShortcuts.set(accelerator,slot);
@@ -166,16 +371,33 @@ async function readShareOrder(){
   }
   return {ids:current(),source:'settings'};
 }
-async function openComposer(botId,receipt){
+async function openInGrokBot(botId){
+  if(!(latestState.bots??[]).some(bot=>bot.id===botId))throw new Error('BOT_NOT_FOUND');
+  const url=grokBotAgentUrl(botId);
+  try{await shell.openExternal(url);}catch{throw new Error('GROK_BOT_OPEN_FAILED');}
+  return {ok:true};
+}
+async function openComposer(botId,receipt,options={}){
   if(latestState.accountBusy)throw new Error('ACCOUNT_BUSY');
   if(receipt&&(receipt.accountId!==latestState.account?.id||receipt.botId!==botId))throw new Error('RECEIPT_SCOPE_MISMATCH');
   const bot=latestState.bots?.find(item=>item.id===botId);if(!bot)throw new Error('BOT_NOT_FOUND');
   const generation=++composeGeneration;
-  // Capture before the composer window is created or focused, or Finder/Explorer is no longer frontmost.
-  const localPaths=receipt?[]:await frontmostFiles();
+  const capture=!receipt&&options.captureSelection!==false;
+  const deferFiles=capture&&process.platform==='win32';
+  // macOS reads Finder before focus moves. Windows snapshots the foreground hwnd before show, then reads that window.
+  let prepared=null;
+  if(deferFiles){
+    const pending=prepareExplorerSelection();
+    const snap=await Promise.race([pending.hwndReady.then(info=>({info})),new Promise(resolve=>setTimeout(()=>resolve({info:'TIMEOUT'}),2500))]);
+    if(generation!==composeGeneration)return {ok:true};
+    if(snap.info!=='TIMEOUT')prepared=pending;
+  }
+  const localPaths=capture&&!deferFiles?await frontmostFiles():[];
   if(generation!==composeGeneration)return {ok:true};
   activeBotId=botId;
-  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes})=>({name,bytes})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths};
+  const draftText=typeof options.text==='string'?options.text:undefined;
+  const attachToken=deferFiles?generation:0;
+  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes})=>({name,bytes})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
   const float=await ensureFloat();
   placeFloat(368,110);
   floatShownAt=Date.now();
@@ -183,6 +405,16 @@ async function openComposer(botId,receipt){
   float.show();float.focus();
   layoutExtras();
   notify('composer',pendingFloat);
+  if(prepared){
+    const token=attachToken;
+    const openedFor=botId;
+    void prepared.files().then(async paths=>{
+      if(token!==composeGeneration)return;
+      const localPaths=await regularFiles(Array.isArray(paths)?paths:[]);
+      if(token!==composeGeneration)return;
+      notify('composer-files',{botId:openedFor,token,localPaths});
+    }).catch(()=>{});
+  }
   return {ok:true};
 }
 async function intake(botId,files){
@@ -230,7 +462,7 @@ async function accountAction(method){
   if(accountBusy)throw new Error('ACCOUNT_BUSY');accountBusy=true;
   try{
     const result=await rpc.call(method,{},600000);
-    await vault.save(result.credentials);latestState=result.state;hostIssue=null;update();
+    await vault.save(result.credentials);latestState=result.state;hostIssue=null;try{await syncCliCredential(result.credentials);}catch(error){cliStatus.error=errorCode(error);}update();
     void rpc.call('resume').catch(error=>issue(errorCode(error)));
     return publicState();
   }finally{accountBusy=false;}
@@ -241,6 +473,7 @@ async function nativeRequest(method,p){
     case 'runtime':return {mainAgentId:latestState.runtime?.mainAgentId??null};
     case 'statuses':return {statuses:latestState.runtime?.statuses??[]};
     case 'status':return {connected:latestState.connected,sending:latestState.backgroundSending||latestState.inbox?.some(row=>['uploading','sending'].includes(row.phase))||false};
+    case 'compose':return openComposer(p.botId);
     case 'unwatch':return {};
     case 'resolve':{
       for(const item of latestState.inbox.filter(row=>row.botId===p.botId&&row.status==='unconfirmed'&&!row.holdResolved))await rpc.call('resolve',{id:item.id});
@@ -264,10 +497,10 @@ async function startCompanion(){
   const executable=app.isPackaged?join(process.resourcesPath,'native/GrokBotCompanion.app/Contents/MacOS/TouchBarBot'):join(here,'../../native/GrokBotCompanion.app/Contents/MacOS/TouchBarBot');
   if(!existsSync(executable))return;
   companion=new NativeCompanion({executable,avatarRoot:app.isPackaged?join(process.resourcesPath,'native/avatar'):join(here,'../../out/native-avatar'),smoke,onRequest:nativeRequest,onEvent:message=>{
-    if(message.event==='library.open'){window?.show();window?.focus();}
+    if(message.event==='library.open')showMainWindow();
     if(message.event==='exit'){issue('NATIVE_COMPOSER_UNAVAILABLE');}
   }});
-  try{await companion.start();await companion.call('state',latestState);update();void flushSharedComposers();}catch{companion.stop();companion=null;issue('NATIVE_COMPOSER_UNAVAILABLE');}
+  try{await companion.start();await companion.call('state',latestState);await companion.call('touchbar.pin',touchBarPinPayload(touchBarPinned)).catch(()=>{});update();void flushSharedComposers();}catch{companion.stop();companion=null;issue('NATIVE_COMPOSER_UNAVAILABLE');}
 }
 async function dispatch(method,p){
   switch(method){
@@ -276,10 +509,24 @@ async function dispatch(method,p){
     case 'desktopLogin':return accountAction('desktopLogin');
     case 'logout':{
       if(accountBusy)throw new Error('ACCOUNT_BUSY');
-      const state=await rpc.call('logout');await vault.remove();latestState=state;await companion?.call('state',state);update();return publicState();
+      const state=await rpc.call('logout');await vault.remove();await forgetCliCredential();latestState=state;await companion?.call('state',state);update();return publicState();
     }
     case 'refresh':await rpc.call('refresh');return publicState();
+    case 'duplicateBot':{const result=await rpc.call('duplicateBot',{botId:p.botId});return {...publicState(),duplicatedBotId:result?.bot?.id??''};}
     case 'configure':return rpc.call('configure',{botId:p.botId,patch:p.patch});
+    case 'disableAllReceive':return rpc.call('disableAllReceive');
+    case 'explorerMenu':{
+      if(preview)throw new Error('PREVIEW_ONLY');
+      if(process.platform!=='win32')throw new Error('EXPLORER_MENU_UNAVAILABLE');
+      if(p.action==='remove')explorerMenu=false;
+      else if(p.action==='set')explorerMenu=p.enabled===true;
+      else if(p.action!=='rebuild')throw new Error('METHOD_UNKNOWN');
+      saveExplorerPref();
+      try{await explorerSync.schedule(explorerOps(),applyExplorer,{force:true});}
+      catch{issue('EXPLORER_SYNC_FAILED');throw new Error('EXPLORER_SYNC_FAILED');}
+      update();
+      return {enabled:explorerMenu===true};
+    }
     case 'updateMenu':{
       if(!shareMenu||preview)throw new Error('MENU_UNAVAILABLE');
       menuReconciler.request(latestState);await menuReconciler.flush({force:true});return shareMenu.status;
@@ -287,6 +534,18 @@ async function dispatch(method,p){
     case 'menuOrder':return readShareOrder();
     case 'theme':nativeTheme.themeSource=p.theme;return rpc.call('theme',{theme:p.theme});
     case 'setShortcut':return rpc.call('setShortcut',{slot:p.slot,accelerator:p.accelerator});
+    case 'setCli':return setCliEnabled(!!p.enabled);
+    case 'setOpenAtLogin':{
+      const next=!!p.enabled;
+      if(shouldApplyLoginItem({preview,packaged:app.isPackaged})){try{applyLoginItem(next,app);}catch{throw new Error('LOGIN_ITEM_FAILED');}}
+      openAtLogin=next;loginItemKnown=true;saveLoginPref();
+      update();return {enabled:openAtLogin};
+    }
+    case 'setTouchBarPinned':{
+      touchBarPinned=!!p.pinned;saveTouchPref();
+      if(companion?.ready){try{await companion.call('touchbar.pin',touchBarPinPayload(touchBarPinned));}catch{}}
+      update();return touchBarPinPayload(touchBarPinned);
+    }
     case 'setComposerPrefs':{
       composerPrefs={keepAfterSend:typeof p.keepAfterSend==='boolean'?p.keepAfterSend:composerPrefs.keepAfterSend,dismissOnOutside:typeof p.dismissOnOutside==='boolean'?p.dismissOnOutside:composerPrefs.dismissOnOutside};
       saveComposerPrefs();update();return composerPrefs;
@@ -311,6 +570,12 @@ async function dispatch(method,p){
       else applyShortcuts(latestState.shortcuts);
       return {ok:true};
     }
+    case 'copyComposeLink':{
+      const link=composeLink(p.botId);
+      if(!link||!(latestState.bots??[]).some(bot=>bot.id===p.botId))throw new Error('BOT_NOT_FOUND');
+      clipboard.writeText(link);return {ok:true};
+    }
+    case 'openBot':return openInGrokBot(p.botId);
     case 'compose':return openComposer(p.botId);
     case 'openReceipt':{const item=await rpc.call('composer',{id:p.id});return openComposer(item.botId,item);}
     case 'sendReceipt':{const item=await rpc.call('composer',{id:p.id});return rpc.call('submit',{id:p.id,text:item.text??''},0);}
@@ -334,43 +599,87 @@ function serviceEvent(message){
   if(message.event==='state'){
     latestState=message.data;applyShortcuts(latestState.shortcuts);update();
     if(menuReconciler)menuReconciler.request(latestState);
+    if(process.platform==='win32')syncExplorer();
     if(companion?.ready)void companion.call('state',latestState).catch(()=>{});
     if(pendingSharedComposers.size)void flushSharedComposers();
   }
   if(message.event==='login.url'){
     try{const url=new URL(message.data.url);if(url.origin!=='https://cursor.com'||url.pathname!=='/loginDeepControl')throw new Error();void shell.openExternal(url.href).catch(()=>issue('BROWSER_OPEN_FAILED'));}catch{issue('LOGIN_URL_INVALID');}
   }
-  if(message.event==='auth.expired'){hostIssue='LOGIN_REQUIRED';void vault.remove().catch(()=>{});update();}
-  if(message.event==='reply'&&!preview&&Notification.isSupported())new Notification({title:message.data.name||'Grok Bot',body:zh?'收到新回复':'New reply'}).show();
+  if(message.event==='auth.expired'){hostIssue='LOGIN_REQUIRED';void vault.remove().catch(()=>{});void forgetCliCredential().then(()=>update()).catch(()=>update());}
+  if(message.event==='reply'&&!preview&&Notification.isSupported())systemNotification({title:message.data.name||'Grok Bot',body:zh?'收到新回复':'New reply'}).show();
   if(message.event==='share.received'){
     const action=shareHandoff({mode:message.data.mode});
-    if(action==='service'){window?.show();window?.focus();notify('navigate',{page:'inbox'});}
+    if(action==='service'){showMainWindow();notify('navigate',{page:'inbox'});}
     else void presentShare(message.data.id);
   }
   if(message.event==='share.error')issue('SHARE_IMPORT_FAILED');
 }
 function ownerWindow(){const owner=ipcSender?BrowserWindow.fromWebContents(ipcSender):null;return owner&&!owner.isDestroyed()?owner:window;}
 function trusted(event){const contents=event.sender;if(event.senderFrame!==contents.mainFrame)return false;return [window,floatWindow,avatarWindow,pickerWindow].some(target=>target&&contents===target.webContents);}
+// win32 去掉应用菜单后，编辑快捷键不再由菜单 accelerator 派发，这里补回输入框命令
+// 2026-11-01 before-input-event：selectAll/copy/paste/cut/undo/redo，contents 无返回值
+function bindWindowsEditKeys(contents){
+  if(process.platform!=='win32')return;
+  contents.on('before-input-event',(event,input)=>{
+    const command=editCommand(input);
+    if(!command)return;
+    event.preventDefault();
+    contents[command]();
+  });
+}
+function pushWindowState(){
+  if(!window||window.isDestroyed())return;
+  let inset=0;
+  try{const bounds=window.getBounds();inset=maximizedContentInset(process.platform,window.isMaximized(),bounds,screen.getDisplayMatching(bounds).workArea);}catch{inset=0;}
+  window.webContents.send('anywhere:window-state',{maximized:window.isMaximized(),focused:window.isFocused(),inset});
+}
 async function createWindow(){
-  const mac=process.platform==='darwin';
-  window=new BrowserWindow({width:800,height:600,minWidth:720,minHeight:520,title:'Grok Bot Anywhere',show:false,
-    titleBarStyle:mac?'hiddenInset':'default',backgroundColor:'#00000000',transparent:mac,hasShadow:true,
-    ...(mac?{vibrancy:'fullscreen-ui',trafficLightPosition:{x:14,y:18}}:{}),
+  window=new BrowserWindow({...mainWindowOptions(process.platform),
+    ...(process.platform==='win32'?{icon:nativeImage.createFromBuffer(coalBallPng(256))}:{}),
     webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false}});
   if(process.platform==='win32'){try{window.setBackgroundMaterial('acrylic');windowMaterial='acrylic';}catch{window.setBackgroundColor('#f4f4f4');windowMaterial='none';}}
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   if(smoke)window.webContents.on('console-message',details=>{if(details.level==='error')console.error('Renderer:',details.message);});
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
-  window.on('close',event=>{if(!quitting&&!smoke){event.preventDefault();window.hide();}});
-  window.once('ready-to-show',()=>{if(!smoke&&!backgroundShare)window.show();});
+  bindWindowsEditKeys(window.webContents);
+  window.on('close',event=>{if(windowCloseAction({quitting,smoke,hasTray:!!tray})==='hide'){event.preventDefault();window.hide();}});
+  for(const name of ['maximize','unmaximize','focus','blur'])window.on(name,pushWindowState);
+  window.webContents.on('did-finish-load',pushWindowState);
+  window.on('session-end',()=>{quitting=true;});
+  window.once('ready-to-show',()=>{
+    let wasOpenedAtLogin=false;
+    try{wasOpenedAtLogin=app.getLoginItemSettings().wasOpenedAtLogin===true;}catch{wasOpenedAtLogin=false;}
+    const openedAtLogin=openedAsLoginItem({wasOpenedAtLogin,argv:process.argv});
+    if(!smoke&&!quietLaunch&&!openedAtLogin)showMainWindow();
+  });
   await window.loadFile(join(here,'../../out/index.html'));
 }
+if(process.platform==='win32')app.setAppUserModelId('dev.ronglecat.grokbotanywhere');
 app.setName('Grok Bot Anywhere');
-if(!app.requestSingleInstanceLock()&&!smoke){app.quit();}else{
- app.on('second-instance',()=>{window?.show();window?.focus();});
+if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else{
+ app.on('second-instance',(_event,commandLine,_cwd,additionalData)=>{
+  const argv=Array.isArray(additionalData?.argv)&&additionalData.argv.length?additionalData.argv:(commandLine??[]);
+  const forward=parseExplorerForward(argv);
+  const link=(argv??[]).map(item=>String(item).trim().replace(/^"(.*)"$/,'$1')).find(item=>item.startsWith('grokbotanywhere://'));
+  if(forward){forward.argv=argv;explorerBatch.push(forward);}
+  if(link)acceptDeeplink(link);
+  if(forward||link||openedAsLoginItem({argv:argv}))return;
+  showMainWindow();
+ });
+ app.on('open-url',(event,url)=>{
+  event.preventDefault();
+  if(String(url??'').startsWith('grokbotanywhere:'))acceptDeeplink(url);
+ });
  app.whenReady().then(async()=>{
+  if(!preview){
+    if(app.isPackaged)app.setAsDefaultProtocolClient('grokbotanywhere');
+    else app.setAsDefaultProtocolClient('grokbotanywhere',process.execPath,[app.getAppPath()]);
+  }
+  if(process.platform==='win32'&&!preview)warmExplorerSelection();
   vault=new CredentialVault(join(app.getPath('userData'),'account.enc'),safeStorage);
+  if(!preview&&loadCliPref().enabled){try{await setCliEnabled(true);}catch(error){cliStatus={enabled:false,command:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:errorCode(error)};}}
   if(!preview&&process.platform==='darwin'){
     const template=menuHostTemplate({packaged:app.isPackaged,resourcesPath:process.resourcesPath,devRoot:join(here,'../..')});
     if(existsSync(join(template,'Contents/MacOS/GrokBotMenuHost'))){
@@ -388,6 +697,9 @@ if(!app.requestSingleInstanceLock()&&!smoke){app.quit();}else{
   worker.on('message',message=>rpc.receive(message));worker.on('exit',()=>{rpc.close();issue('SERVICE_EXITED');});
   worker.stderr?.on('data',bytes=>{if(smoke)process.stderr.write(bytes);});
   loadComposerPrefs();
+  loadShellPrefs();
+  const loginStartup=loginItemStartup({known:loginItemKnown,enabled:openAtLogin});
+  if(loginStartup&&shouldApplyLoginItem({preview,packaged:app.isPackaged})){try{applyLoginItem(loginStartup.openAtLogin,app);}catch{/* Keep the saved preference when the system rejects it. */}}
   latestState=await rpc.call('initialize',{root:join(app.getPath('userData'),'inbox'),shareRoot:shareMenu?.root,preview,locale:app.getLocale()});
   applyShortcuts(latestState.shortcuts);
   if(menuReconciler)menuReconciler.request(latestState);
@@ -398,11 +710,24 @@ if(!app.requestSingleInstanceLock()&&!smoke){app.quit();}else{
     try{return {value:await dispatch(method,params??{})};}catch(error){return {error:errorCode(error)};}
     finally{ipcSender=null;}
   });
-  const menu=Menu.buildFromTemplate([
+  ipcMain.handle('anywhere:window-control',(event,action)=>{
+    if(!trusted(event)||!window||window.isDestroyed()||event.sender!==window.webContents)return {error:'UNTRUSTED_SENDER'};
+    const allowed=acceptWindowControl(action);
+    if(!allowed)return {error:'METHOD_UNKNOWN'};
+    if(allowed==='minimize')window.minimize();
+    else if(allowed==='toggleMaximize'){if(window.isMaximized())window.unmaximize();else window.maximize();}
+    // 关闭走窗口 close，由 windowCloseAction 决定隐藏到托盘或退出
+    // 2026-11-01 action close → window.close()
+    else window.close();
+    return {value:{ok:true}};
+  });
+  if(process.platform==='win32')Menu.setApplicationMenu(null);
+  else{const menu=Menu.buildFromTemplate([
     ...(process.platform==='darwin'?[{label:app.name,submenu:[{role:'about'},{type:'separator'},{role:'quit'}]}]:[]),
-    {label:zh?'文件':'File',submenu:[{label:zh?'显示主窗口':'Show window',click:()=>window?.show()},...(process.platform!=='darwin'?[{role:'quit'}]:[])]},
-    {role:'editMenu'},{role:'windowMenu'}]);Menu.setApplicationMenu(menu);
+    {label:zh?'文件':'File',submenu:[{label:zh?'显示主窗口':'Show window',click:()=>showMainWindow()},...(process.platform!=='darwin'?[{role:'quit'}]:[])]},
+    {role:'editMenu'},{role:'windowMenu'}]);Menu.setApplicationMenu(menu);}
   await createWindow();
+  ensureTray();
   await startCompanion();
   if(smoke){
     const result=await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const start=Date.now();const tick=()=>{if(document.documentElement.dataset.ready==='true')resolve({title:document.title,headings:[...document.querySelectorAll('h1')].map(e=>e.textContent)});else if(Date.now()-start>10000)reject(new Error('RENDERER_NOT_READY'));else setTimeout(tick,50);};tick();})`);
@@ -433,13 +758,18 @@ if(!app.requestSingleInstanceLock()&&!smoke){app.quit();}else{
     quitting=true;app.quit();return;
   }
   if(!preview){
+    explorerBatch.arm(async(botId,files,meta)=>{try{await deliverExplorer({botId,files,argv:meta?.argv??[]});}catch(error){issue(errorCode(error));}});
     try{const credentials=await vault.load();if(credentials){const result=await rpc.call('connect',credentials);latestState=result.state;applyShortcuts(latestState.shortcuts);update();void rpc.call('resume').catch(error=>issue(errorCode(error)));presentPendingComposer();}}
     catch(error){issue(errorCode(error));}
+    explorerSettled=true;
+    deeplinkReady=true;
+    for(const raw of pendingLinks.splice(0))acceptDeeplink(raw);
   }
  }).catch(error=>{console.error(errorCode(error));app.exit(1);});
 }
-app.on('activate',()=>{window?.show();window?.focus();});
+app.on('activate',()=>showMainWindow());
 app.on('window-all-closed',()=>{if(smoke)app.quit();});
-app.on('before-quit',()=>{quitting=true;unregisterShortcuts();menuReconciler?.close();companion?.stop();worker?.kill();rpc?.close();});
+app.on('session-end',()=>{quitting=true;});
+app.on('before-quit',()=>{quitting=true;if(tray){tray.destroy();tray=null;}stopExplorerSelection();unregisterShortcuts();menuReconciler?.close();companion?.stop();worker?.kill();rpc?.close();});
 // Preview data uses an OS temporary directory. Do not delete Chromium's cache
 // while its helper processes are still shutting down.

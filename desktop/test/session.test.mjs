@@ -87,6 +87,19 @@ if(loaded) {
   assert.equal(session.snapshot().shortcuts.bots[bot.id],undefined);
   session.setShortcut('compose','');
   assert.equal(session.snapshot().shortcuts.compose,null);
+  session.setShortcut(bot.id,'Alt+A');
+  session.setShortcut('open','Ctrl+Shift+G');
+  assert.equal(session.snapshot().shortcuts.open,'Ctrl+Shift+G');
+  assert.throws(()=>session.setShortcut('open','Alt+A'),/SHORTCUT_UNAVAILABLE/);
+  assert.throws(()=>session.setShortcut(bot.id,'Ctrl+Shift+G'),/SHORTCUT_UNAVAILABLE/);
+  session.setShortcut('open','');
+  assert.equal(session.snapshot().shortcuts.open,null);
+  session.setShortcut(`grok:${bot.id}`,'Alt+O');
+  assert.equal(session.snapshot().shortcuts.opens[bot.id],'Alt+O');
+  assert.throws(()=>session.setShortcut(`grok:${bot.id}`,'Alt+A'),/SHORTCUT_UNAVAILABLE/);
+  assert.throws(()=>session.setShortcut(bot.id,'Alt+O'),/SHORTCUT_UNAVAILABLE/);
+  session.setShortcut(`grok:${bot.id}`,'');
+  assert.equal(session.snapshot().shortcuts.opens[bot.id],undefined);
  });
  async function setup(t,overrides={}) {
   const root=await mkdtemp(join(tmpdir(),'gba-session-'));const store=new InboxStore(root);
@@ -130,5 +143,87 @@ if(loaded) {
   session.sdk.pollLogin=()=>new Promise(r=>{release=r;});
   const login=session.login();await session.logout();release({accessToken:'late'});
   await assert.rejects(login,/LOGIN_CANCELLED/);assert.equal(session.snapshot().connected,false);
+ });
+ test('connect loads pins and sections without dropping a later status list',async t=>{
+  const {session,client}=await setup(t,{getRuntimeSettings:async()=>({mainAgentId:'bot-one',pinnedAgentIds:['bot-one'],sections:[{id:'sec-1',name:'工作',agentIds:[],collapsed:true}]})});
+  const runtime=session.snapshot().runtime;
+  assert.equal(runtime.mainAgentId,'bot-one');
+  assert.deepEqual(runtime.pinnedAgentIds,['bot-one']);
+  assert.equal(runtime.sections[0].name,'工作');
+  assert.equal(session.snapshot().capabilities.runtime,true);
+  session.runtime.statuses=[{agentId:'bot-one',isRunning:true}];
+  client.getRuntimeSettings=async()=>({mainAgentId:null,pinnedAgentIds:[],sections:[]});
+  const refreshed=await session.refresh();
+  assert.equal(refreshed.runtime.statuses[0].isRunning,true);
+  assert.deepEqual(refreshed.runtime.pinnedAgentIds,[]);
+ });
+ test('agent statuses from the sdk keep only the running flag',async t=>{
+  const {session}=await setup(t,{listAgentStatuses:async()=>({statuses:[{agentId:'bot-one',isRunning:true,live:{secret:1}}]})});
+  const state=await session.refresh();
+  assert.deepEqual(state.runtime.statuses,[{agentId:'bot-one',isRunning:true}]);
+  assert.equal(state.capabilities.statuses,true);
+  assert.ok(!JSON.stringify(state.runtime).includes('secret'));
+ });
+ test('duplicate copies one bot and refuses a room',async t=>{
+  const room={id:'room-1',name:'Room',kind:'GROK_BOT_AGENT_KIND_ROOM',memberAgentIds:['bot-one'],sessionId:''};
+  const copy={id:'copied-bot',name:'Copy',kind:'GROK_BOT_AGENT_KIND_AGENT',memberAgentIds:[],sessionId:''};
+  let listed=0;
+  const {session}=await setup(t,{
+   listBots:async()=>({bots:++listed>1?[bot,room,copy]:[bot,room],truncated:false}),
+   duplicateBot:async options=>{assert.deepEqual(options,{botId:'bot-one'});return {bot:copy};}
+  });
+  await assert.rejects(session.duplicateBot('room-1'),/BOT_NOT_COPYABLE/);
+  await assert.rejects(session.duplicateBot('missing'),/BOT_NOT_FOUND/);
+  const result=await session.duplicateBot('bot-one');
+  assert.equal(result.bot.id,'copied-bot');
+  assert.ok(session.snapshot().bots.some(item=>item.id==='copied-bot'));
+  assert.equal(session.snapshot().recipients.find(item=>item.botId==='copied-bot').sources.wechat,false);
+ });
+ test('duplicate still returns the new bot when refresh fails',async t=>{
+  const copy={id:'copied-late',name:'Late',kind:'GROK_BOT_AGENT_KIND_AGENT',memberAgentIds:[],sessionId:''};
+  const {session,client}=await setup(t,{duplicateBot:async()=>({bot:copy})});
+  client.listBots=async()=>{throw new Error('RPC_FAILED');};
+  const result=await session.duplicateBot(bot.id);
+  assert.equal(result.bot.id,'copied-late');
+  assert.equal(session.snapshot().bots.some(item=>item.id==='copied-late'),false);
+ });
+ test('disable all receive closes every enabled bot once and rolls back together',async t=>{
+  const hidden={id:'bot-hidden',name:'Same',kind:'GROK_BOT_AGENT_KIND_AGENT',memberAgentIds:[]};
+  const room={id:'room-1',name:'Same',kind:'GROK_BOT_AGENT_KIND_ROOM',memberAgentIds:['bot-one']};
+  const {session,store}=await setup(t);
+  session.bots=[bot,hidden,room];
+  const sources={wechat:true,share:true,shortcuts:true,drop:false};
+  session.configure(bot.id,{enabled:true,mode:'direct',prefix:'keep',sources});
+  session.configure(hidden.id,{enabled:true,mode:'compose',prefix:'hide',sources});
+  session.configure(room.id,{enabled:false,mode:'compose',prefix:'room',sources});
+  let events=0;
+  session.onEvent=()=>{events+=1;};
+  const result=session.disableAllReceive();
+  assert.equal(result.closed,2);
+  assert.equal(events,1);
+  const kept=store.recipient('account-a',bot.id);
+  assert.equal(kept.enabled,false);
+  assert.equal(kept.mode,'direct');
+  assert.equal(kept.prefix,'keep');
+  assert.equal(kept.sources.wechat,true);
+  assert.equal(kept.sources.share,true);
+  assert.equal(kept.sources.shortcuts,true);
+  assert.equal(kept.sources.drop,false);
+  assert.equal(store.recipient('account-a',hidden.id).enabled,false);
+  assert.equal(store.recipient('account-a',hidden.id).prefix,'hide');
+  assert.equal(store.recipient('account-a',room.id).enabled,false);
+  assert.equal(store.recipient('account-a',room.id).prefix,'room');
+  session.configure(bot.id,{enabled:true});
+  session.configure(hidden.id,{enabled:true});
+  const original=store.saveRecipient.bind(store);
+  let calls=0;
+  store.saveRecipient=(accountId,botId,patch)=>{calls+=1;if(calls===2)throw new Error('RECIPIENT_INVALID');return original(accountId,botId,patch);};
+  assert.throws(()=>session.disableAllReceive(),/RECIPIENT_INVALID/);
+  assert.equal(store.recipient('account-a',bot.id).enabled,true);
+  assert.equal(store.recipient('account-a',hidden.id).enabled,true);
+ });
+ test('duplicate is unavailable until the sdk provides it',async t=>{
+  const {session}=await setup(t);
+  await assert.rejects(session.duplicateBot(bot.id),/DUPLICATE_UNAVAILABLE/);
  });
 }

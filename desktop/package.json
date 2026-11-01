@@ -6,7 +6,9 @@
   "author": "RongleCat",
   "type": "module",
   "main": "src/main/main.mjs",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "npm run build && electron .",
     "dev": "npm run build && electron .",
@@ -16,11 +18,17 @@
     "build:native": "node scripts/build-native.mjs",
     "build:share": "node scripts/build-share.mjs",
     "smoke:native": "npm run build && npm run build:native && node scripts/smoke-native.mjs",
-    "package": "npm run build && electron-builder --dir"
+    "package": "npm run build && electron-builder --dir",
+    "package:mac-arm": "bash scripts/package-mac-signed.sh arm64",
+    "package:mac-intel": "bash scripts/package-mac-signed.sh x64",
+    "package:mac-all": "npm run package:mac-arm && npm run package:mac-intel",
+    "package:mac-signed": "npm run package:mac-all",
+    "package:win": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64",
+    "package:all": "npm run package:mac-all && npm run package:win"
   },
   "dependencies": {
-    "grok-bot-sdk": "file:vendor/grok-bot-sdk-0.1.0.tgz",
-    "grok-bot-avatar-engine": "file:vendor/grok-bot-avatar-engine-1.0.0.tgz"
+    "grok-bot-avatar-engine": "file:vendor/grok-bot-avatar-engine-1.0.0.tgz",
+    "grok-bot-sdk": "github:RongleCat/grok-bot-sdk"
   },
   "devDependencies": {
     "electron": "45.1.0",
@@ -30,14 +38,72 @@
   "build": {
     "appId": "dev.ronglecat.grokbotanywhere",
     "productName": "Grok Bot Anywhere",
-    "directories": { "output": "release" },
-    "files": ["src/**", "out/**", "package.json", "node_modules/**"],
-    "extraResources": [
-      {"from":"native/GrokBotCompanion.app","to":"native/GrokBotCompanion.app","filter":["**/*"]},
-      {"from":"native/GrokBotMenuHost.app","to":"native/GrokBotMenuHost.app","filter":["**/*"]},
-      {"from":"out/native-avatar","to":"native/avatar","filter":["**/*"]}
+    "protocols": [
+      {
+        "name": "Grok Bot Anywhere",
+        "schemes": ["grokbotanywhere"]
+      }
     ],
-    "mac": { "category": "public.app-category.productivity", "target": ["dir"], "identity": null, "extendInfo": { "NSAppleEventsUsageDescription": "把你在 Finder 选中的文件加入输入框。" } },
-    "win": { "target": ["dir"] }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**",
+      "out/**",
+      "package.json",
+      "node_modules/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/grok-bot-skill",
+        "to": "grok-bot-skill",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true,
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "把你在 Finder 选中的文件加入输入框。"
+      },
+      "extraResources": [
+        {
+          "from": "native/GrokBotCompanion.app",
+          "to": "native/GrokBotCompanion.app",
+          "filter": [
+            "**/*"
+          ]
+        },
+        {
+          "from": "native/GrokBotMenuHost.app",
+          "to": "native/GrokBotMenuHost.app",
+          "filter": [
+            "**/*"
+          ]
+        },
+        {
+          "from": "out/native-avatar",
+          "to": "native/avatar",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        "zip"
+      ],
+      "signAndEditExecutable": false
+    }
   }
 }

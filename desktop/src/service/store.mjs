@@ -32,6 +32,31 @@ export class InboxStore {
     this.db.prepare('INSERT OR REPLACE INTO recipients VALUES (?,?,?)').run(accountId,botId,JSON.stringify(value));
     return value;
   }
+  disableEnabled(accountId,botIds){
+    if(typeof accountId!=='string'||!accountId)throw new Error('RECIPIENT_INVALID');
+    const ids=[];
+    const seen=new Set();
+    for(const botId of botIds??[]){
+      if(typeof botId!=='string'||!botId||seen.has(botId))continue;
+      seen.add(botId);
+      ids.push(botId);
+    }
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      let closed=0;
+      for(const botId of ids){
+        const current=this.recipient(accountId,botId);
+        if(current.enabled!==true)continue;
+        this.saveRecipient(accountId,botId,{enabled:false});
+        closed+=1;
+      }
+      this.db.exec('COMMIT');
+      return closed;
+    }catch(error){
+      try{this.db.exec('ROLLBACK');}catch{/* The original transaction error is the one to surface. */}
+      throw error;
+    }
+  }
   add(item) {this.db.prepare('INSERT INTO receipts VALUES (?,?,?)').run(item.id,item.accountId,JSON.stringify(item)); return item;}
   get(id,accountId) {const row=this.db.prepare('SELECT value FROM receipts WHERE id=? AND account=?').get(id,accountId);return row?JSON.parse(row.value):null;}
   list(accountId) {return this.db.prepare('SELECT value FROM receipts WHERE account=? ORDER BY rowid DESC').all(accountId).map(row=>JSON.parse(row.value));}

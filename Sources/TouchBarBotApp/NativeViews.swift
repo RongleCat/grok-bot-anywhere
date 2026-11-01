@@ -672,10 +672,6 @@ private final class ComposerTextView: NSTextView {
 
 private struct ComposerGlass: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(macOS 26, *) {
-            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        } else {
-            content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        }
+        content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }

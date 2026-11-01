@@ -1,4 +1,5 @@
 import {createAvatar,createStrip,renderAvatarPng} from 'grok-bot-avatar-engine';
+import {placeStack,renderStackPng,stackPlan} from './group-avatar.mjs';
 let avatar,live,strip;
 window.setAvatar=config=>{const target=document.querySelector('#avatar');if(!avatar)avatar=createAvatar(target,{...config,size:Math.min(innerWidth,innerHeight)});else avatar.update(config);};
 window.renderStill=config=>renderAvatarPng({...config,size:128});
@@ -8,14 +9,81 @@ window.renderStrip=config=>{document.body.classList.add('strip');const target=do
 window.stepStrip=()=>{};
 window.acknowledge=id=>strip?.acknowledge(id);
 window.nodNeighbors=()=>strip?.nodNeighbors()??'';
-window.captureMenuAvatar=async config=>{const handle=createAvatar(document.querySelector('#avatar'),{...config,size:128,reducedMotion:true,theme:'light'});try{return await handle.capture(128);}finally{handle.destroy();}};
+async function waitStack(root){
+ const start=Date.now();let last='',stable=0;
+ while(Date.now()-start<4000){
+  const avatars=[...root.querySelectorAll('.avatar')];
+  const ready=avatars.length>0&&avatars.every(node=>node.shadowRoot?.querySelector('svg'));
+  const sig=avatars.map(node=>{
+   const shadow=node.shadowRoot;
+   const glyph=shadow?.querySelector('.glyph')?.style.transform||'';
+   const path=shadow?.querySelector('svg path')?.getAttribute('d')?.slice(0,32)||'';
+   return `${glyph}:${path}`;
+  }).join('|');
+  if(ready&&sig&&sig===last)stable+=1;else stable=0;
+  last=sig;
+  if(ready&&stable>=8)return;
+  await new Promise(resolve=>setTimeout(resolve,50));
+ }
+ throw new Error('MENU_AVATAR_TIMEOUT');
+}
+function resetHost(){
+ // A single-face capture mounts into #avatar and leaves its shadow root behind.
+ // Light-DOM children are then not painted, so the group stack never gets an SVG.
+ let host=document.querySelector('#avatar');
+ if(host.shadowRoot){
+  const next=host.cloneNode(false);
+  next.id='avatar';
+  host.replaceWith(next);
+  host=next;
+ }
+ host.replaceChildren();
+ host.style.cssText='position:relative;display:block;width:128px;height:128px;background:transparent';
+ return host;
+}
+async function captureStack(members){
+ const host=resetHost();
+ const root=document.createElement('div');
+ root.className='avatar-stack';
+ root.style.cssText='position:relative;width:128px;height:128px';
+ const plan=stackPlan(members);
+ const handles=[];
+ const add=node=>{const face=document.createElement('div');face.className='stack-face';face.append(node);root.append(face);};
+ if(plan.extra){
+  const badge=document.createElement('span');
+  badge.className='stack-more';
+  badge.textContent=`+${plan.extra}`;
+  badge.style.cssText='display:grid;place-items:center;width:100%;height:100%;background:#1c1c1e;color:#fff;font:600 12px sans-serif';
+  add(badge);
+ }
+ host.append(root);
+ const faceSize=Math.round(128*plan.ratio);
+ for(const member of plan.shown){
+  const target=document.createElement('div');
+  target.className='avatar';
+  add(target);
+  handles.push(createAvatar(target,{agentId:member.agentId,shape:member.shape,color:member.color,size:faceSize,main:false,state:'idle',reducedMotion:true,theme:'light'}));
+  target.style.width='100%';target.style.height='100%';
+ }
+ placeStack(root);
+ try{await waitStack(root);return await renderStackPng(root,256);}finally{for(const handle of handles)handle.destroy();}
+}
+window.captureMenuAvatar=async config=>{
+ if(Array.isArray(config.members)&&config.members.length>=2)return captureStack(config.members);
+ const target=document.createElement('div');
+ target.className='avatar';
+ resetHost().append(target);
+ const handle=createAvatar(target,{...config,size:128,reducedMotion:true,theme:'light'});
+ try{return await handle.capture(128);}finally{handle.destroy();}
+};
 
 // Flatten share icons before macOS supplies a material tile for transparency.
 // Live avatars continue using their transparent captures.
 window.whiteMenuIcon=async source=>{
  const image=new Image();
  await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('MENU_AVATAR_MISSING'));image.src=source;});
- const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
- const context=canvas.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,128,128);context.drawImage(image,0,0,128,128);
+ const size=Math.max(128,image.naturalWidth||0,image.naturalHeight||0);
+ const canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;
+ const context=canvas.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,size,size);context.drawImage(image,0,0,size,size);
  return canvas.toDataURL('image/png');
 };

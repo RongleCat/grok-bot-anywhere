@@ -13,8 +13,8 @@ test('shortcut recording accepts a modifier combination and rejects bare keys',(
   assert.equal(formatAccelerator('Ctrl+Alt+K','win32'),'Ctrl+Alt+K');
 });
 test('saved shortcuts keep the general slot and one accelerator per bot',()=>{
-  assert.deepEqual(normalizeShortcutMap(null),{compose:'Ctrl+Alt+Space',bots:{}});
-  assert.deepEqual(normalizeShortcutMap({compose:''}),{compose:null,bots:{}});
-  assert.deepEqual(normalizeShortcutMap({compose:'not a shortcut',bots:{'bot-1':'Alt+K'}}),{compose:'Ctrl+Alt+Space',bots:{'bot-1':'Alt+K'}});
-  assert.deepEqual(normalizeShortcutMap({compose:'Alt+K',bots:{'bot-1':'Ctrl+Shift+A','nope space':'Alt+B','bot-2':'K','bot-3':'Alt+K'}}),{compose:'Alt+K',bots:{'bot-1':'Ctrl+Shift+A'}});
+  assert.deepEqual(normalizeShortcutMap(null),{compose:'Ctrl+Alt+Space',open:null,bots:{},opens:{}});
+  assert.deepEqual(normalizeShortcutMap({compose:''}),{compose:null,open:null,bots:{},opens:{}});
+  assert.deepEqual(normalizeShortcutMap({compose:'not a shortcut',open:'Ctrl+Shift+G',bots:{'bot-1':'Alt+K'},opens:{'bot-1':'Ctrl+Alt+O'}}),{compose:'Ctrl+Alt+Space',open:'Ctrl+Shift+G',bots:{'bot-1':'Alt+K'},opens:{'bot-1':'Ctrl+Alt+O'}});
+  assert.deepEqual(normalizeShortcutMap({compose:'Alt+K',open:'Alt+K',bots:{'bot-1':'Ctrl+Shift+A','nope space':'Alt+B','bot-2':'K','bot-3':'Alt+K','bot-4':'Ctrl+Shift+G'},opens:{'bot-1':'Ctrl+Shift+A','bot-4':'Alt+O'}}),{compose:'Alt+K',open:null,bots:{'bot-1':'Ctrl+Shift+A','bot-4':'Ctrl+Shift+G'},opens:{'bot-4':'Alt+O'}});
 });

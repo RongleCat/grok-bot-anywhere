@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configureMenus()
         picker = PickerWindowController(store: store)
         composer = ComposerWindowController(store: store)
-        picker?.compose = { [weak self] in self?.showComposer() }
+        picker?.compose = { [weak self] in self?.composeFromTouchBar() }
         store.openComposer = { [weak self] in self?.showComposer() }
         store.onSelection = { [weak self] in self?.picker?.refresh() }
         composer?.window?.touchBar = picker?.makeTouchBar()
@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for (title, action, key) in [("撤销", Selector(("undo:")), "z"), ("剪切", #selector(NSText.cut(_:)), "x"), ("复制", #selector(NSText.copy(_:)), "c"), ("粘贴", #selector(NSText.paste(_:)), "v"), ("全选", #selector(NSText.selectAll(_:)), "a")] { edit.addItem(withTitle: title, action: action, keyEquivalent: key) }
         for menu in [app, actions, edit] { let item = NSMenuItem(); item.submenu = menu; main.addItem(item) }
         NSApplication.shared.mainMenu = main
+        if NativeCompanion.enabled { return }
         let statusMenu = NSMenu()
         let open = NSMenuItem(title: "开始对话  ⌃⌥Space", action: #selector(globalCompose), keyEquivalent: ""); open.target = self; statusMenu.addItem(open)
         let voice = NSMenuItem(title: "语音发送  ⌃⌥V", action: #selector(dictateCompose), keyEquivalent: ""); voice.target = self; statusMenu.addItem(voice)
@@ -90,6 +91,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem?.button?.image = NSImage(systemSymbolName: "bubble.left.and.bubble.right", accessibilityDescription: "Touch Bar Bot")
         statusItem?.menu = statusMenu
+    }
+    private func composeFromTouchBar() {
+        if NativeCompanion.enabled, let id = store.selectedBot?.id, !id.isEmpty {
+            let companion = self.companion
+            Task { @MainActor in
+                let opened = await companion?.askParentToCompose(id) ?? false
+                if !opened { self.showComposer() }
+            }
+            return
+        }
+        showComposer()
     }
     @objc private func showComposer() {
         guard !store.bots.isEmpty else { showLibrary(); return }

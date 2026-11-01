@@ -10,8 +10,18 @@
 </head>
 <body>
   <div class="shell">
+    <header class="titlebar">
+      <div class="titlebar-side">
+        <button id="search-toggle" class="titlebar-button" type="button" aria-pressed="true" aria-controls="search"></button>
+        <button id="sync" class="titlebar-button" type="button"></button>
+        <button id="group-toggle" class="titlebar-button" type="button" aria-pressed="false"></button>
+      </div>
+      <div id="titlebar-title" class="titlebar-title"></div>
+    </header>
     <aside class="sidebar">
-      <label class="search"><input id="search" type="search" spellcheck="false" autocomplete="off"></label>
+      <div class="search-row">
+        <label class="search"><input id="search" type="search" spellcheck="false" autocomplete="off"></label>
+      </div>
       <div id="grid" class="bot-list"></div>
       <div class="sidebar-foot">
         <nav id="navigation"></nav>

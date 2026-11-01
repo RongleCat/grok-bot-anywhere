@@ -1,3 +1,4 @@
+import {groupMembers,listedBots,stackIconVersion} from '../renderer/group-avatar.mjs';
 export const menuHostName='Grok Bot Anywhere Menu';
 export const MENU_ID='dev.ronglecat.grokbotanywhere.menu';
 export const destinationIdentifier=slot=>`${MENU_ID}.destination${String(slot).padStart(2,'0')}`;
@@ -14,9 +15,17 @@ export const destinationPath=(root,slot)=>`${root}/Contents/Helpers/Destination$
 export const slotExtensionPath=(root,slot)=>`${destinationPath(root,slot)}/Contents/PlugIns/GrokBotShare.appex`;
 export function menuEntries(state){
   if(!state.account?.id||state.accountBusy)return [];
-  return state.recipients.filter(r=>r.enabled&&r.sources.wechat).map((r,index)=>({r,index,bot:state.bots.find(b=>b.id===r.botId)})).filter(row=>row.bot)
+  const visible=new Set(listedBots(state.bots).map(bot=>bot.id));
+  return state.recipients.filter(r=>r.enabled&&r.sources.wechat).map((r,index)=>({r,index,bot:state.bots.find(b=>b.id===r.botId)})).filter(row=>row.bot&&visible.has(row.bot.id))
     .sort((a,b)=>a.r.order-b.r.order||a.index-b.index).slice(0,12).map(({r,bot})=>({accountId:state.account.id,botId:bot.id,botName:bot.name||'Bot',sessionId:bot.sessionId??'',mode:r.mode,prefix:r.prefix,
-      avatarKey:JSON.stringify([bot.avatarShape,bot.avatarColor,bot.avatar?.picture?.url,bot.avatar?.picture?.version,state.runtime?.mainAgentId===bot.id]),bot}));
+      avatarKey:avatarKey(bot,state),bot}));
+}
+function avatarKey(bot,state){
+ const base=[bot.avatarShape,bot.avatarColor,bot.avatar?.picture?.url,bot.avatar?.picture?.version,state.runtime?.mainAgentId===bot.id];
+ const members=groupMembers(bot,state.bots);
+ if(members.length<2)return JSON.stringify(base);
+ const shown=members.slice(0,4);
+ return JSON.stringify([...base,shown.map(member=>[member.id,member.avatarShape??'',member.avatarColor??'',member.avatar?.kind==='picture'?member.avatar.picture?.url??'':'']),stackIconVersion]);
 }
 function stickyMenu(desired,previous){
   const used=new Set();

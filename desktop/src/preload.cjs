@@ -4,8 +4,11 @@ const call=(method,params={})=>ipcRenderer.invoke('anywhere:call',method,params)
 });
 contextBridge.exposeInMainWorld('anywhere',{
   state:()=>call('state'),login:()=>call('login'),desktopLogin:()=>call('desktopLogin'),logout:()=>call('logout'),refresh:()=>call('refresh'),
+  duplicateBot:botId=>call('duplicateBot',{botId}),
+  disableAllReceive:()=>call('disableAllReceive'),
+  explorerMenu:action=>call('explorerMenu',action??{}),
   configure:(botId,patch)=>call('configure',{botId,patch}),theme:theme=>call('theme',{theme}),
-  compose:botId=>call('compose',{botId}),openReceipt:id=>call('openReceipt',{id}),sendReceipt:id=>call('sendReceipt',{id}),
+  compose:botId=>call('compose',{botId}),copyComposeLink:botId=>call('copyComposeLink',{botId}),openBot:botId=>call('openBot',{botId}),openReceipt:id=>call('openReceipt',{id}),sendReceipt:id=>call('sendReceipt',{id}),
   sendDraft:(botId,text,files,receiptId)=>call('sendDraft',{botId,text,files,receiptId}),
   retry:id=>call('retry',{id}),
   resolve:id=>call('resolve',{id}),
@@ -16,6 +19,9 @@ contextBridge.exposeInMainWorld('anywhere',{
   setShortcut:(slot,accelerator)=>call('setShortcut',{slot,accelerator}),
   suppressShortcuts:on=>call('suppressShortcuts',{on}),
   setComposerPrefs:prefs=>call('setComposerPrefs',prefs),
+  setCli:enabled=>call('setCli',{enabled}),
+  setOpenAtLogin:enabled=>call('setOpenAtLogin',{enabled}),
+  setTouchBarPinned:pinned=>call('setTouchBarPinned',{pinned}),
   noteBot:botId=>call('noteBot',{botId}),
   pendingComposer:()=>call('pendingComposer'),
   hideComposer:()=>call('hideComposer'),
@@ -25,5 +31,9 @@ contextBridge.exposeInMainWorld('anywhere',{
   pickBot:botId=>call('pickBot',{botId}),
   dropFiles:(botId,files)=>call('dropFiles',{botId,files:files.map(file=>webUtils.getPathForFile(file)).filter(Boolean)}),
   filePaths:files=>files.map(file=>webUtils.getPathForFile(file)).filter(Boolean),
-  onChange:listener=>{const handler=(_event,data)=>listener(data);ipcRenderer.on('anywhere:event',handler);return()=>ipcRenderer.removeListener('anywhere:event',handler);}
+  onChange:listener=>{const handler=(_event,data)=>listener(data);ipcRenderer.on('anywhere:event',handler);return()=>ipcRenderer.removeListener('anywhere:event',handler);},
+  windowControl:action=>ipcRenderer.invoke('anywhere:window-control',action).then(result=>{
+    if(result?.error)throw new Error(result.error);return result?.value;
+  }),
+  onWindowState:listener=>{const handler=(_event,data)=>listener(data);ipcRenderer.on('anywhere:window-state',handler);return()=>ipcRenderer.removeListener('anywhere:window-state',handler);}
 });

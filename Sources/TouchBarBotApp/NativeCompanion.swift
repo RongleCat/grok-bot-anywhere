@@ -60,6 +60,14 @@ final class NativeCompanion {
         emit(["event": "hello", "data": ["version": 1, "platform": "darwin", "capabilities": ["composer", "touchbar", "speech"]]])
     }
     func event(_ name: String) { emit(["event": name, "data": [:]]) }
+    func askParentToCompose(_ botId: String) async -> Bool {
+        do {
+            _ = try await request("compose", ["botId": botId])
+            return true
+        } catch {
+            return false
+        }
+    }
     private func emit(_ value: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: value) else { return }
         try? FileHandle.standardOutput.write(contentsOf: data + Data([10]))
@@ -102,6 +110,7 @@ final class NativeCompanion {
                 } else if let bot = store.bots.first(where: { $0.id == botId }) { store.select(bot) }
                 openComposer?()
             case "composer.hide": store.onHideComposer?()
+            case "touchbar.pin": store.setPinnedTouchBar(params["pinned"] as? Bool ?? false)
             case "shutdown": NSApplication.shared.terminate(nil)
             default: throw BridgeFailure.code("METHOD_UNKNOWN")
             }

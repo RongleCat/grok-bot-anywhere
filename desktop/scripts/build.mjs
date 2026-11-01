@@ -1,7 +1,11 @@
 import {build} from 'esbuild';
-import {mkdir,copyFile,writeFile} from 'node:fs/promises';
+import {mkdir,copyFile,readFile,writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
+const engine=root+'node_modules/grok-bot-avatar-engine/dist/index.js';
+const engineSource=await readFile(engine,'utf8');
+const filledEyes=engineSource.replaceAll('gl("var(--grok-bot-ink)")','gl("var(--grok-bot-ink)","#fff")').replaceAll('gl(typeof n=="string"?n:oH)','gl(typeof n=="string"?n:oH,"#fff")');
+if(filledEyes!==engineSource)await writeFile(engine,filledEyes);
 await mkdir(root+'out',{recursive:true});
 await build({entryPoints:[root+'src/renderer/app.mjs',root+'src/renderer/composer.mjs'],outdir:root+'out',bundle:true,format:'esm',platform:'browser',target:'chrome140',minify:false,logOverride:{'impossible-typeof':'silent'}});
 await Promise.all(['index.html','styles.css','composer.html','composer.css'].map(file=>copyFile(root+'src/renderer/'+file,root+'out/'+file)));

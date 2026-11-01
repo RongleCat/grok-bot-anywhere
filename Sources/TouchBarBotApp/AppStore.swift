@@ -185,10 +185,10 @@ final class AppStore: ObservableObject {
         }
     }
     func setPinnedTouchBar(_ pinned: Bool) {
-        guard pinTouchBar != pinned else { return }
+        let changed = pinTouchBar != pinned
         pinTouchBar = pinned
         UserDefaults.standard.set(pinned, forKey: "pinTouchBar")
-        onPinChanged?(pinned)
+        if changed || pinned { onPinChanged?(pinned) }
     }
     func select(_ bot: Bot, openOnRepeat: Bool = false, subscribe: Bool = true) {
         let repeated = workspace.select(bot.id)

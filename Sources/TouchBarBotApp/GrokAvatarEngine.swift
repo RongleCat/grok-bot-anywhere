@@ -5,6 +5,10 @@ import WebKit
 
 struct EngineStamp: Codable { var asarSize: Int; var asarMtimeMs: Double }
 
+private final class LiveFrame: @unchecked Sendable {
+    var image: NSImage?
+}
+
 @MainActor
 final class GrokAvatarEngine: ObservableObject {
     static let shared = GrokAvatarEngine()
@@ -283,15 +287,18 @@ final class GrokAvatarRaster: ObservableObject {
     }
 
     func captureLive(shape: String, hex: String, state: String, seed: String) async -> NSImage? {
-        await withCheckedContinuation { (continuation: CheckedContinuation<NSImage?, Never>) in
+        let frame = LiveFrame()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             enqueue { [weak self] in
-                guard let self else { continuation.resume(returning: nil); return }
+                guard let self else { continuation.resume(); return }
                 let config: [String: Any] = ["shape": shape, "color": hex, "state": state, "seed": seed, "visible": true, "reducedMotion": false]
                 _ = await self.runJS("const started = Date.now(); while (!window.prepareLive) { if (Date.now() - started > 4000) return; await new Promise(r => setTimeout(r, 40)); } window.prepareLive(config);", arguments: ["config": config])
                 try? await Task.sleep(nanoseconds: 40_000_000)
-                continuation.resume(returning: await self.grabLive())
+                frame.image = await self.grabLive()
+                continuation.resume()
             }
         }
+        return frame.image
     }
 
     private func didLoad() {

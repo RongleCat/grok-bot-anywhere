@@ -35,25 +35,30 @@ export function acceleratorFromEvent(event){
 }
 
 const SLOT=/^[\w-]{1,80}$/;
+function takeShortcut(seen,target,id,value){
+  if(!SLOT.test(id)||typeof value!=='string'||!value)return;
+  try{
+    const accelerator=normalizeAccelerator(value);
+    if(!accelerator||seen.has(accelerator))return;
+    seen.add(accelerator);
+    target[id]=accelerator;
+  }catch{}
+}
 export function normalizeShortcutMap(saved){
-  const map={compose:DEFAULT_SHORTCUTS.compose,bots:{}};
+  const map={compose:DEFAULT_SHORTCUTS.compose,open:null,bots:{},opens:{}};
   if(!saved||typeof saved!=='object')return map;
   if(Object.prototype.hasOwnProperty.call(saved,'compose')){
     if(saved.compose==null||saved.compose==='')map.compose=null;
     else{try{map.compose=normalizeAccelerator(saved.compose);}catch{map.compose=DEFAULT_SHORTCUTS.compose;}}
   }
-  const seen=new Set(map.compose?[map.compose]:[]);
-  if(saved.bots&&typeof saved.bots==='object'){
-    for(const [id,value] of Object.entries(saved.bots)){
-      if(!SLOT.test(id)||typeof value!=='string'||!value)continue;
-      try{
-        const accelerator=normalizeAccelerator(value);
-        if(!accelerator||seen.has(accelerator))continue;
-        seen.add(accelerator);
-        map.bots[id]=accelerator;
-      }catch{}
-    }
+  if(Object.prototype.hasOwnProperty.call(saved,'open')){
+    if(saved.open==null||saved.open==='')map.open=null;
+    else{try{map.open=normalizeAccelerator(saved.open);}catch{map.open=null;}}
   }
+  if(map.compose&&map.open===map.compose)map.open=null;
+  const seen=new Set([map.compose,map.open].filter(Boolean));
+  if(saved.bots&&typeof saved.bots==='object')for(const [id,value] of Object.entries(saved.bots))takeShortcut(seen,map.bots,id,value);
+  if(saved.opens&&typeof saved.opens==='object')for(const [id,value] of Object.entries(saved.opens))takeShortcut(seen,map.opens,id,value);
   return map;
 }
 

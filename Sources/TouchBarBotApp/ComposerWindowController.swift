@@ -57,48 +57,61 @@ private final class PointerGate: @unchecked Sendable {
     var onHide: @Sendable () -> Void = {}
 
     func contains(_ screenPoint: NSPoint) -> Bool {
-        guard let window, let host, host.bounds.width > 1, host.bounds.height > 1 else { return false }
-        let inWindow = window.convertFromScreen(NSRect(origin: screenPoint, size: .zero)).origin
-        let local = host.convert(inWindow, from: nil)
-        return host.containsInteractive(local)
+        MainActor.assumeIsolated {
+            guard let window, let host, host.bounds.width > 1, host.bounds.height > 1 else { return false }
+            let inWindow = window.convertFromScreen(NSRect(origin: screenPoint, size: .zero)).origin
+            let local = host.convert(inWindow, from: nil)
+            return host.containsInteractive(local)
+        }
     }
 
     func updatePassthrough() {
-        guard let window, window.isVisible else { return }
-        let interactive = contains(NSEvent.mouseLocation)
-        if window.ignoresMouseEvents == interactive { window.ignoresMouseEvents = !interactive }
+        MainActor.assumeIsolated {
+            guard let window, window.isVisible else { return }
+            let interactive = contains(NSEvent.mouseLocation)
+            if window.ignoresMouseEvents == interactive { window.ignoresMouseEvents = !interactive }
+        }
     }
 
     func notePress() {
-        guard window?.isVisible == true else { return }
-        let point = NSEvent.mouseLocation
-        if contains(point) { outsidePress = nil; return }
-        outsidePress = dismissOnOutside ? point : nil
+        MainActor.assumeIsolated {
+            guard window?.isVisible == true else { return }
+            let point = NSEvent.mouseLocation
+            if contains(point) { outsidePress = nil; return }
+            outsidePress = dismissOnOutside ? point : nil
+        }
     }
 
     func noteRelease() {
-        guard let start = outsidePress else { return }
-        outsidePress = nil
-        guard window?.isVisible == true, dismissOnOutside else { return }
-        let point = NSEvent.mouseLocation
-        guard !contains(point), hypot(point.x - start.x, point.y - start.y) < 6 else { return }
-        onHide()
+        MainActor.assumeIsolated {
+            guard let start = outsidePress else { return }
+            outsidePress = nil
+            guard window?.isVisible == true, dismissOnOutside else { return }
+            let point = NSEvent.mouseLocation
+            guard !contains(point), hypot(point.x - start.x, point.y - start.y) < 6 else { return }
+            onHide()
+        }
     }
 
     func forward(_ event: NSEvent) -> NSEvent? {
-        guard let window, window.isVisible else { return event }
-        if event.timestamp <= swallowUntil { return nil }
-        let point = NSEvent.mouseLocation
-        if contains(point) {
-            outsidePress = nil
-            if !NSApplication.shared.isActive { NSApplication.shared.activate(ignoringOtherApps: true) }
-            window.makeKey()
-            return event
+        let timestamp = event.timestamp
+        let action = MainActor.assumeIsolated { () -> String in
+            guard let window, window.isVisible else { return "pass" }
+            if timestamp <= swallowUntil { return "swallow" }
+            let point = NSEvent.mouseLocation
+            if contains(point) {
+                outsidePress = nil
+                if !NSApplication.shared.isActive { NSApplication.shared.activate(ignoringOtherApps: true) }
+                window.makeKey()
+                return "pass"
+            }
+            window.ignoresMouseEvents = true
+            outsidePress = dismissOnOutside ? point : nil
+            swallowUntil = timestamp
+            return "repost"
         }
-        window.ignoresMouseEvents = true
-        outsidePress = dismissOnOutside ? point : nil
-        swallowUntil = event.timestamp
-        if let raw = event.cgEvent {
+        if action == "pass" { return event }
+        if action == "repost", let raw = event.cgEvent {
             let posted = PostedEvent(raw)
             DispatchQueue.main.async { posted.event.post(tap: .cghidEventTap) }
         }

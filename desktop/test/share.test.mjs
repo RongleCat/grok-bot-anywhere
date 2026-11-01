@@ -8,6 +8,29 @@ test('share menu and local importer are implemented',()=>assert.ok(loaded.every(
 const model=loaded[0].value,ShareInbox=loaded[1].value?.ShareInbox;
 const state={account:{id:'a'},bots:Array.from({length:14},(_,i)=>({id:`bot-${i}`,name:`Bot ${i}`,avatarShape:'cloud',avatarColor:'brown'})),recipients:Array.from({length:14},(_,i)=>({botId:`bot-${i}`,enabled:true,order:i,mode:'compose',prefix:'',sources:{wechat:true}}))};
 if(model&&ShareInbox){
+ test('a same-named single bot is not a second share row for the group',()=>{
+  const input=structuredClone(state);
+  input.bots[0].kind='GROK_BOT_AGENT_KIND_ROOM';
+  input.bots[0].memberAgentIds=['bot-2','bot-3'];
+  input.bots[0].name='Same';
+  input.bots[1].name='Same';
+  const entries=model.menuEntries(input);
+  assert.equal(entries.filter(entry=>entry.botName==='Same').length,1);
+  assert.equal(entries.find(entry=>entry.botName==='Same').botId,'bot-0');
+ });
+ test('group menu icons key off member faces and single bots keep the short key',()=>{
+  const input=structuredClone(state);
+  input.bots[0].kind='GROK_BOT_AGENT_KIND_ROOM';
+  input.bots[0].memberAgentIds=['bot-2','bot-3','bot-4','bot-5','bot-6'];
+  const entries=model.menuEntries(input);
+  const group=JSON.parse(entries.find(entry=>entry.botId==='bot-0').avatarKey);
+  const single=JSON.parse(entries.find(entry=>entry.botId==='bot-1').avatarKey);
+  assert.equal(group.length,7);
+  assert.equal(group[5].length,4);
+  assert.equal(group[6],3);
+  assert.deepEqual(group[5].map(item=>item[0]),['bot-2','bot-3','bot-4','bot-5']);
+  assert.equal(single.length,5);
+ });
  test('only WeChat-enabled recipients get at most twelve slots in configured order',()=>{
   const input=structuredClone(state);input.recipients[0].enabled=false;input.recipients[1].sources.wechat=false;
   const slots=model.menuEntries(input);assert.equal(slots.length,12);assert.equal(slots[0].botId,'bot-2');

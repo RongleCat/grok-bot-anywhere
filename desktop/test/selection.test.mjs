@@ -5,7 +5,8 @@ import {mkdtemp, writeFile, mkdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
-import {captureFrontmostSelection, listedPaths, regularFiles, selectionScripts} from '../src/main/selection.mjs';
+import {EventEmitter} from 'node:events';
+import {captureFrontmostSelection, createSelectionClient, listedPaths, prepareExplorerSelection, regularFiles, selectionScripts} from '../src/main/selection.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,6 +24,24 @@ test('regular files drop folders, empty files, and duplicates', async () => {
   await mkdir(folder);
   const picked = await regularFiles([file, file, empty, folder, join(root, 'missing.txt'), '  ']);
   assert.deepEqual(picked, [file]);
+  await rm(root, {recursive: true, force: true});
+});
+
+test('regular files drop folders, missing paths, and shell virtual items', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'gba-selection-'));
+  const file = join(root, 'note.txt');
+  const folder = join(root, 'folder');
+  await writeFile(file, 'kept');
+  await mkdir(folder);
+  const picked = await regularFiles([
+    folder,
+    join(root, 'missing.txt'),
+    '::{20D04FE0-3AEA-1069-A2D8-08002B30309D}',
+    '::{645FF040-5081-101B-9F08-00AA002F954E}\\folder',
+    file
+  ], {platform: 'win32'});
+  assert.deepEqual(picked, [file]);
+  await rm(root, {recursive: true, force: true});
 });
 
 test('frontmost capture returns script paths and treats a failed script as no selection', async () => {
@@ -39,6 +58,89 @@ test('finder and explorer scripts stay limited to the foreground file window', (
   assert.match(selectionScripts.explorerScript, /GetForegroundWindow/);
   assert.match(selectionScripts.explorerScript, /explorer/);
   assert.match(selectionScripts.explorerScript, /SelectedItems/);
+  const script = selectionScripts.selectionHostScript;
+  const ready = script.indexOf("WriteLine('READY')");
+  const snap = script.indexOf("if ($line -eq 'SNAP')");
+  const files = script.indexOf("if ($line.StartsWith('FILES '))");
+  const foreground = script.indexOf('::GetForegroundWindow()');
+  assert.ok(script.indexOf('Add-Type') >= 0 && script.indexOf('Add-Type') < ready);
+  assert.ok(ready < snap && snap < foreground && foreground < files);
+  assert.equal(script.slice(files).includes('GetForegroundWindow'), false);
+  assert.match(script.slice(snap, files), /ProcessName/);
+  assert.match(script.slice(snap, files), /0xFFFFFFFFL/);
+  assert.match(script.slice(snap, files), /try \{/);
+  assert.match(script.slice(snap, files), /HWND 0 none/);
+  assert.equal(script.slice(snap, files).includes('0xFFFFFFFF)'), false);
+  assert.match(script.slice(files), /SelectedItems/);
+  assert.match(script.slice(files), /0xFFFFFFFFL/);
+  assert.match(createSelectionClient.toString(), /if \(child !== current\) return/);
+  assert.match(createSelectionClient.toString(), /StringDecoder/);
+  assert.match(createSelectionClient.toString(), /takeLine\(20000\)/);
+});
+
+function fakePowerShell(writes) {
+  const stdout = new EventEmitter();
+  const stdin = {write(text) {
+    const line = String(text).trim();
+    writes.push(line);
+    if (line === 'SNAP') stdout.emit('data', Buffer.from('HWND 42 explorer\n'));
+    if (line.startsWith('FILES ')) stdout.emit('data', Buffer.from('C:\\Temp\\笔记.txt\nEND\n'));
+  }, on() {}};
+  const child = new EventEmitter();
+  child.stdout = stdout;
+  child.stdin = stdin;
+  child.kill = () => {};
+  queueMicrotask(() => stdout.emit('data', Buffer.from('READY\n')));
+  return child;
+}
+
+test('windows selection reads the hwnd before it reads files', async () => {
+  const writes = [];
+  const client = createSelectionClient({spawnImpl: () => fakePowerShell(writes)});
+  const prepared = prepareExplorerSelection({client, platform: 'win32'});
+  const info = await prepared.hwndReady;
+  assert.deepEqual(info, {hwnd: '42', name: 'explorer'});
+  assert.deepEqual(writes, ['SNAP']);
+  assert.deepEqual(await prepared.files(), ['C:\\Temp\\笔记.txt']);
+  assert.deepEqual(writes, ['SNAP', 'FILES 42']);
+  client.stop();
+  const idle = prepareExplorerSelection({client: {snap: async () => ({hwnd: '7', name: 'notepad'}), files() { throw new Error('FILES'); }}, platform: 'win32'});
+  await idle.hwndReady;
+  assert.deepEqual(await idle.files(), []);
+});
+
+test('selection host reassembles split utf-8 and ignores a stopped child', async () => {
+  const children = [];
+  const client = createSelectionClient({spawnImpl: () => {
+    const stdout = new EventEmitter();
+    const child = new EventEmitter();
+    child.stdout = stdout;
+    child.stdin = {write() {}, on() {}};
+    child.kill = () => {};
+    children.push(child);
+    return child;
+  }});
+  const starting = client.start();
+  const ready = Buffer.from('READY\n', 'utf8');
+  children[0].stdout.emit('data', ready.subarray(0, 3));
+  children[0].stdout.emit('data', ready.subarray(3));
+  await starting;
+  client.stop();
+  children[0].stdout.emit('data', Buffer.from('HWND 99 explorer\n'));
+  const again = client.start();
+  children[1].stdout.emit('data', Buffer.from('READY\n'));
+  await again;
+  const snap = client.snap();
+  children[1].stdout.emit('data', Buffer.from('HWND 42 explorer\n'));
+  assert.deepEqual(await snap, {hwnd: '42', name: 'explorer'});
+  const path = 'C:\\Temp\\笔记.txt';
+  const payload = Buffer.from(`${path}\nEND\n`, 'utf8');
+  const mark = payload.indexOf(Buffer.from('笔', 'utf8'));
+  const reading = client.files('42');
+  children[1].stdout.emit('data', payload.subarray(0, mark + 1));
+  children[1].stdout.emit('data', payload.subarray(mark + 1));
+  assert.deepEqual(await reading, [path]);
+  client.stop();
 });
 
 test('finder selection script compiles', async () => {

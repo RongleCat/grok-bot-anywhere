@@ -1,6 +1,32 @@
 import * as sdk from 'grok-bot-sdk';
 import {Delivery} from './delivery.mjs';
+import {readSidebarSettings} from './runtime-settings.mjs';
 import {normalizeAccelerator,normalizeShortcutMap} from '../shortcuts.mjs';
+
+function emptyRuntime(){return {mainAgentId:null,statuses:[],pinnedAgentIds:[],sections:[]};}
+async function readRuntime(client,bots,previous=emptyRuntime(),credentials){
+  const runtime={...emptyRuntime(),...previous,statuses:Array.isArray(previous?.statuses)?previous.statuses:[]};
+  if(typeof client.getRuntimeSettings==='function'){
+    const settings=await client.getRuntimeSettings();
+    runtime.mainAgentId=settings?.mainAgentId??null;
+    runtime.pinnedAgentIds=Array.isArray(settings?.pinnedAgentIds)?settings.pinnedAgentIds:[];
+    runtime.sections=Array.isArray(settings?.sections)?settings.sections:[];
+  }else if(credentials?.accessToken&&client?.constructor?.name==='GrokBotClient'){
+    const settings=await readSidebarSettings(credentials);
+    runtime.mainAgentId=settings.mainAgentId;
+    runtime.pinnedAgentIds=settings.pinnedAgentIds;
+    runtime.sections=settings.sections;
+  }
+  const ids=bots.map(bot=>bot.id);
+  if(typeof client.listStatuses==='function'){
+    const listed=await client.listStatuses(ids);
+    runtime.statuses=Array.isArray(listed?.statuses)?listed.statuses:[];
+  }else if(typeof client.listAgentStatuses==='function'){
+    const listed=await client.listAgentStatuses(ids);
+    runtime.statuses=(Array.isArray(listed?.statuses)?listed.statuses:[]).flatMap(row=>typeof row?.agentId==='string'&&row.agentId?[{agentId:row.agentId,isRunning:row.isRunning===true}]:[]);
+  }
+  return runtime;
+}
 
 export class AccountSession {
   constructor({store,sdk:implementation=sdk,upload,onEvent=()=>{},now=Date.now}) {
@@ -8,7 +34,7 @@ export class AccountSession {
     const cached=store.preference('lastAccount');
     this.account=cached?.account??null;this.bots=cached?.bots??[];
     this.client=null;this.credentials=null;this.generation=0;this.pending=0;this.transition=false;
-    this.watches=new Map();this.sendQueues=new Map();this.watchErrors={};this.runtime={mainAgentId:null,statuses:[]};
+    this.watches=new Map();this.sendQueues=new Map();this.watchErrors={};this.runtime=emptyRuntime();
   }
   requireAccount(){if(!this.account)throw new Error('LOGIN_REQUIRED');return this.account.id;}
   requireClient(){if(this.transition)throw new Error('ACCOUNT_BUSY');if(!this.client)throw new Error('LOGIN_REQUIRED');return this.client;}
@@ -18,7 +44,7 @@ export class AccountSession {
     return {account:this.account,connected:!!this.client,accountBusy:this.transition,bots:this.bots,recipients:accountId?this.bots.map(bot=>this.store.recipient(accountId,bot.id)):[],
       inbox:accountId?this.store.list(accountId).map(({files,...item})=>({...item,files:files.map(({name,bytes})=>({name,bytes}))})):[],
       theme:this.store.preference('theme')??'system',shortcuts:this.shortcutMap(),runtime:this.runtime,watchErrors:this.watchErrors,backgroundSending:!!this.delivery?.inflight.size,
-      capabilities:{runtime:typeof this.client?.getRuntimeSettings==='function',statuses:typeof this.client?.listStatuses==='function'}};
+      capabilities:{runtime:typeof this.client?.getRuntimeSettings==='function',statuses:typeof this.client?.listStatuses==='function'||typeof this.client?.listAgentStatuses==='function'}};
   }
   emit(){if(!this.closed)this.onEvent({event:'state',data:this.snapshot()});}
   async login() {
@@ -50,10 +76,11 @@ export class AccountSession {
     try{
     const client=new this.sdk.GrokBotClient(credentials);
     const me=await client.getMe();const roster=await client.listBots();
+    const runtime=await readRuntime(client,roster.bots,emptyRuntime(),credentials);
     if(generation!==this.generation)throw new Error('LOGIN_CANCELLED');
     this.stopWatches();
     this.account={id:String(me.authId??me.userId),name:me.name??me.email??'Grok Bot'};
-    this.bots=roster.bots;this.client=client;this.credentials=credentials;this.watchErrors={};
+    this.bots=roster.bots;this.runtime=runtime;this.client=client;this.credentials=credentials;this.watchErrors={};
     this.delivery=new Delivery({store:this.store,client,now:this.now,upload:(file,context)=>{
       if(!this.upload)throw new Error('UPLOAD_UNAVAILABLE');
       return this.upload(file,{...context,credentials});
@@ -68,15 +95,29 @@ export class AccountSession {
     try{
       const roster=await client.listBots();
       if(generation!==this.generation)throw new Error('LOGIN_CANCELLED');
-      let runtime=this.runtime;
-      if(typeof client.getRuntimeSettings==='function')runtime={...runtime,...await client.getRuntimeSettings()};
-      if(typeof client.listStatuses==='function')runtime={...runtime,...await client.listStatuses(roster.bots.map(b=>b.id))};
+      const runtime=await readRuntime(client,roster.bots,this.runtime,this.credentials);
       if(generation!==this.generation)throw new Error('LOGIN_CANCELLED');
       this.bots=roster.bots;this.runtime=runtime;
       this.store.preference('lastAccount',{account:this.account,bots:this.bots});this.emit();return this.snapshot();
     }catch(error){if(generation===this.generation)this.authFailure(error);throw error;}
   }
   configure(botId,patch){const accountId=this.requireAccount();if(!this.bots.some(b=>b.id===botId))throw new Error('BOT_NOT_FOUND');const result=this.store.saveRecipient(accountId,botId,patch);this.emit();return result;}
+  disableAllReceive(){
+    const accountId=this.requireAccount();
+    const closed=this.store.disableEnabled(accountId,this.bots.map(bot=>bot.id));
+    this.emit();
+    return {closed};
+  }
+  async duplicateBot(botId){
+    const client=this.requireClient();
+    const bot=this.bots.find(item=>item.id===botId);
+    if(!bot)throw new Error('BOT_NOT_FOUND');
+    if(bot.kind==='GROK_BOT_AGENT_KIND_ROOM'||(Array.isArray(bot.memberAgentIds)&&bot.memberAgentIds.length>0))throw new Error('BOT_NOT_COPYABLE');
+    if(typeof client.duplicateBot!=='function')throw new Error('DUPLICATE_UNAVAILABLE');
+    const result=await client.duplicateBot({botId});
+    try{await this.refresh();}catch{/* The Bot already exists. The window refreshes again. */}
+    return {bot:result.bot};
+  }
   async receive({botId,expectedAccountId,...input}){
     if(this.transition)throw new Error('ACCOUNT_BUSY');
     const accountId=this.requireAccount(),bot=this.bots.find(b=>b.id===botId);if(!bot)throw new Error('BOT_NOT_FOUND');
@@ -160,19 +201,27 @@ export class AccountSession {
   setShortcut(slot,accelerator){
     const current=this.shortcutMap();
     const next=normalizeAccelerator(accelerator);
-    if(slot==='compose'){
-      if(next&&Object.values(current.bots).includes(next))throw new Error('SHORTCUT_UNAVAILABLE');
-      current.compose=next;
+    const grok=typeof slot==='string'&&slot.startsWith('grok:')?slot.slice(5):'';
+    const owned=[['compose',current.compose],['open',current.open],...Object.entries(current.bots),...Object.entries(current.opens).map(([id,value])=>[`grok:${id}`,value])];
+    const taken=(candidate,except)=>!!candidate&&owned.some(([id,value])=>id!==except&&value===candidate);
+    if(slot==='compose'||slot==='open'){
+      if(taken(next,slot))throw new Error('SHORTCUT_UNAVAILABLE');
+      current[slot]=next;
+    }else if(grok){
+      if(!/^[\w-]{1,80}$/.test(grok))throw new Error('SHORTCUT_INVALID');
+      if(!this.bots.some(bot=>bot.id===grok))throw new Error('BOT_NOT_FOUND');
+      if(taken(next,slot))throw new Error('SHORTCUT_UNAVAILABLE');
+      if(next)current.opens[grok]=next;else delete current.opens[grok];
     }else{
       if(!/^[\w-]{1,80}$/.test(String(slot??'')))throw new Error('SHORTCUT_INVALID');
       if(!this.bots.some(bot=>bot.id===slot))throw new Error('BOT_NOT_FOUND');
-      if(next&&(current.compose===next||Object.entries(current.bots).some(([id,value])=>id!==slot&&value===next)))throw new Error('SHORTCUT_UNAVAILABLE');
+      if(taken(next,slot))throw new Error('SHORTCUT_UNAVAILABLE');
       if(next)current.bots[slot]=next;else delete current.bots[slot];
     }
-    this.store.preference('shortcuts',{compose:current.compose,bots:current.bots});
+    this.store.preference('shortcuts',{compose:current.compose,open:current.open,bots:current.bots,opens:current.opens});
     this.emit();return this.snapshot();
   }
-  async logout(){if(this.pending||this.delivery?.active.size||this.delivery?.inflight.size)throw new Error('DELIVERY_IN_PROGRESS');++this.generation;this.transition=false;this.stopWatches();this.client=null;this.credentials=null;this.account=null;this.bots=[];this.runtime={mainAgentId:null,statuses:[]};this.store.preference('lastAccount',null);this.emit();return this.snapshot();}
+  async logout(){if(this.pending||this.delivery?.active.size||this.delivery?.inflight.size)throw new Error('DELIVERY_IN_PROGRESS');++this.generation;this.transition=false;this.stopWatches();this.client=null;this.credentials=null;this.account=null;this.bots=[];this.runtime=emptyRuntime();this.store.preference('lastAccount',null);this.emit();return this.snapshot();}
   stopWatches(){for(const control of this.watches.values())control.abort();this.watches.clear();}
   close(){this.closed=true;++this.generation;this.stopWatches();}
 }
