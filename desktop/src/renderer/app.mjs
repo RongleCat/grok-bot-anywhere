@@ -362,6 +362,12 @@ function renderChat(content){
    card.append(settingRow(t('前缀','Prefix'),prefix));
   }
  }
+ const afterMode=el('div','segment');afterMode.setAttribute('aria-label',t('输入框发送后','Composer after sending'));
+ for(const [value,label] of [['inherit',t('跟随全局','Use global')],['hide',t('隐藏','Hide')],['open',t('打开 Bot','Open Bot')]]){
+  const choice=el('button',(recipient?.composerAfterSend??'inherit')===value?'selected':'',label);choice.type='button';
+  choice.addEventListener('click',()=>run(()=>api.configure(bot.id,{composerAfterSend:value})));afterMode.append(choice);
+ }
+ card.append(settingRow(t('输入框发送后','Composer after sending'),afterMode,t('覆盖全局设置；默认跟随全局。','Overrides the global setting; follows it by default.')));
  card.append(shortcutRow(bot.id,t('打开悬浮输入框','Open composer'),t('只打开这个 Bot 的悬浮输入框。','Opens the floating composer for this Bot.')));
  card.append(shortcutRow(`grok:${bot.id}`,t('在 Grok Bot 中打开','Open in Grok Bot'),t('在 Grok Bot 里打开这个 Bot。','Opens this Bot in Grok Bot.')));
  card.append(settingRow(t('快捷指令','Shortcuts'),smallButton(t('复制快捷指令链接','Copy shortcut link'),async()=>{await api.copyComposeLink(bot.id);toast(t('已复制快捷指令链接','Shortcut link copied'));},'secondary'),t('在快捷指令里用「打开 URL」。','Use Open URL in Shortcuts.')));
@@ -543,20 +549,20 @@ function renderSettings(content){
  keys.append(shortcutRow('open',t('在 Grok Bot 中打开','Open in Grok Bot'),t('打开上次选中的 Bot。链接是 grokbot://app/v1/agent?id= 加上这个 Bot 的编号。','Opens the Bot you selected last. The link is grokbot://app/v1/agent?id= plus that Bot id.')));
  if(state.host?.platform==='darwin')keys.append(hostSwitch(t('常驻 Touch Bar','Keep on the Touch Bar'),t('切到别的应用时，Touch Bar 上仍保留 Bot。点一下当前 Bot 会打开悬浮输入框。','The Touch Bar keeps the Bots while another app is in front. Press the current Bot to open the floating composer.'),!!state.host?.touchBarPinned,t('常驻 Touch Bar','Keep on the Touch Bar'),next=>api.setTouchBarPinned(next)));
  if(settingsTab==='shortcuts')panel.append(keys);
- const prefs=state.composerPrefs??{keepAfterSend:true,dismissOnOutside:true};
- const behavior=el('section','group'),keepRow=el('div','group-row');
- keepRow.append(el('span','group-label',t('发送后','After sending')));
- const keep=el('div','segment');
- for(const [value,label] of [[true,t('保留输入框','Keep open')],[false,t('直接隐藏','Hide')]]){
-  const choice=el('button',prefs.keepAfterSend===value?'selected':'',label);choice.type='button';
-  choice.addEventListener('click',()=>run(()=>api.setComposerPrefs({keepAfterSend:value,dismissOnOutside:prefs.dismissOnOutside!==false})));
-  keep.append(choice);
+ const prefs=state.composerPrefs??{afterSend:'hide',dismissOnOutside:true};
+ const behavior=el('section','group'),afterRow=el('div','group-row'),afterCopy=el('div','group-copy');
+ afterCopy.append(el('div','group-label',t('发送后','After sending')),el('div','group-help',t('默认隐藏输入框。单个 Bot 可以覆盖这个设置。','The composer hides by default. Each Bot can override this.')));
+ const after=el('div','segment');
+ for(const [value,label] of [['hide',t('隐藏输入框','Hide composer')],['open',t('打开 Grok Bot','Open Grok Bot')]]){
+  const choice=el('button',(prefs.afterSend??'hide')===value?'selected':'',label);choice.type='button';
+  choice.addEventListener('click',()=>run(()=>api.setComposerPrefs({afterSend:value,dismissOnOutside:prefs.dismissOnOutside!==false})));
+  after.append(choice);
  }
- keepRow.append(keep);behavior.append(keepRow);
+ afterRow.append(afterCopy,after);behavior.append(afterRow);
  const dismissRow=el('div','group-row'),dismissCopy=el('div');
  dismissCopy.append(el('div','group-label',t('点按外部关闭','Click outside closes')),el('div','group-help',t('关掉以后，悬浮输入框会显示关闭按钮。','When this is off, the floating composer shows a close button.')));
  const dismiss=el('input','switch');dismiss.type='checkbox';dismiss.checked=prefs.dismissOnOutside!==false;dismiss.setAttribute('aria-label',t('点按外部关闭','Click outside closes'));
- dismiss.addEventListener('change',()=>run(()=>api.setComposerPrefs({keepAfterSend:prefs.keepAfterSend!==false,dismissOnOutside:dismiss.checked})));
+ dismiss.addEventListener('change',()=>run(()=>api.setComposerPrefs({afterSend:prefs.afterSend??'hide',dismissOnOutside:dismiss.checked})));
  dismissRow.append(dismissCopy,dismiss);behavior.append(dismissRow);if(settingsTab==='composer')panel.append(behavior);
  const cli=state.host?.cli??{enabled:false,credential:false},cliPanel=el('section','group'),cliRow=el('div','group-row'),cliCopy=el('div');
  const cliPlain=t('命令行使用的登录信息会以明文保存在本机用户目录。新开的终端才会使用新的命令路径。','The login used by the command line is stored in plain text in this computer\'s user folder. New terminals pick up the new command path.');

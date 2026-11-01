@@ -1,6 +1,6 @@
 import {createAvatar} from 'grok-bot-avatar-engine';
 import {cutoutStack,groupMembers,listedBots,placeStack,stackPlan} from './group-avatar.mjs';
-import {acceptLateFiles} from '../shell/actions.mjs';
+import {acceptLateFiles,composerAfterSend} from '../shell/actions.mjs';
 const api=window.anywhere;
 const part=new URLSearchParams(location.search).get('part')||'card';
 const columns=10;
@@ -12,7 +12,7 @@ const $=id=>document.getElementById(id);
 const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;};
 const chinese=()=>state?.host?.locale?.startsWith('zh')??navigator.language.startsWith('zh');
 const t=(cn,en)=>chinese()?cn:en;
-const prefs=()=>state?.composerPrefs??{keepAfterSend:true,dismissOnOutside:true};
+const prefs=()=>state?.composerPrefs??{afterSend:'hide',dismissOnOutside:true};
 const ordered=()=>{
  if(!state)return [];
  const visible=new Set(listedBots(state.bots).map(bot=>bot.id));
@@ -245,7 +245,10 @@ async function send(){
   const result=await api.sendDraft(bot.id,draft.text,draft.paths,draft.receiptId);
   if(result?.status!=='sent')throw new Error(result?.status==='unconfirmed'?'SEND_UNCONFIRMED':result?.error||'SEND_FAILED');
   draft.text='';draft.paths=[];draft.names=[];draft.remote=[];draft.receiptId=null;
-  if(!prefs().keepAfterSend){await api.hideComposer();return;}
+  const recipient=state?.recipients?.find(row=>row.botId===bot.id);
+  const action=composerAfterSend(recipient,prefs());
+  await api.hideComposer();
+  if(action==='open'){try{await api.openBot(bot.id);}catch{}}
  }catch(error){toast(errors[error.message]?t(...errors[error.message]):t('没有发出去。','It was not sent.'));}
  finally{sending=false;focus=true;render();}
 }

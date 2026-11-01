@@ -37,7 +37,7 @@ let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shar
 let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
 let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,ipcSender=null;
-let composerPrefs={keepAfterSend:true,dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0;
+let composerPrefs={afterSend:'hide',dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0;
 let cliStatus={enabled:false,command:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:''};
 const pendingSharedComposers=new Set();let openingSharedComposer=false,shortcutsSuppressed=false;
 const pendingLinks=[];let deeplinkReady=false,deeplinkChain=Promise.resolve();
@@ -53,8 +53,8 @@ const errorCode=error=>/^[A-Z][A-Z0-9_]{1,70}$/.test(error?.message??'')?error.m
 function paintChrome(){if(!window||window.isDestroyed()||process.platform!=='darwin')return;window.setBackgroundColor('#00000000');}
 nativeTheme.on('updated',paintChrome);
 function loadComposerPrefs(){
-  try{const parsed=JSON.parse(readFileSync(join(app.getPath('userData'),'composer-prefs.json'),'utf8'));composerPrefs={keepAfterSend:parsed.keepAfterSend!==false,dismissOnOutside:parsed.dismissOnOutside!==false};}
-  catch{composerPrefs={keepAfterSend:true,dismissOnOutside:true};}
+  try{const parsed=JSON.parse(readFileSync(join(app.getPath('userData'),'composer-prefs.json'),'utf8'));composerPrefs={afterSend:parsed.afterSend==='open'?'open':'hide',dismissOnOutside:parsed.dismissOnOutside!==false};}
+  catch{composerPrefs={afterSend:'hide',dismissOnOutside:true};}
 }
 function saveComposerPrefs(){try{writeFileSync(join(app.getPath('userData'),'composer-prefs.json'),JSON.stringify(composerPrefs));}catch{}}
 function cliConfigDir(){return process.platform==='win32'?join(app.getPath('localAppData'),'Grok Bot Anywhere','cli'):join(app.getPath('userData'),'cli');}
@@ -621,7 +621,7 @@ async function dispatch(method,p){
       update();return touchBarPinPayload(touchBarPinned);
     }
     case 'setComposerPrefs':{
-      composerPrefs={keepAfterSend:typeof p.keepAfterSend==='boolean'?p.keepAfterSend:composerPrefs.keepAfterSend,dismissOnOutside:typeof p.dismissOnOutside==='boolean'?p.dismissOnOutside:composerPrefs.dismissOnOutside};
+      composerPrefs={afterSend:['hide','open'].includes(p.afterSend)?p.afterSend:composerPrefs.afterSend,dismissOnOutside:typeof p.dismissOnOutside==='boolean'?p.dismissOnOutside:composerPrefs.dismissOnOutside};
       saveComposerPrefs();update();return composerPrefs;
     }
     case 'noteBot':if(typeof p.botId==='string'){activeBotId=p.botId;update();}return {ok:true};

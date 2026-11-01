@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {inflateSync} from 'node:zlib';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
-import {acceptLateFiles,applyExplorerRegistry,applyLoginItem,confirmAccountStill,confirmCopy,createExplorerBatch,createExplorerSync,explorerAccept,explorerCleanupKeys,explorerLogLine,explorerRegistryOps,explorerRejectNotice,explorerTargets,explorerVerdict,floatingComposerTraits,loginItemPayload,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shouldApplyLoginItem,toolboxShareOff,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction,coalBallSvg} from '../src/shell/actions.mjs';
+import {acceptLateFiles,applyExplorerRegistry,applyLoginItem,confirmAccountStill,confirmCopy,createExplorerBatch,createExplorerSync,explorerAccept,explorerCleanupKeys,explorerLogLine,explorerRegistryOps,explorerRejectNotice,explorerTargets,explorerVerdict,floatingComposerTraits,loginItemPayload,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shouldApplyLoginItem,toolboxShareOff,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction,coalBallSvg,composerAfterSend} from '../src/shell/actions.mjs';
 import {normalizeBot} from 'grok-bot-sdk';
 import {coalBallGeometry,coalBallIcon,coalBallPng,coalBallRaster,coalBallSample} from '../src/shell/coal-ball.mjs';
 
@@ -274,6 +274,13 @@ test('explorer registry publishes commands before the parent and rolls back a fa
   assert.equal(live.slice(failedAt+1).some(args=>args[0]==='delete'&&String(args[1]).endsWith('GrokBotAnywhere.Menu')),true);
 });
 
+test('composer after-send prefers the Bot setting and defaults to hide',()=>{
+ assert.equal(composerAfterSend({composerAfterSend:'inherit'},{afterSend:'open'}),'open');
+ assert.equal(composerAfterSend({composerAfterSend:'hide'},{afterSend:'open'}),'hide');
+ assert.equal(composerAfterSend({composerAfterSend:'open'},{afterSend:'hide'}),'open');
+ assert.equal(composerAfterSend(undefined,{afterSend:'hide'}),'hide');
+ assert.equal(composerAfterSend(undefined,{}),'hide');
+});
 test('touch bar press opens the composer and a scrub only selects',()=>{
   assert.deepEqual(touchBarChoice({moved:false,startId:'bot-a',selectedId:'bot-a'}),{action:'compose',botId:'bot-a'});
   assert.deepEqual(touchBarChoice({moved:true,startId:'bot-a',selectedId:'bot-b'}),{action:'select',botId:'bot-b'});
