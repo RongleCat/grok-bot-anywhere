@@ -326,6 +326,8 @@ function placePicker(width,height){
   layoutExtras();
 }
 function hideFloat({clearAttachments=false}={}){
+  suppressActivate=true;
+  setTimeout(()=>{suppressActivate=false;},400);
   pickerOpen=false;
   if(clearAttachments)notify('composer-clear',{attachments:true});
   for(const extra of [avatarWindow,pickerWindow])if(extra&&!extra.isDestroyed()&&extra.isVisible())extra.hide();
