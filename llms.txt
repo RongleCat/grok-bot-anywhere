@@ -1,0 +1,31 @@
+# Grok Bot Anywhere
+
+> 非官方 Grok Bot 桌面客户端：把微信转发、快捷指令、Explorer 右键、拖放和全局悬浮输入框接给指定 Bot。macOS 已验证，Windows 已实现未实机验证，Linux 未支持。
+
+## 入口
+
+- [Agent 说明](AGENTS.md)：仓库规则、命令、改哪里、完成定义。
+- [Wiki 入口](docs/README.md)：按任务路由到架构、子系统、平台、runbook。
+- [经验教训](LESSONS.md)：已踩过的坑。
+
+## 核心文档
+
+- [架构](docs/architecture.md)
+- [术语](docs/glossary.md)
+- [投递服务](docs/subsystems/delivery-service.md)
+- [分享菜单](docs/subsystems/share-menu.md)
+- [原生伴侣](docs/subsystems/native-companion.md)
+- [构建](docs/runbooks/build.md)
+- [测试](docs/runbooks/test.md)
+- [发布](docs/runbooks/release.md)
+
+## 平台
+
+- [macOS](docs/platforms/macos.md)：完整支持。
+- [Windows](docs/platforms/windows.md)：已实现，未实机验证；微信分享不支持。
+- [Linux](docs/platforms/linux.md)：未支持。
+
+## 可选
+
+- [Rokid 2026 策划案](projects/rokid-2026/README.md)
+- [Windows 分享入口研究](projects/windows-share/README.md)

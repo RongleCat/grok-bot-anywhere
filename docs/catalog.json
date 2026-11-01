@@ -1,0 +1,376 @@
+{
+  "version": 1,
+  "updated": "2026-11-01",
+  "entry": "docs/README.md",
+  "pages": [
+    {
+      "id": "architecture",
+      "title": "系统架构",
+      "path": "docs/architecture.md",
+      "summary": "进程拓扑、数据所有权、运行时路径、仓库分层与不变量。",
+      "tags": [
+        "architecture",
+        "runtime",
+        "processes"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "glossary",
+      "title": "术语表",
+      "path": "docs/glossary.md",
+      "summary": "Bot、receipt、compose/direct、share slot、unconfirmed 等名词的唯一解释。",
+      "tags": [
+        "glossary"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "subsystems-desktop-shell",
+      "title": "桌面外壳",
+      "path": "docs/subsystems/desktop-shell.md",
+      "summary": "Electron 主进程、窗口、托盘、全局快捷键、深链、登录项与单实例。",
+      "tags": [
+        "desktop",
+        "electron",
+        "tray",
+        "deeplink"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "subsystems-renderer-ui",
+      "title": "渲染层与界面",
+      "path": "docs/subsystems/renderer-ui.md",
+      "summary": "主窗口页面、悬浮输入框、Tab 宫格、主题与进程隔离。",
+      "tags": [
+        "desktop",
+        "renderer",
+        "ui"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "subsystems-delivery-service",
+      "title": "投递服务",
+      "path": "docs/subsystems/delivery-service.md",
+      "summary": "utility process、SQLite 收件库、上传、发送、状态机与单 Bot 串行。",
+      "tags": [
+        "desktop",
+        "service",
+        "delivery",
+        "sqlite"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "subsystems-share-menu",
+      "title": "分享菜单",
+      "path": "docs/subsystems/share-menu.md",
+      "summary": "macOS 12 槽微信分享、独立宿主 App、注册与更新；Windows 差异。",
+      "tags": [
+        "macos",
+        "share",
+        "wechat"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "subsystems-native-companion",
+      "title": "原生伴侣",
+      "path": "docs/subsystems/native-companion.md",
+      "summary": "Swift 伴侣职责、NDJSON 协议、Touch Bar、语音、草稿保护。",
+      "tags": [
+        "macos",
+        "swift",
+        "touchbar",
+        "companion"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "subsystems-client-protocol",
+      "title": "Client Protocol SDK",
+      "path": "docs/subsystems/client-protocol.md",
+      "summary": "非官方协议 SDK 的能力、边界、登录方式与附件验收。",
+      "tags": [
+        "node",
+        "sdk",
+        "protocol"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "subsystems-avatar",
+      "title": "头像引擎",
+      "path": "docs/subsystems/avatar.md",
+      "summary": "Electron 与 Swift 两条头像渲染路径、ID 派生规则与静态菜单图标。",
+      "tags": [
+        "avatar",
+        "rendering"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "subsystems-packaging",
+      "title": "打包与签名",
+      "path": "docs/subsystems/packaging.md",
+      "summary": "electron-builder 配置、mac 双架构 DMG、公证环境、Windows zip。",
+      "tags": [
+        "packaging",
+        "signing",
+        "release"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "platform-macos",
+      "title": "macOS",
+      "path": "docs/platforms/macos.md",
+      "summary": "macOS 前置条件、已验证能力、Touch Bar 与分享扩展的实机边界。",
+      "tags": [
+        "platform",
+        "macos"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "platform-windows",
+      "title": "Windows",
+      "path": "docs/platforms/windows.md",
+      "summary": "Windows 实现清单、未验证项、PowerShell 宿主与微信限制。",
+      "tags": [
+        "platform",
+        "windows"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "platform-linux",
+      "title": "Linux",
+      "path": "docs/platforms/linux.md",
+      "summary": "Linux 当前不支持的范围、试跑方法与本阶段不做的理由。",
+      "tags": [
+        "platform",
+        "linux"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "runbook-build",
+      "title": "构建",
+      "path": "docs/runbooks/build.md",
+      "summary": "从零安装依赖、构建 UI、Swift 伴侣、分享扩展与头像资源。",
+      "tags": [
+        "runbook",
+        "build"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "runbook-test",
+      "title": "测试",
+      "path": "docs/runbooks/test.md",
+      "summary": "各套测试的命令、覆盖范围、临时目录与未运行项的记录方式。",
+      "tags": [
+        "runbook",
+        "test"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "runbook-release",
+      "title": "发布",
+      "path": "docs/runbooks/release.md",
+      "summary": "签名、公证、DMG/zip 产物、校验命令与发布前检查单。",
+      "tags": [
+        "runbook",
+        "release"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "runbook-troubleshooting",
+      "title": "排障",
+      "path": "docs/runbooks/troubleshooting.md",
+      "summary": "常见错误码、分享菜单不更新、原生伴侣退出、头像空白等。",
+      "tags": [
+        "runbook",
+        "troubleshooting"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "standards-code",
+      "title": "代码规范",
+      "path": "docs/standards/code.md",
+      "summary": "改动边界、状态与并发、跨平台、错误处理与不可破坏的约定。",
+      "tags": [
+        "standards",
+        "code"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "standards-testing",
+      "title": "测试规范",
+      "path": "docs/standards/testing.md",
+      "summary": "测试隔离、失败即 bug、平台矩阵、验收证据写法。",
+      "tags": [
+        "standards",
+        "testing"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "standards-docs",
+      "title": "文档规范",
+      "path": "docs/standards/docs.md",
+      "summary": "一事实一页、状态标注、catalog 与链接校验、历史归档。",
+      "tags": [
+        "standards",
+        "docs"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "standards-commits",
+      "title": "提交规范",
+      "path": "docs/standards/commits.md",
+      "summary": "一个提交一个目标、消息格式、验证记录与不提交的内容。",
+      "tags": [
+        "standards",
+        "git"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "reference-cli",
+      "title": "命令行",
+      "path": "docs/reference/cli.md",
+      "summary": "grok-bot 命令、安装位置、凭据副本与退出码。",
+      "tags": [
+        "reference",
+        "cli"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "reference-deeplinks",
+      "title": "URL 协议",
+      "path": "docs/reference/deeplinks.md",
+      "summary": "grokbotanywhere:// 的路由、预填规则与安全边界。",
+      "tags": [
+        "reference",
+        "deeplink"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "reference-native-protocol",
+      "title": "原生伴侣协议",
+      "path": "docs/reference/native-protocol.md",
+      "summary": "v1 NDJSON 请求/事件契约与错误码。",
+      "tags": [
+        "reference",
+        "protocol",
+        "swift"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "reference-receipts",
+      "title": "收件状态",
+      "path": "docs/reference/receipts.md",
+      "summary": "receipt 字段、状态迁移、过期与 unconfirmed 的含义。",
+      "tags": [
+        "reference",
+        "delivery"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "reference-configuration",
+      "title": "配置与数据位置",
+      "path": "docs/reference/configuration.md",
+      "summary": "userData 下的数据库、分享收件箱、凭据、日志与可安全删除的项。",
+      "tags": [
+        "reference",
+        "storage"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "decision-0001",
+      "title": "ADR 0001：Electron 作为主外壳",
+      "path": "docs/decisions/0001-electron-over-swift.md",
+      "summary": "为什么跨平台主产品选 Electron，Swift 退为 macOS 原生伴侣。",
+      "tags": [
+        "decision"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "decision-0002",
+      "title": "ADR 0002：12 个固定分享槽",
+      "path": "docs/decisions/0002-share-menu-slots.md",
+      "summary": "macOS 分享扩展无法动态增删，用固定槽位换稳定注册。",
+      "tags": [
+        "decision"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "decision-0003",
+      "title": "ADR 0003：不自动重发",
+      "path": "docs/decisions/0003-no-automatic-retry.md",
+      "summary": "结果不明确时暂停并要求用户核对，避免重复投递。",
+      "tags": [
+        "decision"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "decision-0004",
+      "title": "ADR 0004：本地优先收件箱",
+      "path": "docs/decisions/0004-local-first-inbox.md",
+      "summary": "先落本地 SQLite 再联网，断网与未登录不丢内容。",
+      "tags": [
+        "decision"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "decision-0005",
+      "title": "ADR 0005：平台边界",
+      "path": "docs/decisions/0005-platform-boundaries.md",
+      "summary": "macOS 原生伴侣、Windows 原生文本框、Linux 暂不支持。",
+      "tags": [
+        "decision"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "reference-api-index",
+      "title": "API 参考与实测报告",
+      "path": "docs/reference/api/README.md",
+      "summary": "协议文档、静态目录与历史实测报告的索引和使用规则。",
+      "tags": [
+        "reference",
+        "api"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "decision-0006",
+      "title": "ADR 0006：根目录命令门面",
+      "path": "docs/decisions/0006-root-command-facade.md",
+      "summary": "根 package.json 只做跨平台命令转发，不用 workspaces，依赖仍在 desktop/。",
+      "tags": [
+        "decision",
+        "tooling"
+      ],
+      "status": "current"
+    }
+  ]
+}

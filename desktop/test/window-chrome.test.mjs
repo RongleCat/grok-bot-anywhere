@@ -121,7 +121,7 @@ test('shipped window chrome stays on the main Windows window',async()=>{
   assert.match(css,/#c42b1c/);
   assert.match(css,/opacity:\.5/);
   assert.match(css,/\.os-windows\.maximized body\{padding:var\(--win-inset,0px\)\}/);
-  const preview=await readFile(fileURLToPath(new URL('../../orchestration/results/12_titlebar_preview.html',import.meta.url)),'utf8');
+  const preview=await readFile(fileURLToPath(new URL('./fixtures/window-chrome-preview.html',import.meta.url)),'utf8');
   for(const name of ['minimize','maximize','restore','close'])for(const d of captionGlyph(name))assert.ok(preview.includes(d),d);
   assert.match(preview,/#c42b1c/);
   assert.match(preview,/rgba\(0,0,0,\.06\)/);

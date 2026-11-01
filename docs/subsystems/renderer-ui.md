@@ -1,0 +1,82 @@
+# 渲染层与界面
+
+状态：Current。主要文件在 `desktop/src/renderer/`。
+
+## 组成
+
+| 文件 | 界面 |
+| --- | --- |
+| `index.html` + `app.mjs` + `styles.css` | 主窗口：Bot 网格、聊天页、收件页、设置页 |
+| `composer.html` + `composer.mjs` + `composer.css` | 悬浮输入框；同一 HTML 以 `?part=avatar` / `?part=picker` 复用为头像窗和格子宫格 |
+| `native-avatar.mjs` | 给 Swift WKWebView 用的离线头像桥 |
+| `group-avatar.mjs` | 同名分组、分组头像与 `listedBots` |
+| `preload.cjs` | 唯一 IPC 入口，暴露白名单方法给渲染层 |
+
+渲染层**没有** Node、文件系统、token。它只拿主进程给的 state 快照，并通过 `anywhere:call(method, params)` 请求动作。
+
+## 主窗口
+
+- 左侧：搜索、Bot 网格（按置顶/用户分组/未分组分区）、底部导航（Bot / 收件 / 设置）。
+- 中间：Bot 详情（头像、名称、描述、成员/群组）、收件列表、设置面板。
+- 顶栏：搜索、刷新、分组开关；Windows 额外显示最小化/最大化/关闭。
+- 所有用户可见字符串走 `t()`（中英双语），跟随系统语言。
+
+### 设置页分组
+
+| 分组 | 内容 |
+| --- | --- |
+| 账号 | 登录/退出、当前账号、最近错误 |
+| 外观 | 跟随系统 / 亮 / 暗 |
+| 快捷键 | 唤起输入框的全局快捷键；录制时临时注销 |
+| 行为 | 发送后保留输入框、点击外部收起 |
+| 命令行与 skills | 安装/移除 `grok-bot` 与 skill；显示凭据副本状态 |
+| 微信转发菜单 | 12 槽的启用/顺序/更新；显示宿主安装状态 |
+| 工具箱 | 关闭全部接收转发；Windows 菜单重建/移除 |
+| Windows | Explorer 菜单、诊断 |
+
+## 悬浮输入框
+
+- 368×120 的原生窗口，透明背景；内部是普通 `<textarea>`，不是自绘编辑器。
+- 回车发送、Shift+回车换行；输入法组合期间不发送。
+- Tab 打开 10×2 宫格；`1–0`、`−`/`+`、方向键、回车、Tab 确认，Esc 取消。
+- 支持拖入文件；文件只登记路径，发送时才复制/上传。
+- 发送中禁用编辑；结果不明确时显示“待核对”，不自动重发。
+- 发送后是否保留内容、点击外部是否收起，由设置决定（`composer-prefs.json`）。
+- 点击穿透：主进程 `setIgnoreMouseEvents` 由渲染层 `setHit` 控制。
+
+## 主题与外观
+
+- CSS 变量：亮色画布 `#f4f3f0`、暗色 `#0b0b0c`，表面约 86%/84% 不透明，强调色 `#f59312`。
+- 圆角、发丝线、阴影只用于层次；不用彩色左边条表示状态。
+- 头像：Electron 用 `grok-bot-avatar-engine` 的 `createAvatar`；列表用 IntersectionObserver 懒启动/停止动画。
+- 减少动态效果时显示静帧。
+
+## 状态与事件
+
+- 主进程推送 `anywhere:event`：`state`、`navigate`、`login.url`、`reply`、`share.received`、`picker`、`pick`、`window-state`。
+- 渲染层不缓存业务真相；每次 `state` 全量覆盖视图。切换页面只影响选择，不改变服务状态。
+- 搜索/分组/主题等 UI 偏好保存在渲染层内存或主进程 JSON；账号、receipt、recipient 在 SQLite。
+
+## 约束
+
+1. 不要给渲染层加 Node 集成或直接读文件；需要新能力就加 preload + 主进程白名单方法。
+2. 不要在渲染层写发送重试逻辑；状态机在服务进程。
+3. 新增用户可见文字必须同时给中英文；测试会检查关键标签。
+4. 不要用原生 `<select>` 做重要选择；用应用内菜单/自定义控件保持一致。
+5. 修改 `index.html` 的 CSP 前先确认没有引入远程脚本。
+
+## 验证
+
+```sh
+cd desktop
+npm test          # UI 状态、分组、宫格顺序、设置等纯函数用例
+npm run smoke     # 截图：roster / settings / inbox
+```
+
+截图输出在 `desktop/artifacts/`，只用于人工比对，不提交。
+
+## 相关
+
+- [桌面外壳](desktop-shell.md)
+- [投递服务](delivery-service.md)
+- [头像](avatar.md)

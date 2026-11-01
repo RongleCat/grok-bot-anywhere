@@ -15,3 +15,6 @@ desktop/release-share/
 desktop/artifacts/
 desktop/release-auto/
 desktop/release-auto2/
+
+# Local-only references (never committed)
+local/

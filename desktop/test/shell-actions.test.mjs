@@ -288,26 +288,19 @@ test('touch bar press opens the composer and a scrub only selects',()=>{
 });
 
 test('windows walkthrough marks each required feature',async()=>{
-  const text=await readFile(fileURLToPath(new URL('../../docs/windows-coverage.md',import.meta.url)),'utf8');
-  for(const feature of ['微信分享菜单','Explorer context menu','悬浮输入框','命令行','skills'])assert.match(text,new RegExp(feature));
-  assert.match(text,/微信分享菜单[\s\S]*unsupported-with-reason/);
-  for(const feature of ['Explorer context menu','悬浮输入框','命令行','skills'])assert.match(text,new RegExp(`${feature}[\\s\\S]*implemented-not-verified-on-windows`));
-  assert.match(text,/以下均未在 Windows 实机验证/);
+  const text=await readFile(fileURLToPath(new URL('../../docs/platforms/windows.md',import.meta.url)),'utf8');
+  for(const feature of ['微信分享','Explorer','悬浮输入框','命令行','skills'])assert.match(text,new RegExp(feature));
+  assert.match(text,/微信分享[\s\S]*不支持/);
+  assert.match(text,/未在 Windows 机器上运行/);
   assert.match(text,/start "" "grokbotanywhere:\/\/send\?bot=<id>&text=<text>"/);
   assert.match(text,/WM_SETTINGCHANGE/);
-  assert.match(text,/PowerShell process running/);
-  assert.match(text,/first tab's selection/);
-  assert.match(text,/has not been verified on a Windows machine/);
-  assert.match(text,/Show more options/);
-  assert.match(text,/about 15/);
-  const readme=await readFile(fileURLToPath(new URL('../README.md',import.meta.url)),'utf8');
-  assert.match(readme,/listens for `session-end`/);
-  assert.match(readme,/has not been tested on a Windows machine/);
-  assert.doesNotMatch(readme,/does not leave the app blocking shutdown/);
-  assert.match(readme,/Use the `grok-bot` command when a caller needs to submit without that confirmation/);
-  assert.match(readme,/keeps a PowerShell process running/);
-  assert.match(readme,/first tab's selection/);
-  assert.match(readme,/has not been verified on a Windows machine/);
+  assert.match(text,/常驻 PowerShell/);
+  assert.match(text,/第一个标签/);
+  assert.match(text,/显示更多选项/);
+  assert.match(text,/15 项/);
+  const readme=await readFile(fileURLToPath(new URL('../../README.md',import.meta.url)),'utf8');
+  assert.match(readme,/Windows[\s\S]*未在 Windows 实机验证/);
+  assert.match(readme,/docs\/platforms\/windows\.md/);
 });
 
 test('shipped main and renderer call the confirm, tray, login, and explorer decisions',async()=>{

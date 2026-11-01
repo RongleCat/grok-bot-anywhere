@@ -1,0 +1,30 @@
+{
+  "name": "grok-bot-anywhere",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Command facade for the Grok Bot Anywhere monorepo. Dependencies stay in desktop/; this file only routes commands.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "setup": "npm --prefix desktop ci",
+    "setup:submodules": "git submodule update --init --recursive",
+    "dev": "node scripts/run.mjs desktop npm start",
+    "build": "npm --prefix desktop run build",
+    "build:native": "node scripts/run.mjs desktop npm run build:native",
+    "build:share": "node scripts/run.mjs desktop npm run build:share",
+    "smoke": "node scripts/run.mjs desktop npm run smoke",
+    "test": "npm run test:desktop && npm run test:client && npm run test:avatar",
+    "test:desktop": "npm --prefix desktop test",
+    "test:client": "npm --prefix packages/client-protocol test",
+    "test:avatar": "node --test native/macos/avatar/renderer.test.mjs",
+    "test:swift": "node scripts/run.mjs native/macos ./scripts/test.sh",
+    "test:all": "npm test && npm run test:swift",
+    "docs:check": "node scripts/check-docs.mjs",
+    "package:mac": "npm --prefix desktop run package:mac-all",
+    "package:win": "npm --prefix desktop run package:win",
+    "build:avatar": "node native/macos/scripts/build-avatar.mjs",
+    "smoke:native": "node scripts/run.mjs desktop npm run smoke:native"
+  }
+}

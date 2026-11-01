@@ -740,8 +740,8 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
     await window.webContents.executeJavaScript(`window.anywhere.theme('light')`);
     const botId=latestState.bots[0].id;
     await rpc.call('configure',{botId,patch:{enabled:true,sources:{drop:true}}});
-    const fixture=join(temporaryRoot,'forward.zip');await writeFile(fixture,Buffer.alloc(5*1024*1024,7));
-    const receipt=await rpc.call('receive',{botId,source:'drop',files:[fixture],text:'Smoke context'});
+    const fixture=join(temporaryRoot,'会议记录.zip');await writeFile(fixture,Buffer.alloc(5*1024*1024,7));
+    const receipt=await rpc.call('receive',{botId,source:'drop',files:[fixture],text:'把这份会议记录整理成待办'});
     if(receipt.status!=='needs-input'||receipt.files[0].bytes!==5*1024*1024)throw new Error('LOCAL_INTAKE_FAILED');
     await window.webContents.executeJavaScript(`(async()=>{document.querySelector('.nav-button[data-page="settings"]').click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));})()`);
     await writeFile(join(artifactRoot,'settings.png'),(await window.webContents.capturePage()).toPNG());
@@ -751,6 +751,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
     await floatWindow.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const start=Date.now();const tick=()=>{if(document.querySelector('textarea.composer-input')&&document.querySelector('.float-avatar .avatar'))resolve(true);else if(Date.now()-start>8000)reject(new Error('FLOAT_NOT_READY'));else setTimeout(tick,40);};tick();})`);
     const floatControls=await floatWindow.webContents.executeJavaScript(`({composerCount:document.querySelectorAll('textarea.composer-input').length,avatarCount:document.querySelectorAll('.float-avatar .avatar').length})`);
     if(floatControls.composerCount!==1||floatControls.avatarCount!==1)throw new Error('FLOAT_UI_FAILED');
+    await writeFile(join(artifactRoot,'composer.png'),(await floatWindow.webContents.capturePage()).toPNG());
     hideFloat();
     const controls=await window.webContents.executeJavaScript(`({composerCount:document.querySelectorAll('textarea.composer-input').length,receiptCount:document.querySelectorAll('article').length})`);
     if(controls.composerCount!==0||controls.receiptCount!==1)throw new Error('SHARED_UI_FAILED');

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Windows caption buttons</title>
+  <style>
+    html,body{height:100%;margin:0}
+    body{display:flex;flex-direction:column;justify-content:center;background:#c8c8c8;font:13px/1.3 "Segoe UI","PingFang SC",sans-serif;color:#333}
+    .theme{padding:22px 28px}
+    .theme.dark{background:#1a1a1a;color:#f3f4f6}
+    .row-label{margin:0 0 12px;font-size:13px;font-weight:650}
+    .states{display:flex;gap:16px;align-items:flex-start}
+    figure{margin:0}
+    figcaption{margin-top:8px;font-size:12px;text-align:center;color:#616161}
+    .dark figcaption{color:#bfc0c3}
+    .strip{display:flex;height:32px;background:#f4f4f4;color:#333}
+    .dark .strip{background:#303133;color:#f3f4f6}
+    .win-control{width:46px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:0;padding:0;background:transparent;color:inherit}
+    .win-control svg{width:10px;height:10px;display:block}
+    .light .win-control.is-hover{background:rgba(0,0,0,.06)}
+    .light .win-control.is-down{background:rgba(0,0,0,.12)}
+    .dark .win-control.is-hover{background:rgba(255,255,255,.08)}
+    .dark .win-control.is-down{background:rgba(255,255,255,.14)}
+    .light .win-control-close.is-hover,.dark .win-control-close.is-hover{background:#c42b1c;color:#fff}
+    .light .win-control-close.is-down,.dark .win-control-close.is-down{background:#9a2118;color:#fff}
+    .is-blur .win-control svg{opacity:.5}
+  </style>
+</head>
+<body>
+  <section class="theme light">
+    <p class="row-label">亮色</p>
+    <div class="states">
+      <figure>
+        <div class="strip">
+          <button class="win-control" type="button" aria-label="最小化" title="最小化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control" type="button" aria-label="最大化" title="最大化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close" type="button" aria-label="关闭" title="关闭"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>默认</figcaption>
+      </figure>
+      <figure>
+        <div class="strip">
+          <button class="win-control is-hover" type="button" aria-label="最小化" title="最小化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control is-hover" type="button" aria-label="最大化" title="最大化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close is-hover" type="button" aria-label="关闭" title="关闭"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>悬停</figcaption>
+      </figure>
+      <figure>
+        <div class="strip">
+          <button class="win-control is-down" type="button" aria-label="最小化" title="最小化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control is-down" type="button" aria-label="最大化" title="最大化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close is-down" type="button" aria-label="关闭" title="关闭"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>按下</figcaption>
+      </figure>
+      <figure>
+        <div class="strip">
+          <button class="win-control" type="button" aria-label="最小化" title="最小化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control" type="button" aria-label="还原" title="还原"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 3.5V1.5H8.5V6.5H6.5" fill="none" stroke="currentColor" stroke-width="1"/><path d="M1.5 3.5h5v5h-5z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close" type="button" aria-label="关闭" title="关闭"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>最大化</figcaption>
+      </figure>
+      <figure>
+        <div class="strip is-blur">
+          <button class="win-control" type="button" aria-label="最小化" title="最小化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control" type="button" aria-label="最大化" title="最大化"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close" type="button" aria-label="关闭" title="关闭"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>失焦</figcaption>
+      </figure>
+    </div>
+  </section>
+  <section class="theme dark">
+    <p class="row-label">深色</p>
+    <div class="states">
+      <figure>
+        <div class="strip">
+          <button class="win-control" type="button" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control" type="button" aria-label="Maximize" title="Maximize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>默认</figcaption>
+      </figure>
+      <figure>
+        <div class="strip">
+          <button class="win-control is-hover" type="button" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control is-hover" type="button" aria-label="Maximize" title="Maximize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close is-hover" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>悬停</figcaption>
+      </figure>
+      <figure>
+        <div class="strip">
+          <button class="win-control is-down" type="button" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control is-down" type="button" aria-label="Maximize" title="Maximize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close is-down" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>按下</figcaption>
+      </figure>
+      <figure>
+        <div class="strip">
+          <button class="win-control" type="button" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control" type="button" aria-label="Restore" title="Restore"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.5 3.5V1.5H8.5V6.5H6.5" fill="none" stroke="currentColor" stroke-width="1"/><path d="M1.5 3.5h5v5h-5z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>最大化</figcaption>
+      </figure>
+      <figure>
+        <div class="strip is-blur">
+          <button class="win-control" type="button" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h8" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control" type="button" aria-label="Maximize" title="Maximize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5h7v7h-7z" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+          <button class="win-control win-control-close" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7" fill="none" stroke="currentColor" stroke-width="1"/><path d="M8.5 1.5l-7 7" fill="none" stroke="currentColor" stroke-width="1"/></svg></button>
+        </div>
+        <figcaption>失焦</figcaption>
+      </figure>
+    </div>
+  </section>
+</body>
+</html>
