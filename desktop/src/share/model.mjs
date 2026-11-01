@@ -21,7 +21,7 @@ export function menuEntries(state){
       avatarKey:avatarKey(bot,state),bot}));
 }
 function avatarKey(bot,state){
- const base=[bot.avatarShape,bot.avatarColor,bot.avatar?.picture?.url,bot.avatar?.picture?.version,state.runtime?.mainAgentId===bot.id];
+ const base=[bot.avatarShape,bot.avatarColor,bot.avatar?.picture?.url,bot.avatar?.picture?.version];
  const members=groupMembers(bot,state.bots);
  if(members.length<2)return JSON.stringify(base);
  const shown=members.slice(0,4);

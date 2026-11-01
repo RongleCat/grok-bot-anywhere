@@ -32,7 +32,8 @@
 
 - 引擎文件在构建时被轻微 patch（眼睛填充色），见 `desktop/scripts/build.mjs`；这是已知的视觉修正，不是升级。
 - 列表用 IntersectionObserver 只启动可见头像，避免几十个动画同时跑。
-- 主 Bot 星标：60 视口里直径 16 的圆盘，贴右下，填充 `#f59312`；所有表面保持同一比例。
+- 主 Bot 星标：60 视口里直径 16 的圆盘，贴右下，填充 `#f59312`；只用于应用内表面。
+- 微信菜单图标只展示头像本身，不带主 Bot 星标；菜单动画/标记不进入系统静态图标。
 - 原生头像桥 `src/renderer/native-avatar.mjs` 与 Electron 用同一份引擎，输出给 Swift WKWebView。
 
 ## 菜单静态图标
