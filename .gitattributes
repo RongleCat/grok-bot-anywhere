@@ -1,0 +1,7 @@
+# The shipped skill bundle is checksum-pinned: scripts/grok-bot* verify
+# bin/grok-bot.mjs against bin/SHA256SUMS before every run. Line-ending
+# conversion would change the hash, so these files must stay byte-identical
+# to the repository blob on every platform. Without this, a Windows checkout
+# (core.autocrlf=true is the Git for Windows default) rewrites grok-bot.mjs
+# to CRLF and every `grok-bot` invocation fails with CLI_CHECKSUM_MISMATCH.
+desktop/resources/grok-bot-skill/** -text
