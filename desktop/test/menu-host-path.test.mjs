@@ -1,10 +1,13 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {join} from 'node:path';
 import {menuHostTemplate,sharingApplicationPath} from '../src/share/host-path.mjs';
 
+// Expectations are built with join() so the assertion describes the host layout
+// rather than pinning a POSIX separator.
 test('development and packaged builds both resolve a menu host template',()=>{
-  assert.equal(menuHostTemplate({packaged:false,resourcesPath:'/unused',devRoot:'/repo/desktop'}),'/repo/desktop/native/GrokBotMenuHost.app');
-  assert.equal(menuHostTemplate({packaged:true,resourcesPath:'/App.app/Contents/Resources',devRoot:'/unused'}),'/App.app/Contents/Resources/native/GrokBotMenuHost.app');
+  assert.equal(menuHostTemplate({packaged:false,resourcesPath:'/unused',devRoot:'/repo/desktop'}),join('/repo/desktop','native','GrokBotMenuHost.app'));
+  assert.equal(menuHostTemplate({packaged:true,resourcesPath:'/App.app/Contents/Resources',devRoot:'/unused'}),join('/App.app/Contents/Resources','native','GrokBotMenuHost.app'));
 });
 
 test('share intake launches the real application bundle in both modes',()=>{

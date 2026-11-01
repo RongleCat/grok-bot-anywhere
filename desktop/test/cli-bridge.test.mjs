@@ -9,7 +9,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 import {mkdtemp,rm} from 'node:fs/promises';
-import {disableCli,enableCli,parseRegPath,parseWindowsPathOutput,posixLauncher,profileDocument,quoteSh,samePath,WINDOWS_ENV_BROADCAST,WINDOWS_PATH_ENV,WINDOWS_PATH_MISSING,WINDOWS_PATH_READ,WINDOWS_PATH_WRITE,windowsCommand,windowsPathAppend,windowsPathHasDir,windowsPathRemove,windowsPowerShell,writeCliCredential} from '../src/main/cli-bridge.mjs';
+import {disableCli,enableCli,parseRegPath,parseWindowsPathOutput,pathHasDir,posixLauncher,profileDocument,quoteSh,samePath,WINDOWS_ENV_BROADCAST,WINDOWS_PATH_ENV,WINDOWS_PATH_MISSING,WINDOWS_PATH_READ,WINDOWS_PATH_WRITE,windowsCommand,windowsPathAppend,windowsPathHasDir,windowsPathRemove,windowsPowerShell,writeCliCredential} from '../src/main/cli-bridge.mjs';
 
 const run=promisify(execFile);
 
@@ -44,6 +44,14 @@ test('windows path keeps unexpanded variables and appends only a missing directo
   assert.equal(samePath('/App/Skill/','/App/Skill','darwin'),true);
 });
 
+test('the PATH list splits with the target platform separator, not the host one',()=>{
+  assert.equal(pathHasDir('/usr/local/bin:/usr/bin','/usr/bin','darwin'),true);
+  assert.equal(pathHasDir('C:\\bin;D:\\tools','D:\\tools','win32'),true);
+  // A ';' list is not a POSIX PATH: splitting it with ':' must not match.
+  assert.equal(pathHasDir('C:\\bin;D:\\tools','D:\\tools','darwin'),false);
+  assert.equal(pathHasDir('/usr/local/bin:/usr/bin','/usr/bin','win32'),false);
+});
+
 test('enable registers the command, skill, Claude link, and app credential',async()=>{
   const {home,bundle,runtime,config}=await fixture();
   try{
@@ -60,10 +68,16 @@ test('enable registers the command, skill, Claude link, and app credential',asyn
     assert.equal(launcher.includes('app-token'),false);
     const profile=JSON.parse(await readFile(join(config,'profiles','default.json'),'utf8'));
     assert.deepEqual(profile,{accessToken:'app-token',selectedTeamId:3});
-    assert.equal((await lstat(join(config,'profiles','default.json'))).mode&0o777,0o600);
+    // Windows has no POSIX mode bits: chmod there reports 0o666 and the file is
+    // protected by inherited ACLs instead, so only the POSIX hosts can assert 0600.
+    if(process.platform!=='win32')assert.equal((await lstat(join(config,'profiles','default.json'))).mode&0o777,0o600);
     assert.match(await readFile(join(home,'.zprofile'),'utf8'),/# grok-bot-anywhere/);
-    const {stdout}=await run(enabled.command,['--version']);
-    assert.equal(stdout,`1\n${config}\n${join(enabled.skillsPath,'bin','grok-bot.mjs')}\n`);
+    // The launcher installs as a POSIX shell script; Windows cannot exec it
+    // (spawn has no shebang support). The layout above is still checked there.
+    if(process.platform!=='win32'){
+      const {stdout}=await run(enabled.command,['--version']);
+      assert.equal(stdout,`1\n${config}\n${join(enabled.skillsPath,'bin','grok-bot.mjs')}\n`);
+    }
     const disabled=await disableCli({home,platform:'darwin',configDir:config,removePath:enabled.pathSnippet});
     assert.equal(disabled.enabled,false);
     assert.equal(existsSync(enabled.command),false);
@@ -217,7 +231,10 @@ test('a foreign Claude skill directory is not deleted',async()=>{
   }finally{await rm(home,{recursive:true,force:true});}
 });
 
-test('a managed skill directory can be replaced and credentials are cleared before a later failure',async()=>{
+// POSIX-only by construction: the PATH list separates with ':' (a Windows home
+// path contains a drive colon, which makes the entry unambiguous nowhere) and
+// the failure path asserts ENOTDIR, which Windows reports as ENOENT.
+test('a managed skill directory can be replaced and credentials are cleared before a later failure',{skip:process.platform==='win32'?'POSIX PATH list and ENOTDIR':false},async()=>{
   const {home,bundle,runtime,config}=await fixture();
   const dest=join(home,'.agents','skills','grok-bot');
   try{
@@ -258,7 +275,10 @@ test('windows command keeps quotes out of the value for spaces, Chinese, and per
   }
 });
 
-test('enabling twice keeps the path marker and turning it off removes the snippet',async()=>{
+// The shell rc file this covers only exists on POSIX: rcFile() returns '' for
+// win32, and a darwin install assembled on a Windows host cannot resolve
+// "C:\..." as an absolute symlink target under POSIX path rules.
+test('enabling twice keeps the path marker and turning it off removes the snippet',{skip:process.platform==='win32'?'POSIX rc-file path only':false},async()=>{
   const {home,bundle,runtime,config}=await fixture();
   try{
     const first=await enableCli({home,platform:'darwin',pathEnv:'/usr/bin',bundleDir:bundle,configDir:config,runtime,savedPathSnippet:false});

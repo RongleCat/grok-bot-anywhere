@@ -291,7 +291,12 @@ test('windows walkthrough marks each required feature',async()=>{
   const text=await readFile(fileURLToPath(new URL('../../docs/platforms/windows.md',import.meta.url)),'utf8');
   for(const feature of ['微信分享','Explorer','悬浮输入框','命令行','skills'])assert.match(text,new RegExp(feature));
   assert.match(text,/微信分享[\s\S]*不支持/);
-  assert.match(text,/未在 Windows 机器上运行/);
+  // The page must keep separating what ran on a real Windows machine from what
+  // did not; the section headings are the structure that enforces it.
+  assert.match(text,/部分实机验证/);
+  assert.match(text,/## 实机验证结果/);
+  assert.match(text,/## 未验证项/);
+  assert.match(text,/未运行/);
   assert.match(text,/start "" "grokbotanywhere:\/\/send\?bot=<id>&text=<text>"/);
   assert.match(text,/WM_SETTINGCHANGE/);
   assert.match(text,/常驻 PowerShell/);
@@ -299,7 +304,7 @@ test('windows walkthrough marks each required feature',async()=>{
   assert.match(text,/显示更多选项/);
   assert.match(text,/15 项/);
   const readme=await readFile(fileURLToPath(new URL('../../README.md',import.meta.url)),'utf8');
-  assert.match(readme,/Windows[\s\S]*未在 Windows 实机验证/);
+  assert.match(readme,/Windows[\s\S]*部分实机验证/);
   assert.match(readme,/docs\/platforms\/windows\.md/);
 });
 

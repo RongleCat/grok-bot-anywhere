@@ -82,8 +82,10 @@ if (Store && Delivery) {
     store.saveRecipient('a',bot.id,{enabled:true,mode:'direct',sources:{drop:true}});
     const item = await delivery.receive({accountId:'a',bot,source:'drop',text:'body'});
     store.update(item.id,'a',{phase:'sending'}); store.close();
-    const reopened = new Store(root); t.after(()=>reopened.close());
-    assert.equal(reopened.get(item.id,'a').status,'unconfirmed');
+    // Closed before the test ends: Windows refuses to unlink the open SQLite
+    // file, and the teardown hook that removes the directory runs first.
+    const reopened = new Store(root);
+    try { assert.equal(reopened.get(item.id,'a').status,'unconfirmed'); } finally { reopened.close(); }
   });
   test('a receipt cannot be sent under a different account', async t => {
     const {store,delivery,sent} = await setup(t);

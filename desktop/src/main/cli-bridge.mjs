@@ -3,7 +3,7 @@ import {randomBytes} from 'node:crypto';
 import {chmod,cp,lstat,mkdir,readFile,readlink,rename,rm,symlink,writeFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {homedir} from 'node:os';
-import {delimiter,dirname,join,resolve,sep,win32,posix} from 'node:path';
+import {dirname,join,resolve,sep,win32,posix} from 'node:path';
 import {promisify} from 'node:util';
 
 const runFile=(file,args,options={})=>promisify(execFile)(file,args,{windowsHide:true,...options});
@@ -25,7 +25,9 @@ export function skillBundleDir({packaged,resourcesPath,devRoot}){
 }
 
 export function quoteSh(value){return `'${String(value).replaceAll("'","'\\''")}'`;}
-export function pathHasDir(pathEnv,dir){return String(pathEnv??'').split(delimiter).some(item=>item===dir);}
+// The delimiter belongs to the target platform, not to the host that runs the
+// install: a darwin install assembled on a Windows worker still separates with ':'.
+export function pathHasDir(pathEnv,dir,platform=process.platform){return String(pathEnv??'').split(platform==='win32'?';':':').some(item=>item===dir);}
 export function pathSnippet(dir){return `${PATH_BEGIN}\nexport PATH="${dir}:$PATH"\n${PATH_END}\n`;}
 export function withoutPathSnippet(text){
   const start=text.indexOf(PATH_BEGIN),end=text.indexOf(PATH_END);
@@ -210,7 +212,7 @@ export async function writeCliCredential(configDir,credentials,now=new Date().to
 
 async function ensureUserPath({home,platform,pathEnv,binDir}){
   const file=rcFile(home,platform);
-  if(!file||pathHasDir(pathEnv,binDir))return false;
+  if(!file||pathHasDir(pathEnv,binDir,platform))return false;
   let text='';
   try{text=await readFile(file,'utf8');}catch(error){if(error?.code!=='ENOENT')throw error;}
   if(text.includes(PATH_BEGIN))return false;
