@@ -73,10 +73,11 @@ function confirmPick(){
  const bots=ordered();
  if(!picking||!bots[pickIndex]){picking=false;render();return;}
  const bot=bots[pickIndex];
- picking=false;
+ picking=false;focus=true;
  if(bot.id!==draft.botId){draft.botId=bot.id;draft.receiptId=null;draft.remote=[];fileToken=null;queuedFiles=null;}
  void api.noteBot(bot.id).catch(()=>{});
  render();
+ void api.focusComposer().catch(()=>{});
 }
 function mergePaths(paths){
  for(const path of paths??[]){if(typeof path!=='string'||!path||draft.paths.includes(path)||draft.paths.length+draft.remote.length>=100)continue;draft.paths.push(path);draft.names.push(path.split(/[\\/]/).pop());}

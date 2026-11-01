@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('anywhere',{
   setHit:hit=>call('setHit',{hit}),
   placeComposer:(width,height,regions)=>call('placeComposer',{width,height,regions}),
   composerReady:state=>call('composerReady',state??{}),
+  focusComposer:()=>call('focusComposer'),
   syncPicker:payload=>call('syncPicker',payload??{}),
   pickBot:botId=>call('pickBot',{botId}),
   dropFiles:(botId,files)=>call('dropFiles',{botId,files:files.map(file=>webUtils.getPathForFile(file)).filter(Boolean)}),

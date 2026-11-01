@@ -669,6 +669,7 @@ async function dispatch(method,p){
     case 'noteBot':if(typeof p.botId==='string'){activeBotId=p.botId;update();}return {ok:true};
     case 'pendingComposer':return pendingFloat;
     case 'hideComposer':hideFloat({clearAttachments:p.clear===true});return {ok:true};
+    case 'focusComposer':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.focus();return {ok:true};
     case 'setHit':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.setIgnoreMouseEvents(!p.hit,{forward:true});return {ok:true};
     case 'composerReady':{
       const ready=composerReadyState;
