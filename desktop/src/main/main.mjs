@@ -488,6 +488,12 @@ async function copyDiagnostics(){
     `shareMenu=${JSON.stringify({available:!!status.available,registered:status.registered??0,enabled:status.enabled??0,needsUpdate:!!status.needsUpdate,busy:!!status.busy,error:status.error??''})}`,
     `installed=${JSON.stringify(menuSummary(shareMenu?.installed))}`
   ];
+  try{
+    const finderPid=(await runProcess('/usr/bin/pgrep',['-x','Finder'])).stdout.trim().split('\n')[0];
+    const finderStart=(await runProcess('/bin/ps',['-o','lstart=','-p',finderPid])).stdout.trim();
+    lines.push(`finder=${finderPid} started=${finderStart}`);
+  }catch(error){lines.push(`finder=<${error.code??error.message}>`);}
+  try{lines.push(`menu-state-updated=${(await stat(join(root,'menu-state.json'))).mtime.toISOString()}`);}catch{}
   for(const name of ['configuration.json','menu-state.json']){
     try{
       const data=JSON.parse(await readFile(join(root,name),'utf8'));
@@ -515,6 +521,12 @@ async function copyDiagnostics(){
   const text=lines.join('\n');
   clipboard.writeText(text);
   return {copied:true,characters:text.length};
+}
+async function refreshFinderMenu(){
+  if(process.platform!=='darwin')throw new Error('MAC_ONLY');
+  try{await runProcess('/usr/bin/killall',['Finder'],{timeout:8000});}
+  catch(error){if(error.code!==1)throw new Error('FINDER_REFRESH_FAILED');}
+  return {ok:true};
 }
 async function nativeRequest(method,p){
   switch(method){
@@ -577,6 +589,7 @@ async function dispatch(method,p){
       return {enabled:explorerMenu===true};
     }
     case 'copyDiagnostics':return copyDiagnostics();
+    case 'refreshFinderMenu':return refreshFinderMenu();
     case 'updateMenu':{
       if(!shareMenu||preview)throw new Error('MENU_UNAVAILABLE');
       menuReconciler.request(latestState);await menuReconciler.flush({force:true});return shareMenu.status;

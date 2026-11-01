@@ -77,6 +77,12 @@
 
 ## 分享菜单
 
+**系统共享面板和宿主注册是两层缓存，不要把 Finder 的旧列表当成注册失败。**
+- 2026-11-01：`pluginkit` 与 `NSSharingService.sharingServices` 已返回「赛博小晚/杂物总管」，Finder 右键 → 共享仍显示更早的「增长情报/测试 cli」；Finder 进程从 10-26 起未重启，缓存了旧的 share extension 列表。
+- 规则：先看 `pluginkit -m -p com.apple.share-services` 和 live `NSSharingService`，再看 Finder/微信进程；Finder 需要重启（应用设置里的「刷新访达菜单」）才会重新枚举。
+- 证据：`desktop/src/main/main.mjs` 的 `refreshFinderMenu`；宿主 `Destination01/02` 显示名与注册 ID 对比。
+- Seen 1×（2026-11-01）。
+
 **微信菜单图标不带应用内状态标记。**
 - 2026-11-01：菜单图标配置把 `mainAgentId` 传给了头像引擎，主 Bot 在微信里显示成「圆形 + 五角星」；`avatarKey` 也把主 Bot 状态算进签名 key，切换主 Bot 会无谓重建菜单。
 - 规则：菜单图标只传形状/颜色/图片/group members，`main:false`；`avatarKey` 不包含主 Bot 或运行状态。

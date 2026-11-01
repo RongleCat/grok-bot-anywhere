@@ -588,6 +588,13 @@ function renderSettings(content){
    finally{copyLog.disabled=false;}
   });
   diagnose.append(settingRow(t('排查','Troubleshoot'),copyLog,t('复制分享菜单状态、宿主版本和最近一次更新错误。可能包含本机路径，不包含登录凭据。','Copies share-menu status, host build and the latest update error. May include local paths, never credentials.')));
+  const refresh=smallButton(t('刷新访达菜单','Refresh Finder menu'),async()=>{
+   const confirmed=await askConfirm({title:t('重启访达？','Restart Finder?'),body:t('访达会缓存右键共享菜单。重启访达后，已打开的访达窗口会重新打开，再试一次共享菜单。','Finder caches the Share menu. Restarting Finder reopens its windows; try the Share menu again afterwards.'),confirmLabel:t('重启访达','Restart Finder')});
+   if(!confirmed)return;
+   await api.refreshFinderMenu();
+   toast(t('已重启访达，请重新打开右键共享菜单。','Finder restarted. Reopen the Share menu.'));
+  });
+  diagnose.append(settingRow(t('系统共享菜单','System share menu'),refresh,t('修改接收 Bot 后，访达右键的共享菜单可能还显示旧名字。重启访达后才会刷新。','After changing receivers, Finder may still show old names in its Share menu. Restart Finder to refresh it.')));
   panel.append(wechatPanel,diagnose);
  }
  if(settingsTab==='toolbox'){
