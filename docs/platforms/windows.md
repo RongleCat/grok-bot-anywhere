@@ -12,6 +12,7 @@
 | 全局快捷键 | 默认 `Ctrl+Alt+Space`（可改） |
 | URL 协议 | `start "" "grokbotanywhere://open"`；`start "" "grokbotanywhere://send?bot=<id>&text=<text>"`；行为与 macOS 一致 |
 | 命令行 | 写 `grok-bot.cmd` + `grok-bot.ps1`；Path 通过 PowerShell 读写 `HKCU\Environment`，写完广播 `WM_SETTINGCHANGE` |
+| 应用图标 | `build/icon.ico`；`signExecutable: false` 保留 exe 图标/metadata，仅跳过签名 |
 | skills | 复制 skill；Claude Code 用 junction |
 | Explorer 右键 | `HKCU\Software\Classes\*\shell\GrokBotAnywhere` 级联，每个启用 Bot 一行 |
 | 收件/发送 | 与 macOS 同一套服务进程与 SQLite |

@@ -14,9 +14,10 @@
 | 协议 | `grokbotanywhere` |
 | 文件 | `src/**`、`out/**`、`package.json`、`node_modules/**` |
 | 额外资源 | `resources/grok-bot-skill`（CLI skill） |
+| 应用图标 | `build/icon.png`（1024 主图）、`build/icon.icns`、`build/icon.ico` |
 | macOS 额外资源 | `native/GrokBotCompanion.app`、`native/GrokBotMenuHost.app`、`out/native-avatar` |
-| macOS | hardened runtime、entitlements、`notarize: true`、目标 `dmg` |
-| Windows | 目标 `zip`、`signAndEditExecutable: false`、x64 |
+| macOS | `icon: build/icon.icns`、hardened runtime、entitlements、`notarize: true`、目标 `dmg` |
+| Windows | `icon: build/icon.ico`、目标 `zip`、`signExecutable: false`（保留图标/metadata 写入，跳过签名）、x64 |
 
 ## 命令
 
@@ -24,6 +25,7 @@
 cd desktop
 
 npm run build            # 只构建 out/（esbuild）
+npm run build:icons      # 生成应用图标（mac icns / Windows ico）
 npm run build:native     # macOS 伴侣（需要 Swift）
 npm run build:share      # macOS 宿主 + 12 appex（需要 Swift）
 npm run package          # 未签名 --dir，调试用
@@ -32,6 +34,10 @@ npm run package:mac-intel# x64 DMG，签名+公证
 npm run package:mac-all  # 两个都打
 npm run package:win      # 未签名 zip
 ```
+
+应用图标只用于 App/Dock/任务栏；状态栏、托盘、微信菜单图标仍由 `coal-ball.mjs` 和 `menu-icons.mjs` 单独生成，不经过这里的资源。
+
+macOS 图标遵循 Apple 的 1024/824 安全区：1024px 画布四周留 100px 透明边，煤球内容约 824px；Windows ICO 使用较小的透明边并包含 16/24/32/48/64/128/256 多尺寸。生成脚本为 `desktop/scripts/build-app-icons.mjs`。
 
 macOS 签名脚本 `desktop/scripts/package-mac-signed.sh`：
 

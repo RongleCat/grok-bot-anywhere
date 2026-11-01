@@ -21,7 +21,7 @@ import {matchShareTitles} from '../share/order.mjs';
 import {grokBotAgentUrl} from '../grok-link.mjs';
 import {disableCli,enableCli,skillBundleDir,writeCliCredential} from './cli-bridge.mjs';
 import {applyExplorerRegistry,applyLoginItem,createExplorerBatch,createExplorerSync,explorerLogLine,explorerRegistryOps,explorerRejectNotice,floatingComposerTraits,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shouldApplyLoginItem,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction} from '../shell/actions.mjs';
-import {coalBallIcon,coalBallPng,trayIconImages} from '../shell/coal-ball.mjs';
+import {coalBallAppPng,coalBallIcon,coalBallPng,trayIconImages} from '../shell/coal-ball.mjs';
 import {acceptWindowControl,editCommand,mainWindowOptions,maximizedContentInset} from '../shell/window-chrome.mjs';
 import {composeLink,deeplinkNotice,parseDeeplink,shortcutSourceAllowed} from '../shell/deeplink.mjs';
 import {listedBots} from '../renderer/group-avatar.mjs';
@@ -117,6 +117,10 @@ function showMainWindow(){
   if(window.isMinimized())window.restore();
   window.show();
   window.focus();
+}
+function applyAppIcon(){
+  if(smoke||preview||process.platform!=='darwin')return;
+  try{const image=nativeImage.createFromBuffer(coalBallAppPng(1024,{platform:'darwin'}));if(!image.isEmpty())app.dock?.setIcon(image);}catch{}
 }
 function ensureTray(){
   if(tray||smoke||preview)return;
@@ -764,7 +768,7 @@ function pushWindowState(){
 }
 async function createWindow(){
   window=new BrowserWindow({...mainWindowOptions(process.platform),
-    ...(process.platform==='win32'?{icon:nativeImage.createFromBuffer(coalBallPng(256))}:{}),
+    ...(process.platform==='win32'?{icon:nativeImage.createFromBuffer(coalBallAppPng(256,{platform:'win32'}))}:{}),
     webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false}});
   if(process.platform==='win32'){try{window.setBackgroundMaterial('acrylic');windowMaterial='acrylic';}catch{window.setBackgroundColor('#f4f4f4');windowMaterial='none';}}
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -864,6 +868,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
     {role:'editMenu'},{role:'windowMenu'}]);Menu.setApplicationMenu(menu);}
   await createWindow();
   ensureTray();
+  applyAppIcon();
   await startCompanion();
   if(smoke){
     const result=await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const start=Date.now();const tick=()=>{if(document.documentElement.dataset.ready==='true')resolve({title:document.title,headings:[...document.querySelectorAll('h1')].map(e=>e.textContent)});else if(Date.now()-start>10000)reject(new Error('RENDERER_NOT_READY'));else setTimeout(tick,50);};tick();})`);

@@ -13,6 +13,7 @@
     "dev": "node scripts/run.mjs desktop npm start",
     "build": "npm --prefix desktop run build",
     "build:native": "node scripts/run.mjs desktop npm run build:native",
+    "build:icons": "node scripts/run.mjs desktop npm run build:icons",
     "build:share": "node scripts/run.mjs desktop npm run build:share",
     "smoke": "node scripts/run.mjs desktop npm run smoke",
     "test": "node scripts/check-node.mjs && npm run test:desktop && npm run test:client && npm run test:avatar",

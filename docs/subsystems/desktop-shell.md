@@ -29,7 +29,7 @@
 | `desktop/src/shell/actions.mjs` | 纯函数：窗口关闭策略、托盘模型、快捷键、Explorer 注册表、登录项 |
 | `desktop/src/shell/window-chrome.mjs` | 主窗口选项、Windows 自绘标题栏、编辑快捷键 |
 | `desktop/src/shell/deeplink.mjs` | 深链解析、来源开关检查 |
-| `desktop/src/shell/coal-ball.mjs` | 托盘/任务栏煤球图标 |
+| `desktop/src/shell/coal-ball.mjs` | 应用图标、托盘/任务栏煤球图标 |
 
 ## 窗口
 

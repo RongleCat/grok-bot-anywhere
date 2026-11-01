@@ -6,7 +6,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {acceptLateFiles,applyExplorerRegistry,applyLoginItem,confirmAccountStill,confirmCopy,createExplorerBatch,createExplorerSync,explorerAccept,explorerCleanupKeys,explorerLogLine,explorerRegistryOps,explorerRejectNotice,explorerTargets,explorerVerdict,floatingComposerTraits,loginItemPayload,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shouldApplyLoginItem,toolboxShareOff,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction,coalBallSvg,composerAfterSend} from '../src/shell/actions.mjs';
 import {normalizeBot} from 'grok-bot-sdk';
-import {coalBallGeometry,coalBallIcon,coalBallPng,coalBallRaster,coalBallSample} from '../src/shell/coal-ball.mjs';
+import {appIconInset,coalBallAppPng,coalBallGeometry,coalBallIcon,coalBallPng,coalBallRaster,coalBallSample} from '../src/shell/coal-ball.mjs';
 
 const room={id:'room-1',name:'Same',kind:'GROK_BOT_AGENT_KIND_ROOM',memberAgentIds:['bot-a']};
 const hidden={id:'bot-hidden',name:'Same',kind:'GROK_BOT_AGENT_KIND_AGENT',memberAgentIds:[]};
@@ -367,7 +367,7 @@ test('shipped main and renderer call the confirm, tray, login, and explorer deci
   assert.match(main,/explorer-forward\.log/);
   assert.match(main,/setAppUserModelId\('dev\.ronglecat\.grokbotanywhere'\)/);
   assert.ok(main.indexOf("setAppUserModelId('dev.ronglecat.grokbotanywhere')")<main.indexOf('app.whenReady'));
-  assert.match(main,/coalBallPng\(256\)/);
+  assert.match(main,/coalBallAppPng\(256,\{platform:'win32'\}\)/);
   assert.match(main,/additionalData/);
   assert.match(main,/explorerBatch\.arm\([\s\S]*rpc\.call\('connect'/);
   assert.match(main,/case 'explorerMenu'/);
@@ -439,6 +439,37 @@ function pngPixels(png,size){
   }
   return inflateSync(idat);
 }
+
+test('application icon keeps a transparent safe area on macOS',()=>{
+  assert.equal(appIconInset(1024,'darwin'),100);
+  const size=256,inset=appIconInset(size,'darwin');
+  const raw=pngPixels(coalBallAppPng(size,{platform:'darwin'}),size),stride=1+size*4;
+  const at=(x,y)=>raw.subarray(y*stride+1+x*4,y*stride+1+x*4+4);
+  assert.equal(at(0,0)[3],0);
+  assert.equal(at(Math.floor(inset)-1,size/2)[3],0);
+  assert.deepEqual([...at(size/2,size/2)],[18,18,21,255]);
+  let eye=0;for(let y=0;y<size;y++)for(let x=0;x<size;x++)if(at(x,y)[0]>240&&at(x,y)[3]===255)eye++;
+  assert.ok(eye>4);
+  assert.ok(appIconInset(256,'win32')<appIconInset(256,'darwin'));
+});
+
+test('packaging points at the generated application icons',()=>{
+  const pkg=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
+  assert.equal(pkg.build.mac.icon,'build/icon.icns');
+  assert.equal(pkg.build.win.icon,'build/icon.ico');
+  assert.equal(pkg.build.win.signExecutable,false);
+  assert.equal(pkg.build.win.signAndEditExecutable,undefined);
+  assert.equal(pkg.scripts['build:icons'],'node scripts/build-app-icons.mjs');
+});
+
+test('shipped application icon assets are valid',()=>{
+  const icns=readFileSync(new URL('../build/icon.icns',import.meta.url));
+  const ico=readFileSync(new URL('../build/icon.ico',import.meta.url));
+  const png=readFileSync(new URL('../build/icon.png',import.meta.url));
+  assert.equal(icns.subarray(0,4).toString('ascii'),'icns');
+  assert.equal(ico.readUInt16LE(0),0);assert.equal(ico.readUInt16LE(2),1);assert.ok(ico.readUInt16LE(4)>=5);
+  assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+});
 
 test('tray image is the classic black coal ball',()=>{
   const icon=coalBallIcon(32);
