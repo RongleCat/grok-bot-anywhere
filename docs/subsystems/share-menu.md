@@ -40,8 +40,10 @@ macOS 的分享扩展是**签名过的 appex**，不能运行时凭空创建。�
 ```
 
 - 账号切换会立即吊销旧绑定，旧 generation 的安装请求作废。
+- 设置里的「重新同步」是**强制重建**：即使应用认为菜单已是最新，也会重新生成宿主、重签并注册；微信仍显示旧菜单时先点它。
+- 更新过程中状态再次变化（例如切账号、连续改顺序）不会丢掉请求：安装器会让位给最新状态并重试，而不是直接报错。
 - 同名 Bot 靠头像区分；名字过长由系统截断。
-- 更新后必须重新打开微信的转发菜单；微信会缓存旧菜单，必要时退出微信重开。
+- 更新后必须重新打开微信的转发菜单；微信会缓存旧菜单，必要时退出微信重开。手动「重新同步」会强制重建，适合应用显示已同步但微信仍是旧名字/旧顺序的情况。
 
 ## ShareInbox 契约
 
@@ -77,10 +79,17 @@ Windows 微信没有等价的 share-extension 宿主。当前支持：
 
 「共享对象 / 每个 Bot 一行」仍是研究项：本地验证包在 `projects/windows-share/`（默认不入库），未在 Windows 实机运行。
 
+## 排障
+
+- 失败详情写入 `userData/ShareInbox/menu-update.log`（只含错误码、堆栈和命令 stderr，不含凭据）。
+- 宿主当前版本：`plutil -extract CFBundleVersion raw "$HOME/Applications/Grok Bot Anywhere Menu/Contents/Helpers/Destination01.app/Contents/Info.plist"`。
+- 已注册的分享扩展：`pluginkit -m -p com.apple.share-services | grep grokbotanywhere`。
+- 重建后仍不生效：完全退出微信再打开；微信会缓存分享扩展列表。
+
 ## 验证
 
 ```sh
-cd desktop
+npm run test:desktop
 npm test                       # menu model / order / reconciler / registration / handoff
 npm run build:share            # 重建宿主与 12 个 appex（macOS）
 npm run smoke:native           # 原生伴侣，不覆盖真实微信

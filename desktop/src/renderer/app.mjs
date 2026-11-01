@@ -565,8 +565,8 @@ function renderSettings(content){
  cliRow.append(cliCopy,cliSwitch);cliPanel.append(cliRow);if(settingsTab==='cli')panel.append(cliPanel);
  if(settingsTab==='wechat'&&state.host?.platform==='darwin'){
   const menu=state.host.menu??{},wechatPanel=el('section','group'),row=el('div','group-row'),info=el('div');
-  info.append(el('div','group-label',t('微信转发','WeChat')),el('div','group-help',!menu.available?t('这个版本没有分享扩展','Sharing extensions are not in this build'):menu.busy?t('正在同步菜单','Syncing the menu'):menu.needsUpdate?t('设置已保存，正在同步','Saved. Syncing the menu.'):t(`已启用 ${menu.registered??0} 个入口`,`${menu.registered??0} destinations on`)));
-  const update=smallButton(t('重新同步','Sync again'),async()=>{update.disabled=true;try{const result=await api.updateMenu();toast(t(`已同步 ${result.registered} 个入口`,`Synced ${result.registered} destinations`));}finally{update.disabled=false;}});
+  info.append(el('div','group-label',t('微信转发','WeChat')),el('div','group-help',!menu.available?t('这个版本没有分享扩展','Sharing extensions are not in this build'):menu.busy?t('正在同步菜单','Syncing the menu'):menu.needsUpdate?t('设置已保存，需要重新同步','Saved. Sync to update.'):t(`已启用 ${menu.registered??0} 个入口`,`${menu.registered??0} destinations on`)));
+  const update=smallButton(t('重新同步','Sync again'),async()=>{update.disabled=true;try{const result=await api.updateMenu();toast(t(`已同步 ${result.registered} 个入口。若微信里没变化，重新打开微信的转发菜单。`,`Synced ${result.registered} destinations. If WeChat still shows the old menu, reopen its forwarding menu.`));}catch{}finally{update.disabled=false;}});
   update.disabled=!menu.available||menu.busy;row.append(info,update);wechatPanel.append(row);
   const read=smallButton(menuReading?t('正在读取','Reading'):t('读取微信顺序','Read WeChat order'),readMenuOrder);
   read.disabled=menuReading;

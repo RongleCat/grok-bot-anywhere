@@ -75,7 +75,16 @@
 - 规则：不要承诺“这条回复对应那次发送”；UI 文案说“收到新回复”，不说“对刚才那条的回复”。
 - Seen 1×（`docs/reference/api/sdk-usage.md`）。
 
+## 分享菜单
+
+**更新请求不能被正在进行的安装吞掉；手动「重新同步」必须是强制重建。**
+- 2026-11-01：切账号或连续改顺序时，安装前的 `isCurrent` 检查会抛 `MENU_SUPERSEDED`；旧实现把它当失败，且安装期间到达的新状态请求被 `running` 吞掉，结果是红色横幅 + 微信仍是旧菜单。手动按钮只 bump revision，菜单状态被判定为最新时不会重建。
+- 规则：`MENU_SUPERSEDED` / `MENU_UPDATE_BUSY` / `ACCOUNT_BUSY` 由 reconciler 重试最新状态，不显示失败；用户点「重新同步」时传 `force`，无条件重建宿主并重注册。
+- 证据：`desktop/src/share/reconciler.mjs`、`desktop/src/main/share-menu.mjs`；单元测试覆盖两种重试与 force。
+- Seen 1×（2026-11-01）。
+
 ## 文档与仓库
+
 
 **目录/入口一变，所有文档里的路径都要在同一改动里更新。**
 - 2026-11-01：根 README 仍写 `dist/TouchBarBot.app`，而 Electron 迁移后该目录已不存在；`docs/native-app.md` 等也引用旧 `client-mvp/`。

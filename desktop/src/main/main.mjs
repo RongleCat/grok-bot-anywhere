@@ -3,7 +3,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {dirname,isAbsolute,join} from 'node:path';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {appendFile,mkdir,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {RpcClient} from './rpc.mjs';
 import {CredentialVault} from './credentials.mjs';
@@ -687,8 +687,14 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
       await shareMenu.initialize();
       menuReconciler=new MenuReconciler({
         sync:state=>shareMenu.sync(state),publish:state=>shareMenu.sync(state),needsUpdate:()=>shareMenu.status.needsUpdate,
-        update:async(state,isCurrent)=>{const icons=await captureMenuIcons(state,join(here,'../../out/native-avatar/index.html'));if(!isCurrent())return;return shareMenu.update(state,icons,{isCurrent});},
-        onError:()=>{shareMenu.status.error='MENU_UPDATE_FAILED';issue('MENU_UPDATE_FAILED');}
+        update:async(state,isCurrent,force)=>{const icons=await captureMenuIcons(state,join(here,'../../out/native-avatar/index.html'));if(!isCurrent())return;return shareMenu.update(state,icons,{isCurrent,force});},
+        onError:error=>{
+          if(['MENU_SUPERSEDED','MENU_UPDATE_BUSY','ACCOUNT_BUSY'].includes(error?.message))return;
+          shareMenu.status.error='MENU_UPDATE_FAILED';
+          const detail=[new Date().toISOString(),error?.message??String(error),error?.cause?.message,error?.cause?.stderr,error?.stack].filter(Boolean).join('\n');
+          void appendFile(join(app.getPath('userData'),'ShareInbox','menu-update.log'),detail+'\n---\n',{mode:0o600}).catch(()=>{});
+          issue('MENU_UPDATE_FAILED');
+        }
       });
     }
   }

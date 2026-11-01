@@ -17,6 +17,7 @@
 | `touchbar.json` | Touch Bar pin | 可删 |
 | `share menu state`（应用内部） | 宿主路径、槽位、generation | 不要手改；用设置里的更新 |
 | `logs/explorer-forward.log` | Windows 拒绝记录（脱敏） | 可删 |
+| `ShareInbox/menu-update.log` | 分享菜单更新失败的错误码/堆栈/命令 stderr | 可删；报障时附上 |
 | `artifacts/`（开发） | smoke 截图 | 可删 |
 
 macOS 根：`~/Library/Application Support/Grok Bot Anywhere/`

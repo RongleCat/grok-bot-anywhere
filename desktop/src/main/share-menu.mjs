@@ -81,7 +81,7 @@ export class ShareMenu {
   }
   await run(LS,['-u',host]).catch(()=>{});
  }
- async update(state,icons,{isCurrent=()=>true}={}){
+ async update(state,icons,{isCurrent=()=>true,force=false}={}){
   if(process.platform!=='darwin')throw new Error('MAC_ONLY');if(this.busy)throw new Error('MENU_UPDATE_BUSY');
   const check=()=>{if(!isCurrent())throw new Error('MENU_SUPERSEDED');};check();
   if(state.accountBusy)throw new Error('ACCOUNT_BUSY');
@@ -94,7 +94,7 @@ export class ShareMenu {
    if(exists)previousHost=this.host;
    let previousBuild=this.installed?.build??2;
    if(exists){try{const {stdout}=await run('/usr/bin/plutil',['-extract','CFBundleVersion','raw','-o','-',join(this.host,'Contents/Info.plist')]);previousBuild=Math.max(previousBuild,Number(stdout.trim())||0);}catch{}}
-   const rebuild=plan.rebuild||!exists||this.installed?.layoutVersion!==4||this.installed?.templateHash!==this.templateHash||this.installed?.applicationPath!==this.applicationPath;
+   const rebuild=force||plan.rebuild||!exists||this.installed?.layoutVersion!==4||this.installed?.templateHash!==this.templateHash||this.installed?.applicationPath!==this.applicationPath;
    const build=rebuild?previousBuild+1:previousBuild;
    if(rebuild){
     const entries=plan.entries.filter(entry=>plan.enabledSlots.includes(entry.slot)).map(entry=>({...entry,generation:entry.generation??1,extensionId:extensionIdentifier(entry.slot,entry.generation??1)}));
