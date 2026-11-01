@@ -312,8 +312,9 @@ function placePicker(width,height){
   pickerSize={width:Math.round(width)||760,height:Math.round(height)||188};
   layoutExtras();
 }
-function hideFloat(){
+function hideFloat({clearAttachments=false}={}){
   pickerOpen=false;
+  if(clearAttachments)notify('composer-clear',{attachments:true});
   for(const extra of [avatarWindow,pickerWindow])if(extra&&!extra.isDestroyed()&&extra.isVisible())extra.hide();
   if(!floatWindow||floatWindow.isDestroyed()||!floatWindow.isVisible())return;
   floatWindow.hide();
@@ -337,7 +338,7 @@ async function ensureFloat(){
   for(const target of [floatWindow,avatarWindow,pickerWindow]){if(traits.alwaysOnTop){if(mac)target.setAlwaysOnTop(true,'floating');else target.setAlwaysOnTop(true);}try{target.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true,skipTransformProcessType:true});}catch{target.setVisibleOnAllWorkspaces(true);}}
   avatarWindow.setIgnoreMouseEvents(true);
   wireFloat(floatWindow,'Composer');wireFloat(avatarWindow,'Avatar');wireFloat(pickerWindow,'Picker');
-  floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat();},120);});
+  floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat({clearAttachments:true});},120);});
   floatWindow.on('closed',()=>{floatWindow=null;});
   avatarWindow.on('closed',()=>{avatarWindow=null;});
   pickerWindow.on('closed',()=>{pickerWindow=null;});
@@ -411,7 +412,7 @@ async function openComposer(botId,receipt,options={}){
   activeBotId=botId;
   const draftText=typeof options.text==='string'?options.text:undefined;
   const attachToken=deferFiles?generation:0;
-  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes})=>({name,bytes})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
+  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes},index)=>({name,bytes,index})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
   const float=await ensureFloat();
   placeFloat(368,110);
   floatShownAt=Date.now();
@@ -449,7 +450,7 @@ function presentPendingComposer(){
   const item=pending.sort((a,b)=>a.createdAt-b.createdAt).at(-1);
   if(item)void presentShare(item.id);
 }
-async function sendDraft(botId,text,files,receiptId){
+async function sendDraft(botId,text,files,receiptId,remoteKeep){
   if(preview)throw new Error('PREVIEW_ONLY');
   if(typeof text!=='string'||text.length>2_000_000)throw new Error('MESSAGE_INVALID');
   if(files!=null&&(!Array.isArray(files)||files.length>100||files.some(path=>typeof path!=='string'||!path)))throw new Error('ATTACHMENT_INVALID');
@@ -457,8 +458,10 @@ async function sendDraft(botId,text,files,receiptId){
   if(receiptId){
     const item=await rpc.call('composer',{id:receiptId});
     if(item.botId!==botId)throw new Error('RECEIPT_SCOPE_MISMATCH');
-    const merged=extra.length?[...item.files.map(file=>file.path),...extra]:undefined;
-    const result=await rpc.call('submit',{id:receiptId,text,...merged?{files:merged}:{}},0);
+    const selected=Array.isArray(remoteKeep)?new Set(remoteKeep.filter(index=>Number.isSafeInteger(index)&&index>=0)):null;
+    const kept=selected?item.files.filter((_file,index)=>selected.has(index)):item.files;
+    const merged=selected?[...kept.map(file=>file.path),...extra]:(extra.length?[...item.files.map(file=>file.path),...extra]:undefined);
+    const result=await rpc.call('submit',{id:receiptId,text,...merged?{files:merged}:selected?{files:[]}:{}},0);
     return {id:result.id,status:result.status,error:result.error??null};
   }
   if(!text.trim()&&!extra.length)throw new Error('RECEIPT_EMPTY');
@@ -643,7 +646,7 @@ async function dispatch(method,p){
     }
     case 'noteBot':if(typeof p.botId==='string'){activeBotId=p.botId;update();}return {ok:true};
     case 'pendingComposer':return pendingFloat;
-    case 'hideComposer':hideFloat();return {ok:true};
+    case 'hideComposer':hideFloat({clearAttachments:p.clear===true});return {ok:true};
     case 'setHit':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.setIgnoreMouseEvents(!p.hit,{forward:true});return {ok:true};
     case 'placeComposer':if(p.regions?.part==='picker')placePicker(p.width,p.height);else placeFloat(p.width,p.height);return {ok:true};
     case 'syncPicker':{

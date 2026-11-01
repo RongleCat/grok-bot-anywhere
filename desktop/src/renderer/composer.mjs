@@ -77,7 +77,7 @@ function mergePaths(paths){
 }
 function applyPayload(data){
  if(!data?.botId)return;
- if(data.id){draft.botId=data.botId;draft.receiptId=data.id;draft.text=data.text??'';draft.remote=data.files??[];draft.paths=[];draft.names=[];}
+ if(data.id){draft.botId=data.botId;draft.receiptId=data.id;draft.text=data.text??'';draft.remote=(data.files??[]).map((file,index)=>({...file,index:file.index??index}));draft.paths=[];draft.names=[];}
  else{
   if(data.botId!==draft.botId){draft.botId=data.botId;draft.receiptId=null;draft.remote=[];}
   if(typeof data.text==='string'){draft.botId=data.botId;draft.text=data.text;draft.receiptId=null;draft.remote=[];draft.paths=[];draft.names=[];}
@@ -121,10 +121,21 @@ function reportSize(){
  void api.syncPicker({open:picking,index:pickIndex}).catch(()=>{});
 }
 function canSend(){return !!(draft.text.trim()||draft.paths.length||draft.remote.length);}
+function syncPickerSelection(bots){
+ const picker=$('picker');const grid=picker.querySelector('.picker-grid');if(!grid)return;
+ const activeRow=Math.floor(pickIndex/columns);
+ [...grid.children].forEach((cell,index)=>{
+  const selected=index===pickIndex;
+  cell.classList.toggle('selected',selected);cell.setAttribute('aria-selected',String(selected));
+  const ordinal=cell.querySelector('.pick-index');
+  if(ordinal){ordinal.hidden=Math.floor(index/columns)!==activeRow;ordinal.textContent=index%columns===9?'0':String(index%columns+1);}
+ });
+ const selected=grid.children[pickIndex];if(selected)selected.scrollIntoView({block:'nearest'});
+}
 function renderPicker(bots){
  const picker=$('picker');
- const stamp=`${picking}:${pickIndex}:${state.theme}:${bots.map(bot=>`${bot.id}:${(bot.memberAgentIds??[]).join(',')}`).join('|')}`;
- if(stamp===pickerStamp)return;
+ const stamp=`${picking}:${state.theme}:${bots.map(bot=>`${bot.id}:${bot.name??''}:${(bot.memberAgentIds??[]).join(',')}`).join('|')}`;
+ if(stamp===pickerStamp){if(picking)syncPickerSelection(bots);return;}
  pickerStamp=stamp;
  for(const handle of pickerHandles)handle.destroy();pickerHandles.length=0;
  picker.querySelectorAll('.avatar-stack').forEach(stack=>stack.__cutout?.());
@@ -135,7 +146,7 @@ function renderPicker(bots){
  const activeRow=Math.floor(pickIndex/columns);
  bots.forEach((item,index)=>{
   const cell=el('button',`pick${index===pickIndex?' selected':''}`);cell.type='button';cell.setAttribute('role','option');cell.setAttribute('aria-selected',String(index===pickIndex));
-  if(Math.floor(index/columns)===activeRow)cell.append(el('span','pick-index',index%columns===9?'0':String(index%columns+1)));
+  const ordinal=el('span','pick-index',index%columns===9?'0':String(index%columns+1));ordinal.hidden=Math.floor(index/columns)!==activeRow;cell.append(ordinal);
   const face=paintFace(item,36,true,pickerHandles);
   cell.append(face,el('span','pick-name',item.name||t('未命名 Bot','Unnamed Bot')));
   cell.addEventListener('click',()=>{if(part==='picker'){void api.pickBot(item.id);return;}pickIndex=index;confirmPick();});
@@ -189,13 +200,18 @@ function render(){
   const unlock=el('button','',t('解除暂停','Unlock'));unlock.type='button';unlock.addEventListener('click',()=>void api.resolve(held.id).catch(error=>toast(errors[error.message]?t(...errors[error.message]):t('没有完成。','That did not finish.'))));
   line.append(unlock);card.append(line);
  }
- const files=[...draft.remote.map(file=>({name:file.name})),...draft.names.map((name,index)=>({name,index}))];
+ const files=[...draft.remote.map((file,index)=>({name:file.name,kind:'remote',index})),...draft.names.map((name,index)=>({name,kind:'local',index}))];
  if(files.length){
   const chips=el('div','chips');
   for(const file of files){
    const chip=el('span','chip');chip.append(el('span','',file.name));
-   if(file.index!==undefined){const remove=el('button','','×');remove.type='button';remove.setAttribute('aria-label',t('移除','Remove'));remove.addEventListener('click',()=>{draft.names.splice(file.index,1);draft.paths.splice(file.index,1);render();});chip.append(remove);}
-   chips.append(chip);
+   const remove=el('button','','×');remove.type='button';remove.setAttribute('aria-label',t('移除','Remove'));
+   remove.addEventListener('click',()=>{
+    if(file.kind==='remote')draft.remote.splice(file.index,1);
+    else{draft.names.splice(file.index,1);draft.paths.splice(file.index,1);}
+    render();
+   });
+   chip.append(remove);chips.append(chip);
   }
   card.append(chips);
  }
@@ -205,7 +221,7 @@ function render(){
  const sendButton=el('button','send');sendButton.type='button';sendButton.setAttribute('aria-label',t('发送','Send'));sendButton.append(lucide(['m5 12 7-7 7 7','M12 19V5']));
  sendButton.disabled=sending||!canSend();sendButton.addEventListener('click',()=>void send());
  bar.append(attach,sendButton);
- if(!prefs().dismissOnOutside){const close=el('button','close');close.type='button';close.setAttribute('aria-label',t('收起','Close'));close.append(lucide(['M18 6 6 18','m6 6 12 12']));close.addEventListener('click',()=>void api.hideComposer());bar.append(close);}
+ if(!prefs().dismissOnOutside){const close=el('button','close');close.type='button';close.setAttribute('aria-label',t('收起','Close'));close.append(lucide(['M18 6 6 18','m6 6 12 12']));close.addEventListener('click',()=>void api.hideComposer(true));bar.append(close);}
  card.append(bar);
  card.ondragover=event=>event.preventDefault();
  card.ondrop=event=>{event.preventDefault();addPaths(api.filePaths([...event.dataTransfer.files]));};
@@ -216,7 +232,7 @@ function render(){
 }
 function onKey(event){
  if(event.isComposing||event.keyCode===229)return;
- if(event.key==='Escape'){event.preventDefault();if(picking){picking=false;render();}else void api.hideComposer();return;}
+ if(event.key==='Escape'){event.preventDefault();if(picking){picking=false;render();}else void api.hideComposer(true);return;}
  if(event.key==='Tab'&&!event.metaKey&&!event.ctrlKey&&!event.altKey){
   event.preventDefault();
   if(picking)confirmPick();
@@ -242,7 +258,7 @@ async function send(){
  if(!bot||sending||(!draft.text.trim()&&!draft.paths.length&&!draft.remote.length))return;
  sending=true;render();
  try{
-  const result=await api.sendDraft(bot.id,draft.text,draft.paths,draft.receiptId);
+  const result=await api.sendDraft(bot.id,draft.text,draft.paths,draft.receiptId,draft.receiptId?draft.remote.map(file=>file.index).filter(Number.isInteger):undefined);
   if(result?.status!=='sent')throw new Error(result?.status==='unconfirmed'?'SEND_UNCONFIRMED':result?.error||'SEND_FAILED');
   draft.text='';draft.paths=[];draft.names=[];draft.remote=[];draft.receiptId=null;
   const recipient=state?.recipients?.find(row=>row.botId===bot.id);
@@ -269,6 +285,7 @@ if(part==='avatar'){
  });
 }else{
  api.onChange(message=>{
+  if(message.event==='composer-clear'){draft.paths=[];draft.names=[];draft.remote=[];fileToken=null;queuedFiles=null;if(state)render();return;}
   if(message.event==='composer-files'){acceptComposerFiles(message.data,true);return;}
   if(message.event==='composer'){placed='';applyPayload(message.data);}
   if(message.event==='pick'&&message.data?.botId){const index=ordered().findIndex(bot=>bot.id===message.data.botId);if(index>=0)pickIndex=index;confirmPick();return;}
