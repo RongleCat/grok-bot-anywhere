@@ -33,7 +33,7 @@ const smoke=process.argv.includes('--smoke-test');
 const preview=smoke||process.argv.includes('--preview');
 const backgroundShare=process.argv.includes('--share-intake');
 const quietLaunch=backgroundShare||process.argv.includes('--explorer-forward')||process.argv.some(arg=>String(arg).includes('grokbotanywhere://'));
-let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null;
+let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null,suppressActivate=false;
 let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
 let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,ipcSender=null;
@@ -85,8 +85,22 @@ function trayImage(){
   if(icons.some(icon=>icon.template))image.setTemplateImage(true);
   return image;
 }
+function showDock(){
+  if(process.platform!=='darwin')return;
+  try{app.setActivationPolicy('regular');}catch{}
+  try{app.dock?.show();}catch{}
+}
+function hideDock(){
+  if(process.platform!=='darwin'||quitting)return;
+  try{app.setActivationPolicy('accessory');}catch{}
+  try{app.dock?.hide();}catch{}
+}
+function composerVisible(){
+  return [floatWindow,avatarWindow,pickerWindow].some(target=>target&&!target.isDestroyed()&&target.isVisible());
+}
 function showMainWindow(){
   if(!window||window.isDestroyed())return;
+  showDock();
   if(window.isMinimized())window.restore();
   window.show();
   window.focus();
@@ -402,7 +416,10 @@ async function openComposer(botId,receipt,options={}){
   placeFloat(368,110);
   floatShownAt=Date.now();
   float.setIgnoreMouseEvents(false);
+  suppressActivate=true;
   float.show();float.focus();
+  if(!window||window.isDestroyed()||!window.isVisible())setTimeout(hideDock,60);
+  setTimeout(()=>{suppressActivate=false;},400);
   layoutExtras();
   notify('composer',pendingFloat);
   if(prepared){
@@ -718,15 +735,16 @@ async function createWindow(){
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
   bindWindowsEditKeys(window.webContents);
-  window.on('close',event=>{if(windowCloseAction({quitting,smoke,hasTray:!!tray})==='hide'){event.preventDefault();window.hide();}});
+  window.on('close',event=>{if(windowCloseAction({quitting,smoke,hasTray:!!tray})==='hide'){event.preventDefault();window.hide();setTimeout(hideDock,50);}});
   for(const name of ['maximize','unmaximize','focus','blur'])window.on(name,pushWindowState);
+  window.on('show',showDock);
   window.webContents.on('did-finish-load',pushWindowState);
   window.on('session-end',()=>{quitting=true;});
   window.once('ready-to-show',()=>{
     let wasOpenedAtLogin=false;
     try{wasOpenedAtLogin=app.getLoginItemSettings().wasOpenedAtLogin===true;}catch{wasOpenedAtLogin=false;}
     const openedAtLogin=openedAsLoginItem({wasOpenedAtLogin,argv:process.argv});
-    if(!smoke&&!quietLaunch&&!openedAtLogin)showMainWindow();
+    if(!smoke&&!quietLaunch&&!openedAtLogin)showMainWindow();else if(!smoke)hideDock();
   });
   await window.loadFile(join(here,'../../out/index.html'));
 }
@@ -805,7 +823,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   if(process.platform==='win32')Menu.setApplicationMenu(null);
   else{const menu=Menu.buildFromTemplate([
     ...(process.platform==='darwin'?[{label:app.name,submenu:[{role:'about'},{type:'separator'},{role:'quit'}]}]:[]),
-    {label:zh?'文件':'File',submenu:[{label:zh?'显示主窗口':'Show window',click:()=>showMainWindow()},...(process.platform!=='darwin'?[{role:'quit'}]:[])]},
+    {label:zh?'文件':'File',submenu:[{label:zh?'显示主窗口':'Show window',click:()=>showMainWindow()},{label:zh?'关闭窗口':'Close window',accelerator:'CmdOrCtrl+W',click:()=>{if(window&&!window.isDestroyed())window.close();}},...(process.platform!=='darwin'?[{role:'quit'}]:[])]},
     {role:'editMenu'},{role:'windowMenu'}]);Menu.setApplicationMenu(menu);}
   await createWindow();
   ensureTray();
@@ -849,7 +867,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   }
  }).catch(error=>{console.error(errorCode(error));app.exit(1);});
 }
-app.on('activate',()=>showMainWindow());
+app.on('activate',()=>{if(suppressActivate||composerVisible())return;showMainWindow();});
 app.on('window-all-closed',()=>{if(smoke)app.quit();});
 app.on('session-end',()=>{quitting=true;});
 app.on('before-quit',()=>{quitting=true;if(tray){tray.destroy();tray=null;}stopExplorerSelection();unregisterShortcuts();menuReconciler?.close();companion?.stop();worker?.kill();rpc?.close();});
