@@ -43,7 +43,7 @@ macOS 签名脚本 `desktop/scripts/package-mac-signed.sh`：
 
 - 从 `~/.gba-signing/env` 读 `CSC_NAME`、`APPLE_API_ISSUER`、`APPLE_TEAM_ID`、`APPLE_API_KEY`/`APPLE_API_KEY_PATH`（可用 `GBA_SIGNING_ENV` 覆盖路径）。
 - 先签嵌套的伴侣与每个 appex，再签宿主；最后 `codesign --verify --deep --strict`。
-- 再 `npm run build` + `electron-builder --mac dmg --<arch>`，由 electron-builder 做公证。
+- 再 `npm run build` + `electron-builder --mac dmg --<arch>`，由 electron-builder 做公证；脚本最后对生成的 DMG 执行 `stapler staple` + `stapler validate`，确保离线 Gatekeeper 可用。
 - 密钥文件不进仓库，也不要打印。
 
 ## 产物
