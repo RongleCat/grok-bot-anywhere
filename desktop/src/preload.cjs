@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('anywhere',{
   retry:id=>call('retry',{id}),
   resolve:id=>call('resolve',{id}),
   updateMenu:()=>call('updateMenu'),
+  copyDiagnostics:()=>call('copyDiagnostics'),
   menuOrder:()=>call('menuOrder'),
   chooseFiles:botId=>call('chooseFiles',{botId}),
   pickFiles:()=>call('pickFiles'),

@@ -35,7 +35,7 @@
 4. 重新打开「转发 → 其他应用」。
 5. 仍没有：检查 `~/Applications/Grok Bot Anywhere Menu/Contents/Helpers/` 是否有 `DestinationNN.app`；重跑 `npm run build:share`。
 6. 菜单行名对但头像空白：图标尺寸/资源不对，重建宿主；看 [分享菜单](../subsystems/share-menu.md)。
-7. 仍不生效：看 `userData/ShareInbox/menu-update.log` 与宿主 `CFBundleVersion`；确认 `pluginkit -m -p com.apple.share-services` 里有当前 generation 的条目。
+7. 仍不生效：设置 → 微信 → **复制报错日志**，把内容发给维护者；也可直接看 `userData/ShareInbox/menu-update.log` 与宿主 `CFBundleVersion`，确认 `pluginkit -m -p com.apple.share-services` 里有当前 generation 的条目。
 
 ## npm start 直接退出：BrowserWindow 不是 electron 的导出
 

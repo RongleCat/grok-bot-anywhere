@@ -580,7 +580,15 @@ function renderSettings(content){
    down.addEventListener('click',()=>run(()=>moveMenu(bot.id,1)));
    buttons.append(up,down);line.append(el('span','menu-order-name',bot.name),buttons);wechatPanel.append(line);
   });
-  panel.append(wechatPanel);
+  const diagnose=el('section','group');
+  const copyLog=smallButton(t('复制报错日志','Copy error log'),async()=>{
+   copyLog.disabled=true;
+   try{const result=await api.copyDiagnostics();toast(t(`已复制 ${result.characters} 个字符，可以直接粘贴给维护者。`,`Copied ${result.characters} characters. Paste it to the maintainer.`));}
+   catch{toast(t('复制失败','Could not copy'));}
+   finally{copyLog.disabled=false;}
+  });
+  diagnose.append(settingRow(t('排查','Troubleshoot'),copyLog,t('复制分享菜单状态、宿主版本和最近一次更新错误。可能包含本机路径，不包含登录凭据。','Copies share-menu status, host build and the latest update error. May include local paths, never credentials.')));
+  panel.append(wechatPanel,diagnose);
  }
  if(settingsTab==='toolbox'){
   const plans=toolboxShareOff(state.bots??[],state.recipients??[]);

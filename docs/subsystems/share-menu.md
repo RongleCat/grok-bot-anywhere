@@ -81,6 +81,7 @@ Windows 微信没有等价的 share-extension 宿主。当前支持：
 
 ## 排障
 
+- 设置 → 微信 → **复制报错日志**：复制应用与 Electron 版本、菜单状态、宿主 build、`configuration.json`/`menu-state.json` 摘要、最近一次更新错误。可能包含本机路径，不包含登录凭据。
 - 失败详情写入 `userData/ShareInbox/menu-update.log`（只含错误码、堆栈和命令 stderr，不含凭据）。
 - 宿主当前版本：`plutil -extract CFBundleVersion raw "$HOME/Applications/Grok Bot Anywhere Menu/Contents/Helpers/Destination01.app/Contents/Info.plist"`。
 - 已注册的分享扩展：`pluginkit -m -p com.apple.share-services | grep grokbotanywhere`。

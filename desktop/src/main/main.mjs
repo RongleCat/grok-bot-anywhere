@@ -3,7 +3,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {dirname,isAbsolute,join} from 'node:path';
-import {appendFile,mkdir,writeFile} from 'node:fs/promises';
+import {appendFile,mkdir,readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {RpcClient} from './rpc.mjs';
 import {CredentialVault} from './credentials.mjs';
@@ -467,6 +467,55 @@ async function accountAction(method){
     return publicState();
   }finally{accountBusy=false;}
 }
+function tailText(value,limit){
+  if(typeof value!=='string'||!value)return '';
+  return value.length>limit?`… ${value.length-limit} characters omitted …\n${value.slice(-limit)}`:value;
+}
+function menuSummary(installed){
+  const entries=(installed?.entries??[]).map(entry=>({slot:entry.slot,botName:entry.botName,generation:entry.generation??1,extensionId:entry.extensionId??'',mode:entry.mode??''}));
+  return {layoutVersion:installed?.layoutVersion??null,hostPath:installed?.hostPath??'',build:installed?.build??null,entries};
+}
+async function copyDiagnostics(){
+  const root=join(app.getPath('userData'),'ShareInbox');
+  const status=shareMenu?.status??{available:false,registered:0,needsUpdate:true};
+  const lines=[
+    `Grok Bot Anywhere ${app.getVersion()}`,
+    `time=${new Date().toISOString()}`,
+    `platform=${process.platform} ${process.arch}`,
+    `electron=${process.versions.electron??''} node=${process.versions.node??''}`,
+    `packaged=${app.isPackaged}`,
+    `hostIssue=${hostIssue??''}`,
+    `shareMenu=${JSON.stringify({available:!!status.available,registered:status.registered??0,enabled:status.enabled??0,needsUpdate:!!status.needsUpdate,busy:!!status.busy,error:status.error??''})}`,
+    `installed=${JSON.stringify(menuSummary(shareMenu?.installed))}`
+  ];
+  for(const name of ['configuration.json','menu-state.json']){
+    try{
+      const data=JSON.parse(await readFile(join(root,name),'utf8'));
+      const entries=(data.entries??[]).map(entry=>({slot:entry.slot,botName:entry.botName,mode:entry.mode??'',generation:entry.generation??1}));
+      lines.push(`${name}=${JSON.stringify({accountId:data.accountId?'[set]':null,entries})}`);
+    }catch(error){lines.push(`${name}=<unreadable: ${error.code??error.message}>`);}
+  }
+  try{
+    const log=await readFile(join(root,'menu-update.log'),'utf8');
+    lines.push('','menu-update.log (tail):',tailText(log,30000));
+  }catch(error){
+    lines.push('',`menu-update.log=<${error.code??error.message}>`);
+  }
+  try{
+    const names=(await readdir(root)).filter(name=>name.startsWith('update-failure-')&&name.endsWith('.txt'));
+    const files=[];
+    for(const name of names){const info=await stat(join(root,name));files.push({name,mtime:info.mtimeMs});}
+    files.sort((a,b)=>b.mtime-a.mtime);
+    for(const file of files.slice(0,2)){
+      const content=await readFile(join(root,file.name),'utf8').catch(error=>`<${error.code??error.message}>`);
+      lines.push('',`${file.name}:`,tailText(content,8000));
+    }
+    if(!files.length)lines.push('','update-failure-*.txt=none');
+  }catch(error){lines.push('',`update-failure-*.txt=<${error.code??error.message}>`);}
+  const text=lines.join('\n');
+  clipboard.writeText(text);
+  return {copied:true,characters:text.length};
+}
 async function nativeRequest(method,p){
   switch(method){
     case 'list':return {bots:latestState.bots,truncated:false};
@@ -527,6 +576,7 @@ async function dispatch(method,p){
       update();
       return {enabled:explorerMenu===true};
     }
+    case 'copyDiagnostics':return copyDiagnostics();
     case 'updateMenu':{
       if(!shareMenu||preview)throw new Error('MENU_UNAVAILABLE');
       menuReconciler.request(latestState);await menuReconciler.flush({force:true});return shareMenu.status;
