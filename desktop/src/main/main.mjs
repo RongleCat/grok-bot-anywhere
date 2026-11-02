@@ -930,7 +930,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
       await shareMenu.initialize();
       menuReconciler=new MenuReconciler({
         sync:state=>shareMenu.sync(state),publish:state=>shareMenu.sync(state),needsUpdate:()=>shareMenu.status.needsUpdate,
-        update:async(state,isCurrent,force)=>{const icons=await captureMenuIcons(state,join(here,'../../out/native-avatar/index.html'));if(!isCurrent())return;const result=await shareMenu.update(state,icons,{isCurrent,force});if(result)scheduleFinderRefresh();return result;},
+        update:async(state,isCurrent,force)=>{const avatarPage=app.isPackaged?join(process.resourcesPath,'native/avatar/index.html'):join(here,'../../out/native-avatar/index.html');const icons=await captureMenuIcons(state,avatarPage);if(!isCurrent())return;const result=await shareMenu.update(state,icons,{isCurrent,force});if(result)scheduleFinderRefresh();return result;},
         onError:error=>{
           if(['MENU_SUPERSEDED','MENU_UPDATE_BUSY','ACCOUNT_BUSY'].includes(error?.message))return;
           shareMenu.status.error='MENU_UPDATE_FAILED';

@@ -15,7 +15,7 @@
 | 文件 | `src/**`、`out/**`、`package.json`、`node_modules/**` |
 | 额外资源 | `resources/grok-bot-skill`（CLI skill） |
 | 应用图标 | `build/icon.png`（1024 主图）、`build/icon.icns`、`build/icon.ico` |
-| macOS 额外资源 | `native/GrokBotCompanion.app`、`native/GrokBotMenuHost.app`、`out/native-avatar` |
+| macOS 额外资源 | `native/GrokBotCompanion.app`、`native/GrokBotMenuHost.app`、`out/native-avatar` → `Resources/native/avatar` |
 | macOS | `icon: build/icon.icns`、hardened runtime、entitlements、`notarize: true`、目标 `dmg` |
 | Windows | `icon: build/icon.ico`、目标 `zip`、`signExecutable: false`（保留图标/metadata 写入，跳过签名）、x64 |
 
@@ -34,6 +34,8 @@ npm run package:mac-intel# x64 DMG，签名+公证
 npm run package:mac-all  # 两个都打
 npm run package:win      # 未签名 zip
 ```
+
+菜单图标抓取在打包后必须从 `process.resourcesPath/native/avatar/index.html` 加载，而不是 `app.asar/out/native-avatar`。
 
 应用图标只用于 App/Dock/任务栏；状态栏、托盘、微信菜单图标仍由 `coal-ball.mjs` 和 `menu-icons.mjs` 单独生成，不经过这里的资源。
 
