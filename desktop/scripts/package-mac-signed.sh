@@ -39,17 +39,30 @@ cd "$ROOT"
 npm run build
 unset CSC_IDENTITY_AUTO_DISCOVERY || true
 export CSC_IDENTITY_AUTO_DISCOVERY=true
-npx electron-builder --mac dmg --"$ARCH"
+# Let electron-builder finish signing only. Its built-in staple step is a
+# single CloudKit request and flakes on CI networks; notarize and staple the
+# app here with retries before building the DMG.
+npx electron-builder --mac dir --"$ARCH" --config.mac.notarize=false
 
-# electron-builder notarizes the app. Submit and staple the DMG itself so
-# Gatekeeper can validate the disk image offline.
 VERSION="$(node -p "require('./package.json').version")"
 if [[ "$ARCH" == "arm64" ]]; then
+  APP="$ROOT/release/mac-arm64/Grok Bot Anywhere.app"
   DMG="$ROOT/release/Grok Bot Anywhere-$VERSION-arm64.dmg"
 else
+  APP="$ROOT/release/mac/Grok Bot Anywhere.app"
   DMG="$ROOT/release/Grok Bot Anywhere-$VERSION.dmg"
 fi
-[[ -f "$DMG" ]] || { echo "missing $DMG" >&2; exit 1; }
+[[ -d "$APP" ]] || { echo "missing $APP" >&2; exit 1; }
+xcrun notarytool submit "$APP" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+for attempt in 1 2 3 4; do
+  if xcrun stapler staple "$APP"; then break; fi
+  [[ "$attempt" -lt 4 ]] || { echo "app stapler failed after $attempt attempts" >&2; exit 1; }
+  echo "app stapler attempt $attempt failed; retrying..." >&2
+  sleep $((attempt * 10))
+done
+xcrun stapler validate "$APP"
+npx electron-builder --mac dmg --"$ARCH" --prepackaged "$APP" --config.mac.notarize=false
+[[ -f "$DMG" ]] || { echo "missing $DMG after prepackaged build" >&2; exit 1; }
 xcrun notarytool submit "$DMG" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
 # CloudKit's ticket-delivery endpoint occasionally drops a connection after
 # notarization has already been accepted. Retry the staple instead of leaving
