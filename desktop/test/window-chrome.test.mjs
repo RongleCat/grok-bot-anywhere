@@ -90,6 +90,8 @@ test('shipped window chrome stays on the main Windows window',async()=>{
   assert.match(main,/mainWindowOptions\(process\.platform\)/);
   assert.match(main,/process\.platform==='win32'\?\{icon:nativeImage\.createFromBuffer\(coalBallAppPng\(256,\{platform:'win32'\}\)\)\}/);
   assert.match(css,/\.bot-dot\{[^}]*right:-1px;top:-1px[^}]*\}/);
+  assert.match(app,/const showShortcuts=state\.host\?\.platform!=='darwin'/);
+  assert.match(app,/state\.host\?\.platform!=='darwin'\)card\.append\(settingRow\(t\('快捷指令'/);
   assert.doesNotMatch(css,/\.bot-dot\{[^}]*bottom:-1px/);
   assert.match(main,/setBackgroundMaterial\('acrylic'\)/);
   assert.match(main,/bindWindowsEditKeys\(window\.webContents\)/);

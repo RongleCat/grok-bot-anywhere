@@ -345,16 +345,19 @@ function renderChat(content){
   general.type='button';general.setAttribute('aria-pressed',String(generalOn));
   general.title=t('拖放和系统分享。','Drop and system share.');
   general.addEventListener('click',()=>{const next=!generalOn;return run(()=>api.configure(bot.id,{sources:Object.fromEntries(generalKeys.map(key=>[key,next]))}));});
+  const showShortcuts=state.host?.platform!=='darwin';
   const shortcutOn=!!recipient.sources?.shortcuts;
-  const shortcut=el('button',`source-chip${shortcutOn?' selected':''}`,t('快捷指令','Shortcuts'));
-  shortcut.type='button';shortcut.setAttribute('aria-pressed',String(shortcutOn));
-  shortcut.title=t('允许快捷指令和 grokbotanywhere 链接把文字交给这个 Bot。通过链接收到的内容会先放进输入框，由你确认后再发送。','Allow Shortcuts and grokbotanywhere links to deliver text to this Bot. Content received from a link is placed in the composer first. It is sent only after you confirm.');
-  shortcut.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{shortcuts:!shortcutOn}})));
+  const shortcut=showShortcuts?el('button',`source-chip${shortcutOn?' selected':''}`,t('快捷指令','Shortcuts')):null;
+  if(shortcut){
+   shortcut.type='button';shortcut.setAttribute('aria-pressed',String(shortcutOn));
+   shortcut.title=t('允许快捷指令和 grokbotanywhere 链接把文字交给这个 Bot。通过链接收到的内容会先放进输入框，由你确认后再发送。','Allow Shortcuts and grokbotanywhere links to deliver text to this Bot. Content received from a link is placed in the composer first. It is sent only after you confirm.');
+   shortcut.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{shortcuts:!shortcutOn}})));
+  }
   const wechatOn=!!recipient.sources.wechat;
   const wechat=el('button',`source-chip${wechatOn?' selected':''}`,t('微信','WeChat'));
   wechat.type='button';wechat.setAttribute('aria-pressed',String(wechatOn));
   wechat.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{wechat:!wechatOn}})));
-  sources.append(general,shortcut,wechat);
+  sources.append(general,...(shortcut?[shortcut]:[]),wechat);
   card.append(settingRow(t('来源','Sources'),sources));
   if(recipient.mode==='direct'){
    const prefix=el('input','prefix');prefix.placeholder=t('加在正文前','Prefix');prefix.setAttribute('aria-label',t('直接发送时加在正文前','Prefix for direct sends'));prefix.value=recipient.prefix;
@@ -370,7 +373,7 @@ function renderChat(content){
  card.append(settingRow(t('输入框发送后','Composer after sending'),afterMode,t('覆盖全局设置；默认跟随全局。','Overrides the global setting; follows it by default.')));
  card.append(shortcutRow(bot.id,t('打开悬浮输入框','Open composer'),t('只打开这个 Bot 的悬浮输入框。','Opens the floating composer for this Bot.')));
  card.append(shortcutRow(`grok:${bot.id}`,t('在 Grok Bot 中打开','Open in Grok Bot'),t('在 Grok Bot 里打开这个 Bot。','Opens this Bot in Grok Bot.')));
- card.append(settingRow(t('快捷指令','Shortcuts'),smallButton(t('复制快捷指令链接','Copy shortcut link'),async()=>{await api.copyComposeLink(bot.id);toast(t('已复制快捷指令链接','Shortcut link copied'));},'secondary'),t('在快捷指令里用「打开 URL」。','Use Open URL in Shortcuts.')));
+ if(state.host?.platform!=='darwin')card.append(settingRow(t('快捷指令','Shortcuts'),smallButton(t('复制快捷指令链接','Copy shortcut link'),async()=>{await api.copyComposeLink(bot.id);toast(t('已复制快捷指令链接','Shortcut link copied'));},'secondary'),t('在快捷指令里用「打开 URL」。','Use Open URL in Shortcuts.')));
  detail.append(hero,...memberCard?[memberCard]:[],card);content.append(detail);
 }
 function memberList(members){
