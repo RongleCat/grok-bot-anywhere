@@ -297,7 +297,7 @@ test('touch bar press opens the composer and a scrub only selects',()=>{
 test('windows walkthrough marks each required feature',async()=>{
   const text=await readFile(fileURLToPath(new URL('../../docs/platforms/windows.md',import.meta.url)),'utf8');
   for(const feature of ['微信分享','Explorer','悬浮输入框','命令行','skills'])assert.match(text,new RegExp(feature));
-  assert.match(text,/微信分享[\s\S]*不支持/);
+  assert.match(text,/微信分享[\s\S]*(实机验证|只有一个入口)/);
   // The page must keep separating what ran on a real Windows machine from what
   // did not; the section headings are the structure that enforces it.
   assert.match(text,/部分实机验证/);
