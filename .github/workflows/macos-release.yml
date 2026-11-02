@@ -18,11 +18,13 @@ jobs:
       matrix:
         include:
           - arch: arm64
-            runner: macos-14
+            runner: macos-15
             binary_arch: arm64
+            target_arch: arm64
           - arch: x64
-            runner: macos-13
+            runner: macos-15
             binary_arch: x86_64
+            target_arch: x86_64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,6 +45,8 @@ jobs:
           npm --prefix desktop version '${{ inputs.version }}' --no-git-tag-version --allow-same-version
 
       - name: Build macOS companion and share host
+        env:
+          GBA_TARGET_ARCH: ${{ matrix.target_arch }}
         run: |
           set -euo pipefail
           npm run build:native
