@@ -90,7 +90,28 @@
 - 规则：不要承诺“这条回复对应那次发送”；UI 文案说“收到新回复”，不说“对刚才那条的回复”。
 - Seen 1×（`docs/reference/api/sdk-usage.md`）。
 
+## 分享菜单
+
+**系统共享面板和宿主注册是两层缓存，不要把 Finder 的旧列表当成注册失败。**
+- 2026-11-01：`pluginkit` 与 `NSSharingService.sharingServices` 已返回「赛博小晚/杂物总管」，Finder 右键 → 共享仍显示更早的「增长情报/测试 cli」；Finder 进程从 10-26 起未重启，缓存了旧的 share extension 列表。
+- 规则：先看 `pluginkit -m -p com.apple.share-services` 和 live `NSSharingService`，再看 Finder/微信进程；Finder 需要重启才会重新枚举；应用现在在菜单更新和启动时自动重启 Finder。
+- 证据：`desktop/src/main/main.mjs` 的 `refreshFinderMenu`；宿主 `Destination01/02` 显示名与注册 ID 对比。
+- Seen 1×（2026-11-01）。
+
+**微信菜单图标不带应用内状态标记。**
+- 2026-11-01：菜单图标配置把 `mainAgentId` 传给了头像引擎，主 Bot 在微信里显示成「圆形 + 五角星」；`avatarKey` 也把主 Bot 状态算进签名 key，切换主 Bot 会无谓重建菜单。
+- 规则：菜单图标只传形状/颜色/图片/group members，`main:false`；`avatarKey` 不包含主 Bot 或运行状态。
+- 证据：`desktop/src/main/menu-icons.mjs`、`desktop/src/share/model.mjs`；测试断言主 Bot 状态不改变 key。
+- Seen 1×（2026-11-01）。
+
+**更新请求不能被正在进行的安装吞掉；手动「重新同步」必须是强制重建。**
+- 2026-11-01：切账号或连续改顺序时，安装前的 `isCurrent` 检查会抛 `MENU_SUPERSEDED`；旧实现把它当失败，且安装期间到达的新状态请求被 `running` 吞掉，结果是红色横幅 + 微信仍是旧菜单。手动按钮只 bump revision，菜单状态被判定为最新时不会重建。
+- 规则：`MENU_SUPERSEDED` / `MENU_UPDATE_BUSY` / `ACCOUNT_BUSY` 由 reconciler 重试最新状态，不显示失败；用户点「重新同步」时传 `force`，无条件重建宿主并重注册。
+- 证据：`desktop/src/share/reconciler.mjs`、`desktop/src/main/share-menu.mjs`；单元测试覆盖两种重试与 force。
+- Seen 1×（2026-11-01）。
+
 ## 文档与仓库
+
 
 **目录/入口一变，所有文档里的路径都要在同一改动里更新。**
 - 2026-11-01：根 README 仍写 `dist/TouchBarBot.app`，而 Electron 迁移后该目录已不存在；`docs/native-app.md` 等也引用旧 `client-mvp/`。

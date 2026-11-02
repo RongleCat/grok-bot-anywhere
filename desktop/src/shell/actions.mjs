@@ -4,6 +4,11 @@ export function toolboxShareOff(bots,recipients){
   const enabled=new Set((recipients??[]).filter(item=>item?.enabled===true&&typeof item.botId==='string').map(item=>item.botId));
   return (bots??[]).filter(bot=>enabled.has(bot?.id)).map(bot=>({botId:bot.id,patch:{enabled:false}}));
 }
+export function composerAfterSend(recipient,prefs){
+  const per=recipient?.composerAfterSend;
+  if(per==='hide'||per==='open')return per;
+  return prefs?.afterSend==='open'?'open':'hide';
+}
 export function confirmCopy({isRoom=false,confirmed=false}={}){
   if(isRoom)return {duplicate:false,reason:'room'};
   if(confirmed!==true)return {duplicate:false,reason:'cancel'};

@@ -88,7 +88,14 @@ test('shipped window chrome stays on the main Windows window',async()=>{
   const chrome=await readFile(`${root}shell/window-chrome.mjs`,'utf8');
   assert.doesNotMatch(chrome,/thickFrame/);
   assert.match(main,/mainWindowOptions\(process\.platform\)/);
-  assert.match(main,/process\.platform==='win32'\?\{icon:nativeImage\.createFromBuffer\(coalBallPng\(256\)\)\}/);
+  assert.match(main,/process\.platform==='win32'\?\{icon:nativeImage\.createFromBuffer\(coalBallAppPng\(256,\{platform:'win32'\}\)\)\}/);
+  assert.match(css,/\.bot-dot\{[^}]*right:-1px;top:-1px[^}]*\}/);
+  assert.match(app,/const showShortcuts=state\.host\?\.platform!=='darwin'/);
+  assert.match(app,/moreButton\(bot\)/);
+  assert.match(app,/renderMarkdown\(bot\.description/);
+  assert.doesNotMatch(app,/hero-bio/);
+  assert.match(app,/state\.host\?\.platform!=='darwin'\)card\.append\(settingRow\(t\('快捷指令'/);
+  assert.doesNotMatch(css,/\.bot-dot\{[^}]*bottom:-1px/);
   assert.match(main,/setBackgroundMaterial\('acrylic'\)/);
   assert.match(main,/bindWindowsEditKeys\(window\.webContents\)/);
   assert.match(main,/bindWindowsEditKeys\(target\.webContents\)/);
@@ -112,8 +119,8 @@ test('shipped window chrome stays on the main Windows window',async()=>{
   assert.match(paint,/windowCaptionButtons\('win32'\)/);
   assert.match(paint,/api\.windowControl\(/);
   assert.match(app,/classList\.toggle\('os-windows',state\.host\?\.platform==='win32'\)/);
-  assert.match(css,/\.os-windows \.shell\{grid-template-rows:32px/);
-  assert.match(css,/\.os-windows \.win-control\{width:46px;height:32px/);
+  assert.match(css,/\.os-windows \.shell\{grid-template-rows:44px/);
+  assert.match(css,/\.os-windows \.win-control\{width:40px;height:28px/);
   assert.match(css,/-webkit-app-region:drag/);
   assert.match(css,/\.os-windows \.win-controls\{[^}]*-webkit-app-region:no-drag/);
   assert.match(css,/rgba\(0,0,0,\.06\)/);

@@ -29,13 +29,13 @@
 | `desktop/src/shell/actions.mjs` | 纯函数：窗口关闭策略、托盘模型、快捷键、Explorer 注册表、登录项 |
 | `desktop/src/shell/window-chrome.mjs` | 主窗口选项、Windows 自绘标题栏、编辑快捷键 |
 | `desktop/src/shell/deeplink.mjs` | 深链解析、来源开关检查 |
-| `desktop/src/shell/coal-ball.mjs` | 托盘/任务栏煤球图标 |
+| `desktop/src/shell/coal-ball.mjs` | 应用图标、托盘/任务栏煤球图标 |
 
 ## 窗口
 
 | 窗口 | 尺寸/位置 | 说明 |
 | --- | --- | --- |
-| 主窗口 | 系统默认，最小尺寸见 `mainWindowOptions` | 关闭时：有托盘则隐藏，无托盘则退出 |
+| 主窗口 | 系统默认，最小尺寸见 `mainWindowOptions` | 关闭（红点或 `Cmd+W`）时有托盘则隐藏并隐藏 Dock 图标；无托盘才退出 |
 | 悬浮输入框 | 368×120，贴当前屏幕底部 | 透明、置顶、可点击穿透；失焦可配置是否收起 |
 | 头像窗 | 88×88 | 显示当前 Bot 头像，不抢焦点 |
 | Tab 宫格 | 760×188 | 最多 10 列 × 2 行，键盘 1–0 / − + / 方向键 / Tab / Esc |
@@ -48,6 +48,8 @@ macOS 使用 `hiddenInset` + vibrancy；Windows 使用 `frame:false` + 自绘最
 - 主窗口关闭后隐藏，进程继续收分享/快捷键；托盘不存在时关闭即退出。
 - 登录项只在打包构建写入系统；开发模式只保存偏好，不注册裸 Electron。
 - 从登录项启动时保持后台，不弹主窗口。
+- 主窗口隐藏后 Dock 图标隐藏（`app.setActivationPolicy('accessory')`）；托盘、深链或重新显示主窗口时恢复。
+- 唤醒悬浮输入框只显示浮窗，不打开主窗口；应用激活事件的处理器会跳过浮窗可见或正在唤起的状态。
 
 ## 全局快捷键
 

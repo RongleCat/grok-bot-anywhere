@@ -13,6 +13,7 @@
     "start": "npm run build && electron .",
     "dev": "npm run build && electron .",
     "build": "node scripts/build.mjs",
+    "build:icons": "node scripts/build-app-icons.mjs",
     "test": "node --test test/*.test.mjs",
     "smoke": "npm run build && electron . --smoke-test",
     "build:native": "node scripts/build-native.mjs",
@@ -63,6 +64,7 @@
       }
     ],
     "mac": {
+      "icon": "build/icon.icns",
       "category": "public.app-category.productivity",
       "target": [
         "dmg"
@@ -100,10 +102,11 @@
       ]
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "zip"
       ],
-      "signAndEditExecutable": false
+      "signExecutable": false
     }
   }
 }

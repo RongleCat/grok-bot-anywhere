@@ -40,3 +40,15 @@ npm run build
 unset CSC_IDENTITY_AUTO_DISCOVERY || true
 export CSC_IDENTITY_AUTO_DISCOVERY=true
 npx electron-builder --mac dmg --"$ARCH"
+
+# electron-builder notarizes the app and the DMG, but does not staple the
+# disk image. Staple it so Gatekeeper can validate offline.
+VERSION="$(node -p "require('./package.json').version")"
+if [[ "$ARCH" == "arm64" ]]; then
+  DMG="$ROOT/release/Grok Bot Anywhere-$VERSION-arm64.dmg"
+else
+  DMG="$ROOT/release/Grok Bot Anywhere-$VERSION.dmg"
+fi
+[[ -f "$DMG" ]] || { echo "missing $DMG" >&2; exit 1; }
+xcrun stapler staple "$DMG"
+xcrun stapler validate "$DMG"

@@ -43,26 +43,26 @@ export function inCoalEye(ux,uy){
   return false;
 }
 // Ball radius in pixels for a square canvas; the Windows rim needs room outside the ball.
-export function coalBallGeometry(size,{rim=0}={}){
-  const radius=size/2-rim-0.5;
+export function coalBallGeometry(size,{rim=0,inset=0}={}){
+  const radius=size/2-inset-rim-0.5;
   return {cx:size/2,cy:size/2,radius,scale:radius/COAL_BODY_RADIUS,rim};
 }
 // Continuous sample in pixel space: 'eye' | 'body' | 'rim' | 'out'.
-export function coalBallSample(size,px,py,{rim=0}={}){
-  const {cx,cy,radius,scale}=coalBallGeometry(size,{rim});
+export function coalBallSample(size,px,py,{rim=0,inset=0}={}){
+  const {cx,cy,radius,scale}=coalBallGeometry(size,{rim,inset});
   const dx=px-cx,dy=py-cy,dist=Math.hypot(dx,dy);
   if(dist<=radius)return inCoalEye(dx/scale,dy/scale)?'eye':'body';
   return rim>0&&dist<=radius+rim?'rim':'out';
 }
 const SUPER=4;
-function paintBall(size,{body,eye,rimColor=null,rim=0}){
+function paintBall(size,{body,eye,rimColor=null,rim=0,inset=0}){
   const rgba=Buffer.alloc(size*size*4);
   const palette={body,eye,rim:rimColor};
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
       let r=0,g=0,b=0,a=0;
       for(let sy=0;sy<SUPER;sy++)for(let sx=0;sx<SUPER;sx++){
-        const kind=coalBallSample(size,x+(sx+0.5)/SUPER,y+(sy+0.5)/SUPER,{rim});
+        const kind=coalBallSample(size,x+(sx+0.5)/SUPER,y+(sy+0.5)/SUPER,{rim,inset});
         const color=palette[kind];
         if(!color)continue;
         const alpha=color[3]/255;
@@ -103,6 +103,20 @@ export function coalBallPng(size=32){
 }
 export function coalBallTemplatePng(size=18){
   return pngFromRaster(coalBallTemplateRaster(size));
+}
+// Application icon: a black coal ball on a transparent canvas. On macOS the
+// content stays inside the 824px safe area of the 1024px grid (100px margin),
+// so Dock icons do not appear a size larger than their neighbours. Windows
+// needs only a small transparent edge for the taskbar/Explorer tile.
+export const APP_ICON_BODY=[18,18,21,255],APP_ICON_EYE=[249,249,249,255],APP_ICON_RIM=[235,235,240,255];
+export function appIconInset(size,platform=process.platform){
+  return platform==='darwin'?size*100/1024:size*0.06;
+}
+export function coalBallAppRaster(size=1024,{platform=process.platform}={}){
+  return paintBall(size,{body:APP_ICON_BODY,eye:APP_ICON_EYE,rimColor:APP_ICON_RIM,rim:Math.max(1,Math.round(size/600)),inset:appIconInset(size,platform)});
+}
+export function coalBallAppPng(size=1024,options={}){
+  return pngFromRaster(coalBallAppRaster(size,options));
 }
 export function trayIconImages(platform){
   const specs=platform==='darwin'

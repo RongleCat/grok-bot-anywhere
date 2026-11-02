@@ -16,7 +16,7 @@ export async function captureMenuIcons(state,avatarPage){
   for(const entry of menuEntries(state)){
    const members=menuMembers(entry.bot,state);
    if(!members&&entry.bot.avatar?.kind==='picture'&&entry.bot.avatar.picture?.url)continue;
-   const config={agentId:entry.botId,shape:entry.bot.avatarShape,color:entry.bot.avatarColor,main:!members&&state.runtime?.mainAgentId===entry.botId,members};
+   const config={agentId:entry.botId,shape:entry.bot.avatarShape,color:entry.bot.avatarColor,main:false,members};
    icons.push({botId:entry.botId,png:await window.webContents.executeJavaScript(`Promise.race([window.captureMenuAvatar(${JSON.stringify(config)}),new Promise((_,reject)=>setTimeout(()=>reject(new Error('MENU_AVATAR_TIMEOUT')),15000))])`)});
   }
   const resolved=await resolvePictureIcons(state,icons);

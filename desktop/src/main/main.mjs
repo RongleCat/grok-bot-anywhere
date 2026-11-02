@@ -3,7 +3,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {dirname,isAbsolute,join} from 'node:path';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {appendFile,mkdir,readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {RpcClient} from './rpc.mjs';
 import {CredentialVault} from './credentials.mjs';
@@ -22,7 +22,7 @@ import {matchShareTitles} from '../share/order.mjs';
 import {grokBotAgentUrl} from '../grok-link.mjs';
 import {disableCli,enableCli,skillBundleDir,writeCliCredential} from './cli-bridge.mjs';
 import {applyExplorerRegistry,applyLoginItem,createExplorerBatch,createExplorerSync,explorerLogLine,explorerRegistryOps,explorerRejectNotice,floatingComposerTraits,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shouldApplyLoginItem,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction} from '../shell/actions.mjs';
-import {coalBallIcon,coalBallPng,trayIconImages} from '../shell/coal-ball.mjs';
+import {coalBallAppPng,coalBallIcon,coalBallPng,trayIconImages} from '../shell/coal-ball.mjs';
 import {acceptWindowControl,editCommand,mainWindowOptions,maximizedContentInset} from '../shell/window-chrome.mjs';
 import {composeLink,deeplinkNotice,parseDeeplink,shortcutSourceAllowed} from '../shell/deeplink.mjs';
 import {listedBots} from '../renderer/group-avatar.mjs';
@@ -34,11 +34,11 @@ const smoke=process.argv.includes('--smoke-test');
 const preview=smoke||process.argv.includes('--preview');
 const backgroundShare=process.argv.includes('--share-intake');
 const quietLaunch=backgroundShare||process.argv.includes('--explorer-forward')||process.argv.some(arg=>String(arg).includes('grokbotanywhere://'));
-let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false;
+let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null,suppressActivate=false,composerReadyState=null;
 let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
 let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,ipcSender=null;
-let composerPrefs={keepAfterSend:true,dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0;
+let composerPrefs={afterSend:'hide',dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0;
 let cliStatus={enabled:false,command:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:''};
 const pendingSharedComposers=new Set();let openingSharedComposer=false,shortcutsSuppressed=false;
 const pendingLinks=[];let deeplinkReady=false,deeplinkChain=Promise.resolve();
@@ -54,8 +54,8 @@ const errorCode=error=>/^[A-Z][A-Z0-9_]{1,70}$/.test(error?.message??'')?error.m
 function paintChrome(){if(!window||window.isDestroyed()||process.platform!=='darwin')return;window.setBackgroundColor('#00000000');}
 nativeTheme.on('updated',paintChrome);
 function loadComposerPrefs(){
-  try{const parsed=JSON.parse(readFileSync(join(app.getPath('userData'),'composer-prefs.json'),'utf8'));composerPrefs={keepAfterSend:parsed.keepAfterSend!==false,dismissOnOutside:parsed.dismissOnOutside!==false};}
-  catch{composerPrefs={keepAfterSend:true,dismissOnOutside:true};}
+  try{const parsed=JSON.parse(readFileSync(join(app.getPath('userData'),'composer-prefs.json'),'utf8'));composerPrefs={afterSend:parsed.afterSend==='open'?'open':'hide',dismissOnOutside:parsed.dismissOnOutside!==false};}
+  catch{composerPrefs={afterSend:'hide',dismissOnOutside:true};}
 }
 function saveComposerPrefs(){try{writeFileSync(join(app.getPath('userData'),'composer-prefs.json'),JSON.stringify(composerPrefs));}catch{}}
 function cliConfigDir(){return process.platform==='win32'?join(app.getPath('localAppData'),'Grok Bot Anywhere','cli'):join(app.getPath('userData'),'cli');}
@@ -86,11 +86,42 @@ function trayImage(){
   if(icons.some(icon=>icon.template))image.setTemplateImage(true);
   return image;
 }
+function showDock(){
+  if(process.platform!=='darwin')return;
+  try{app.setActivationPolicy('regular');}catch{}
+  try{app.dock?.show();}catch{}
+}
+function hideDock(){
+  if(process.platform!=='darwin'||quitting)return;
+  try{app.setActivationPolicy('accessory');}catch{}
+  try{app.dock?.hide();}catch{}
+}
+function composerVisible(){
+  return [floatWindow,avatarWindow,pickerWindow].some(target=>target&&!target.isDestroyed()&&target.isVisible());
+}
+function waitForComposerReady(generation){
+  return new Promise(resolve=>{
+    const started=Date.now();
+    const tick=()=>{
+      if(generation!==composeGeneration)return resolve(null);
+      const ready=composerReadyState;
+      if(ready?.generation===generation&&ready.card&&ready.avatar)return resolve(ready);
+      if(Date.now()-started>=1200)return resolve(ready?.generation===generation?ready:null);
+      setTimeout(tick,16);
+    };
+    tick();
+  });
+}
 function showMainWindow(){
   if(!window||window.isDestroyed())return;
+  showDock();
   if(window.isMinimized())window.restore();
   window.show();
   window.focus();
+}
+function applyAppIcon(){
+  if(smoke||preview||process.platform!=='darwin')return;
+  try{const image=nativeImage.createFromBuffer(coalBallAppPng(1024,{platform:'darwin'}));if(!image.isEmpty())app.dock?.setIcon(image);}catch{}
 }
 function ensureTray(){
   if(tray||smoke||preview)return;
@@ -250,9 +281,8 @@ async function confirmShare(botId){
         return {ok:false};
       }
     }else{
+      // openComposer owns revealing and focusing the composer now.
       await openComposer(botId,receipt);
-      // The share handoff ends in the composer, so it has to take focus.
-      if(floatWindow&&!floatWindow.isDestroyed()){floatWindow.focus();floatWindow.webContents.focus();}
     }
     try{rmSync(dir,{recursive:true,force:true});}catch{}
     sharePending=null;
@@ -376,11 +406,24 @@ function placePicker(width,height){
   pickerSize={width:Math.round(width)||760,height:Math.round(height)||188};
   layoutExtras();
 }
-function hideFloat(){
+function hideFloat({clearAttachments=false,releaseFocus=false}={}){
+  suppressActivate=true;
+  setTimeout(()=>{suppressActivate=false;},400);
   pickerOpen=false;
+  if(clearAttachments){
+    notify('composer-clear',{attachments:true});
+    if(pendingFloat){
+      if(pendingFloat.id){
+        const id=pendingFloat.id;
+        pendingFloat={...pendingFloat,files:[]};
+        if(rpc)void rpc.call('dismissComposer',{id}).catch(()=>{});
+      }else pendingFloat={...pendingFloat,localPaths:[]};
+    }
+  }
   for(const extra of [avatarWindow,pickerWindow])if(extra&&!extra.isDestroyed()&&extra.isVisible())extra.hide();
   if(!floatWindow||floatWindow.isDestroyed()||!floatWindow.isVisible())return;
   floatWindow.hide();
+  if(releaseFocus&&window&&!window.isDestroyed()&&window.isVisible()){try{window.blur();}catch{}}
 }
 function wireFloat(target,label){
   target.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -401,7 +444,7 @@ async function ensureFloat(){
   for(const target of [floatWindow,avatarWindow,pickerWindow]){if(traits.alwaysOnTop){if(mac)target.setAlwaysOnTop(true,'floating');else target.setAlwaysOnTop(true);}try{target.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true,skipTransformProcessType:true});}catch{target.setVisibleOnAllWorkspaces(true);}}
   avatarWindow.setIgnoreMouseEvents(true);
   wireFloat(floatWindow,'Composer');wireFloat(avatarWindow,'Avatar');wireFloat(pickerWindow,'Picker');
-  floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat();},120);});
+  floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat({clearAttachments:true});},120);});
   floatWindow.on('closed',()=>{floatWindow=null;});
   avatarWindow.on('closed',()=>{avatarWindow=null;});
   pickerWindow.on('closed',()=>{pickerWindow=null;});
@@ -475,14 +518,26 @@ async function openComposer(botId,receipt,options={}){
   activeBotId=botId;
   const draftText=typeof options.text==='string'?options.text:undefined;
   const attachToken=deferFiles?generation:0;
-  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes})=>({name,bytes})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
+  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes},index)=>({name,bytes,index})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
+  composerReadyState={generation,card:null,avatar:false};
   const float=await ensureFloat();
+  const entering=!float.isVisible();
   placeFloat(368,110);
+  if(entering){try{float.setOpacity(0);avatarWindow?.setOpacity(0);}catch{}}
   floatShownAt=Date.now();
   float.setIgnoreMouseEvents(false);
+  suppressActivate=true;
   float.show();float.focus();
+  if(!window||window.isDestroyed()||!window.isVisible())setTimeout(hideDock,60);
+  setTimeout(()=>{suppressActivate=false;},400);
   layoutExtras();
   notify('composer',pendingFloat);
+  const ready=await waitForComposerReady(generation);
+  if(generation!==composeGeneration)return {ok:true};
+  const card=ready?.card??{width:368,height:110};
+  placeFloat(card.width,card.height);
+  notify('composer-show',{});
+  setTimeout(()=>{try{float.setOpacity(1);avatarWindow?.setOpacity(1);}catch{}},20);
   if(prepared){
     const token=attachToken;
     const openedFor=botId;
@@ -506,11 +561,11 @@ async function presentShare(id){
   catch(error){if(errorCode(error)!=='RECEIPT_NOT_SENDABLE'&&errorCode(error)!=='RECEIPT_NOT_FOUND')issue(errorCode(error));}
 }
 function presentPendingComposer(){
-  const pending=(latestState.inbox??[]).filter(item=>item.status==='needs-input'&&item.phase==='ready'&&shareHandoff({mode:item.mode})==='composer');
+  const pending=(latestState.inbox??[]).filter(item=>item.status==='needs-input'&&item.phase==='ready'&&!item.composerDismissed&&shareHandoff({mode:item.mode})==='composer');
   const item=pending.sort((a,b)=>a.createdAt-b.createdAt).at(-1);
   if(item)void presentShare(item.id);
 }
-async function sendDraft(botId,text,files,receiptId){
+async function sendDraft(botId,text,files,receiptId,remoteKeep){
   if(preview)throw new Error('PREVIEW_ONLY');
   if(typeof text!=='string'||text.length>2_000_000)throw new Error('MESSAGE_INVALID');
   if(files!=null&&(!Array.isArray(files)||files.length>100||files.some(path=>typeof path!=='string'||!path)))throw new Error('ATTACHMENT_INVALID');
@@ -518,8 +573,10 @@ async function sendDraft(botId,text,files,receiptId){
   if(receiptId){
     const item=await rpc.call('composer',{id:receiptId});
     if(item.botId!==botId)throw new Error('RECEIPT_SCOPE_MISMATCH');
-    const merged=extra.length?[...item.files.map(file=>file.path),...extra]:undefined;
-    const result=await rpc.call('submit',{id:receiptId,text,...merged?{files:merged}:{}},0);
+    const selected=Array.isArray(remoteKeep)?new Set(remoteKeep.filter(index=>Number.isSafeInteger(index)&&index>=0)):null;
+    const kept=selected?item.files.filter((_file,index)=>selected.has(index)):item.files;
+    const merged=selected?[...kept.map(file=>file.path),...extra]:(extra.length?[...item.files.map(file=>file.path),...extra]:undefined);
+    const result=await rpc.call('submit',{id:receiptId,text,...merged?{files:merged}:selected?{files:[]}:{}},0);
     return {id:result.id,status:result.status,error:result.error??null};
   }
   if(!text.trim()&&!extra.length)throw new Error('RECEIPT_EMPTY');
@@ -544,6 +601,79 @@ async function accountAction(method){
     void rpc.call('resume').catch(error=>issue(errorCode(error)));
     return publicState();
   }finally{accountBusy=false;}
+}
+function tailText(value,limit){
+  if(typeof value!=='string'||!value)return '';
+  return value.length>limit?`… ${value.length-limit} characters omitted …\n${value.slice(-limit)}`:value;
+}
+function menuSummary(installed){
+  const entries=(installed?.entries??[]).map(entry=>({slot:entry.slot,botName:entry.botName,generation:entry.generation??1,extensionId:entry.extensionId??'',mode:entry.mode??''}));
+  return {layoutVersion:installed?.layoutVersion??null,hostPath:installed?.hostPath??'',build:installed?.build??null,entries};
+}
+async function copyDiagnostics(){
+  const root=join(app.getPath('userData'),'ShareInbox');
+  const status=shareMenu?.status??{available:false,registered:0,needsUpdate:true};
+  const lines=[
+    `Grok Bot Anywhere ${app.getVersion()}`,
+    `time=${new Date().toISOString()}`,
+    `platform=${process.platform} ${process.arch}`,
+    `electron=${process.versions.electron??''} node=${process.versions.node??''}`,
+    `packaged=${app.isPackaged}`,
+    `hostIssue=${hostIssue??''}`,
+    `shareMenu=${JSON.stringify({available:!!status.available,registered:status.registered??0,enabled:status.enabled??0,needsUpdate:!!status.needsUpdate,busy:!!status.busy,error:status.error??''})}`,
+    `installed=${JSON.stringify(menuSummary(shareMenu?.installed))}`
+  ];
+  try{
+    const finderPid=(await runProcess('/usr/bin/pgrep',['-x','Finder'])).stdout.trim().split('\n')[0];
+    const finderStart=(await runProcess('/bin/ps',['-o','lstart=','-p',finderPid])).stdout.trim();
+    lines.push(`finder=${finderPid} started=${finderStart}`);
+  }catch(error){lines.push(`finder=<${error.code??error.message}>`);}
+  try{lines.push(`menu-state-updated=${(await stat(join(root,'menu-state.json'))).mtime.toISOString()}`);}catch{}
+  for(const name of ['configuration.json','menu-state.json']){
+    try{
+      const data=JSON.parse(await readFile(join(root,name),'utf8'));
+      const entries=(data.entries??[]).map(entry=>({slot:entry.slot,botName:entry.botName,mode:entry.mode??'',generation:entry.generation??1}));
+      lines.push(`${name}=${JSON.stringify({accountId:data.accountId?'[set]':null,entries})}`);
+    }catch(error){lines.push(`${name}=<unreadable: ${error.code??error.message}>`);}
+  }
+  try{
+    const log=await readFile(join(root,'menu-update.log'),'utf8');
+    lines.push('','menu-update.log (tail):',tailText(log,30000));
+  }catch(error){
+    lines.push('',`menu-update.log=<${error.code??error.message}>`);
+  }
+  try{
+    const names=(await readdir(root)).filter(name=>name.startsWith('update-failure-')&&name.endsWith('.txt'));
+    const files=[];
+    for(const name of names){const info=await stat(join(root,name));files.push({name,mtime:info.mtimeMs});}
+    files.sort((a,b)=>b.mtime-a.mtime);
+    for(const file of files.slice(0,2)){
+      const content=await readFile(join(root,file.name),'utf8').catch(error=>`<${error.code??error.message}>`);
+      lines.push('',`${file.name}:`,tailText(content,8000));
+    }
+    if(!files.length)lines.push('','update-failure-*.txt=none');
+  }catch(error){lines.push('',`update-failure-*.txt=<${error.code??error.message}>`);}
+  const text=lines.join('\n');
+  clipboard.writeText(text);
+  return {copied:true,characters:text.length};
+}
+async function refreshFinderMenu(){
+  if(process.platform!=='darwin')return;
+  try{await runProcess('/usr/bin/killall',['Finder'],{timeout:8000});}catch{}
+}
+function scheduleFinderRefresh(delay=1200){
+  if(process.platform!=='darwin'||preview||smoke)return;
+  clearTimeout(finderRefreshTimer);
+  finderRefreshTimer=setTimeout(()=>{finderRefreshTimer=null;void refreshFinderMenu();},delay);
+}
+async function refreshFinderIfStale(){
+  if(process.platform!=='darwin'||preview||smoke||!shareMenu)return;
+  try{
+    const pid=(await runProcess('/usr/bin/pgrep',['-x','Finder'])).stdout.trim().split('\n')[0];
+    const started=Date.parse((await runProcess('/bin/ps',['-o','lstart=','-p',pid])).stdout.trim());
+    const state=await stat(join(shareMenu.root,'menu-state.json'));
+    if(Number.isFinite(started)&&started<state.mtimeMs)scheduleFinderRefresh();
+  }catch{}
 }
 async function nativeRequest(method,p){
   switch(method){
@@ -616,6 +746,7 @@ async function dispatch(method,p){
       update();
       return {enabled:explorerMenu===true};
     }
+    case 'copyDiagnostics':return copyDiagnostics();
     case 'updateMenu':{
       if(!shareMenu||preview)throw new Error('MENU_UNAVAILABLE');
       menuReconciler.request(latestState);await menuReconciler.flush({force:true});return shareMenu.status;
@@ -636,13 +767,22 @@ async function dispatch(method,p){
       update();return touchBarPinPayload(touchBarPinned);
     }
     case 'setComposerPrefs':{
-      composerPrefs={keepAfterSend:typeof p.keepAfterSend==='boolean'?p.keepAfterSend:composerPrefs.keepAfterSend,dismissOnOutside:typeof p.dismissOnOutside==='boolean'?p.dismissOnOutside:composerPrefs.dismissOnOutside};
+      composerPrefs={afterSend:['hide','open'].includes(p.afterSend)?p.afterSend:composerPrefs.afterSend,dismissOnOutside:typeof p.dismissOnOutside==='boolean'?p.dismissOnOutside:composerPrefs.dismissOnOutside};
       saveComposerPrefs();update();return composerPrefs;
     }
     case 'noteBot':if(typeof p.botId==='string'){activeBotId=p.botId;update();}return {ok:true};
     case 'pendingComposer':return pendingFloat;
-    case 'hideComposer':hideFloat();return {ok:true};
+    case 'hideComposer':hideFloat({clearAttachments:p.clear===true,releaseFocus:true});return {ok:true};
+    case 'focusComposer':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.focus();return {ok:true};
     case 'setHit':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.setIgnoreMouseEvents(!p.hit,{forward:true});return {ok:true};
+    case 'composerReady':{
+      const ready=composerReadyState;
+      if(ready&&ready.generation===composeGeneration){
+       if(p.part==='card'&&Number.isFinite(p.width)&&Number.isFinite(p.height))ready.card={width:Math.max(1,Math.round(p.width)),height:Math.max(1,Math.round(p.height))};
+       if(p.part==='avatar')ready.avatar=true;
+      }
+      return {ok:true};
+    }
     case 'placeComposer':if(p.regions?.part==='picker')placePicker(p.width,p.height);else placeFloat(p.width,p.height);return {ok:true};
     case 'syncPicker':{
       pickerOpen=!!p.open;
@@ -725,7 +865,7 @@ function pushWindowState(){
 }
 async function createWindow(){
   window=new BrowserWindow({...mainWindowOptions(process.platform),
-    ...(process.platform==='win32'?{icon:nativeImage.createFromBuffer(coalBallPng(256))}:{}),
+    ...(process.platform==='win32'?{icon:nativeImage.createFromBuffer(coalBallAppPng(256,{platform:'win32'}))}:{}),
     webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false}});
   if(process.platform==='win32'){try{window.setBackgroundMaterial('acrylic');windowMaterial='acrylic';}catch{window.setBackgroundColor('#f4f4f4');windowMaterial='none';}}
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -733,15 +873,16 @@ async function createWindow(){
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
   bindWindowsEditKeys(window.webContents);
-  window.on('close',event=>{if(windowCloseAction({quitting,smoke,hasTray:!!tray})==='hide'){event.preventDefault();window.hide();}});
+  window.on('close',event=>{if(windowCloseAction({quitting,smoke,hasTray:!!tray})==='hide'){event.preventDefault();window.hide();setTimeout(hideDock,50);}});
   for(const name of ['maximize','unmaximize','focus','blur'])window.on(name,pushWindowState);
+  window.on('show',showDock);
   window.webContents.on('did-finish-load',pushWindowState);
   window.on('session-end',()=>{quitting=true;});
   window.once('ready-to-show',()=>{
     let wasOpenedAtLogin=false;
     try{wasOpenedAtLogin=app.getLoginItemSettings().wasOpenedAtLogin===true;}catch{wasOpenedAtLogin=false;}
     const openedAtLogin=openedAsLoginItem({wasOpenedAtLogin,argv:process.argv});
-    if(!smoke&&!quietLaunch&&!openedAtLogin)showMainWindow();
+    if(!smoke&&!quietLaunch&&!openedAtLogin)showMainWindow();else if(!smoke)hideDock();
   });
   await window.loadFile(join(here,'../../out/index.html'));
 }
@@ -776,8 +917,14 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
       await shareMenu.initialize();
       menuReconciler=new MenuReconciler({
         sync:state=>shareMenu.sync(state),publish:state=>shareMenu.sync(state),needsUpdate:()=>shareMenu.status.needsUpdate,
-        update:async(state,isCurrent)=>{const icons=await captureMenuIcons(state,join(here,'../../out/native-avatar/index.html'));if(!isCurrent())return;return shareMenu.update(state,icons,{isCurrent});},
-        onError:()=>{shareMenu.status.error='MENU_UPDATE_FAILED';issue('MENU_UPDATE_FAILED');}
+        update:async(state,isCurrent,force)=>{const icons=await captureMenuIcons(state,join(here,'../../out/native-avatar/index.html'));if(!isCurrent())return;const result=await shareMenu.update(state,icons,{isCurrent,force});if(result)scheduleFinderRefresh();return result;},
+        onError:error=>{
+          if(['MENU_SUPERSEDED','MENU_UPDATE_BUSY','ACCOUNT_BUSY'].includes(error?.message))return;
+          shareMenu.status.error='MENU_UPDATE_FAILED';
+          const detail=[new Date().toISOString(),error?.message??String(error),error?.cause?.message,error?.cause?.stderr,error?.stack].filter(Boolean).join('\n');
+          void appendFile(join(app.getPath('userData'),'ShareInbox','menu-update.log'),detail+'\n---\n',{mode:0o600}).catch(()=>{});
+          issue('MENU_UPDATE_FAILED');
+        }
       });
     }
   }
@@ -792,6 +939,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   latestState=await rpc.call('initialize',{root:join(app.getPath('userData'),'inbox'),shareRoot:shareMenu?.root,preview,locale:app.getLocale()});
   applyShortcuts(latestState.shortcuts);
   if(menuReconciler)menuReconciler.request(latestState);
+  void refreshFinderIfStale();
   nativeTheme.themeSource=latestState.theme;
   ipcMain.handle('anywhere:call',async(event,method,params)=>{
     if(!trusted(event))return {error:'UNTRUSTED_SENDER'};
@@ -813,10 +961,11 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   if(process.platform==='win32')Menu.setApplicationMenu(null);
   else{const menu=Menu.buildFromTemplate([
     ...(process.platform==='darwin'?[{label:app.name,submenu:[{role:'about'},{type:'separator'},{role:'quit'}]}]:[]),
-    {label:zh?'文件':'File',submenu:[{label:zh?'显示主窗口':'Show window',click:()=>showMainWindow()},...(process.platform!=='darwin'?[{role:'quit'}]:[])]},
+    {label:zh?'文件':'File',submenu:[{label:zh?'显示主窗口':'Show window',click:()=>showMainWindow()},{label:zh?'关闭窗口':'Close window',accelerator:'CmdOrCtrl+W',click:()=>{if(window&&!window.isDestroyed())window.close();}},...(process.platform!=='darwin'?[{role:'quit'}]:[])]},
     {role:'editMenu'},{role:'windowMenu'}]);Menu.setApplicationMenu(menu);}
   await createWindow();
   ensureTray();
+  applyAppIcon();
   await startCompanion();
   if(smoke){
     const result=await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{const start=Date.now();const tick=()=>{if(document.documentElement.dataset.ready==='true')resolve({title:document.title,headings:[...document.querySelectorAll('h1')].map(e=>e.textContent)});else if(Date.now()-start>10000)reject(new Error('RENDERER_NOT_READY'));else setTimeout(tick,50);};tick();})`);
@@ -857,7 +1006,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   }
  }).catch(error=>{console.error(errorCode(error));app.exit(1);});
 }
-app.on('activate',()=>showMainWindow());
+app.on('activate',()=>{if(suppressActivate||composerVisible())return;showMainWindow();});
 app.on('window-all-closed',()=>{if(smoke)app.quit();});
 app.on('session-end',()=>{quitting=true;});
 app.on('before-quit',()=>{quitting=true;if(tray){tray.destroy();tray=null;}stopExplorerSelection();unregisterShortcuts();menuReconciler?.close();companion?.stop();worker?.kill();rpc?.close();});

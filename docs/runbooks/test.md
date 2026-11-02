@@ -2,6 +2,10 @@
 
 状态：Current。
 
+## 前置
+
+Node >=22.13。根脚本会先跑 `scripts/check-node.mjs`；Node 20 会直接报错退出，不会只跑一半测试。
+
 ## 一键
 
 ```sh

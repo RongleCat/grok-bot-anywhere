@@ -25,11 +25,16 @@ if(model&&ShareInbox){
   const entries=model.menuEntries(input);
   const group=JSON.parse(entries.find(entry=>entry.botId==='bot-0').avatarKey);
   const single=JSON.parse(entries.find(entry=>entry.botId==='bot-1').avatarKey);
-  assert.equal(group.length,7);
-  assert.equal(group[5].length,4);
-  assert.equal(group[6],3);
-  assert.deepEqual(group[5].map(item=>item[0]),['bot-2','bot-3','bot-4','bot-5']);
-  assert.equal(single.length,5);
+  assert.equal(group.length,6);
+  assert.equal(group[4].length,4);
+  assert.equal(group[5],3);
+  assert.deepEqual(group[4].map(item=>item[0]),['bot-2','bot-3','bot-4','bot-5']);
+  assert.equal(single.length,4);
+ });
+ test('the main Bot marker never changes the share icon key',()=>{
+  const plain=model.menuEntries(state).find(entry=>entry.botId==='bot-1').avatarKey;
+  const main=model.menuEntries({...state,runtime:{mainAgentId:'bot-1'}}).find(entry=>entry.botId==='bot-1').avatarKey;
+  assert.equal(main,plain);
  });
  test('only WeChat-enabled recipients get at most twelve slots in configured order',()=>{
   const input=structuredClone(state);input.recipients[0].enabled=false;input.recipients[1].sources.wechat=false;

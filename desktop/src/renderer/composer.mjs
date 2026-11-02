@@ -1,6 +1,6 @@
 import {createAvatar} from 'grok-bot-avatar-engine';
 import {cutoutStack,groupMembers,listedBots,placeStack,stackPlan} from './group-avatar.mjs';
-import {acceptLateFiles} from '../shell/actions.mjs';
+import {acceptLateFiles,composerAfterSend} from '../shell/actions.mjs';
 const api=window.anywhere;
 const part=new URLSearchParams(location.search).get('part')||'card';
 const columns=10;
@@ -12,7 +12,7 @@ const $=id=>document.getElementById(id);
 const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;};
 const chinese=()=>state?.host?.locale?.startsWith('zh')??navigator.language.startsWith('zh');
 const t=(cn,en)=>chinese()?cn:en;
-const prefs=()=>state?.composerPrefs??{keepAfterSend:true,dismissOnOutside:true};
+const prefs=()=>state?.composerPrefs??{afterSend:'hide',dismissOnOutside:true};
 const ordered=()=>{
  if(!state)return [];
  const visible=new Set(listedBots(state.bots).map(bot=>bot.id));
@@ -27,6 +27,12 @@ const errors={
  BOT_SEND_HELD:['这个 Bot 有一条未确认的发送，请先到发送记录里核对。','This Bot has an unconfirmed send. Check Send history first.']
 };
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,4000);}
+function playEnter(){
+ for(const node of [$('card'),$('avatar')]){
+  if(!node)continue;
+  node.classList.remove('entering');void node.offsetWidth;node.classList.add('entering');
+ }
+}
 function lucide(paths){const node=document.createElementNS('http://www.w3.org/2000/svg','svg');node.setAttribute('viewBox','0 0 24 24');node.setAttribute('width','16');node.setAttribute('height','16');node.setAttribute('fill','none');node.setAttribute('stroke','currentColor');node.setAttribute('stroke-width','2');node.setAttribute('stroke-linecap','round');node.setAttribute('stroke-linejoin','round');node.setAttribute('aria-hidden','true');for(const d of paths){const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('d',d);node.append(shape);}return node;}
 function paintOne(bot,size,reducedMotion,bucket=handles){
  const target=el('div','avatar');target.style.width=target.style.height=`${size}px`;
@@ -67,17 +73,18 @@ function confirmPick(){
  const bots=ordered();
  if(!picking||!bots[pickIndex]){picking=false;render();return;}
  const bot=bots[pickIndex];
- picking=false;
+ picking=false;focus=true;
  if(bot.id!==draft.botId){draft.botId=bot.id;draft.receiptId=null;draft.remote=[];fileToken=null;queuedFiles=null;}
  void api.noteBot(bot.id).catch(()=>{});
  render();
+ void api.focusComposer().catch(()=>{});
 }
 function mergePaths(paths){
  for(const path of paths??[]){if(typeof path!=='string'||!path||draft.paths.includes(path)||draft.paths.length+draft.remote.length>=100)continue;draft.paths.push(path);draft.names.push(path.split(/[\\/]/).pop());}
 }
 function applyPayload(data){
  if(!data?.botId)return;
- if(data.id){draft.botId=data.botId;draft.receiptId=data.id;draft.text=data.text??'';draft.remote=data.files??[];draft.paths=[];draft.names=[];}
+ if(data.id){draft.botId=data.botId;draft.receiptId=data.id;draft.text=data.text??'';draft.remote=(data.files??[]).map((file,index)=>({...file,index:file.index??index}));draft.paths=[];draft.names=[];}
  else{
   if(data.botId!==draft.botId){draft.botId=data.botId;draft.receiptId=null;draft.remote=[];}
   if(typeof data.text==='string'){draft.botId=data.botId;draft.text=data.text;draft.receiptId=null;draft.remote=[];draft.paths=[];draft.names=[];}
@@ -115,16 +122,29 @@ function reportSize(){
  const card=$('card');if(!card)return;
  const rect=card.getBoundingClientRect();
  const width=Math.ceil(rect.width),height=Math.ceil(rect.height);
+ if(height<8)return;
+ void api.composerReady({part:'card',width,height}).catch(()=>{});
  const key=`card:${width}x${height}:${picking}:${pickIndex}`;
- if(key===placed||height<8)return;placed=key;
+ if(key===placed)return;placed=key;
  void api.placeComposer(width,height).catch(()=>{});
  void api.syncPicker({open:picking,index:pickIndex}).catch(()=>{});
 }
 function canSend(){return !!(draft.text.trim()||draft.paths.length||draft.remote.length);}
+function syncPickerSelection(bots){
+ const picker=$('picker');const grid=picker.querySelector('.picker-grid');if(!grid)return;
+ const activeRow=Math.floor(pickIndex/columns);
+ [...grid.children].forEach((cell,index)=>{
+  const selected=index===pickIndex;
+  cell.classList.toggle('selected',selected);cell.setAttribute('aria-selected',String(selected));
+  const ordinal=cell.querySelector('.pick-index');
+  if(ordinal){ordinal.hidden=Math.floor(index/columns)!==activeRow;ordinal.textContent=index%columns===9?'0':String(index%columns+1);}
+ });
+ const selected=grid.children[pickIndex];if(selected)selected.scrollIntoView({block:'nearest'});
+}
 function renderPicker(bots){
  const picker=$('picker');
- const stamp=`${picking}:${pickIndex}:${state.theme}:${bots.map(bot=>`${bot.id}:${(bot.memberAgentIds??[]).join(',')}`).join('|')}`;
- if(stamp===pickerStamp)return;
+ const stamp=`${picking}:${state.theme}:${bots.map(bot=>`${bot.id}:${bot.name??''}:${(bot.memberAgentIds??[]).join(',')}`).join('|')}`;
+ if(stamp===pickerStamp){if(picking)syncPickerSelection(bots);return;}
  pickerStamp=stamp;
  for(const handle of pickerHandles)handle.destroy();pickerHandles.length=0;
  picker.querySelectorAll('.avatar-stack').forEach(stack=>stack.__cutout?.());
@@ -135,7 +155,7 @@ function renderPicker(bots){
  const activeRow=Math.floor(pickIndex/columns);
  bots.forEach((item,index)=>{
   const cell=el('button',`pick${index===pickIndex?' selected':''}`);cell.type='button';cell.setAttribute('role','option');cell.setAttribute('aria-selected',String(index===pickIndex));
-  if(Math.floor(index/columns)===activeRow)cell.append(el('span','pick-index',index%columns===9?'0':String(index%columns+1)));
+  const ordinal=el('span','pick-index',index%columns===9?'0':String(index%columns+1));ordinal.hidden=Math.floor(index/columns)!==activeRow;cell.append(ordinal);
   const face=paintFace(item,36,true,pickerHandles);
   cell.append(face,el('span','pick-name',item.name||t('未命名 Bot','Unnamed Bot')));
   cell.addEventListener('click',()=>{if(part==='picker'){void api.pickBot(item.id);return;}pickIndex=index;confirmPick();});
@@ -153,6 +173,7 @@ function renderAvatar(){
  if(!bot)return;
  draft.botId=bot.id;paintAvatar(bot);
  document.documentElement.dataset.ready='true';
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{if(part==='avatar')void api.composerReady({part:'avatar'}).catch(()=>{});}));
 }
 function renderPickerOnly(){
  if(!state)return;
@@ -189,13 +210,18 @@ function render(){
   const unlock=el('button','',t('解除暂停','Unlock'));unlock.type='button';unlock.addEventListener('click',()=>void api.resolve(held.id).catch(error=>toast(errors[error.message]?t(...errors[error.message]):t('没有完成。','That did not finish.'))));
   line.append(unlock);card.append(line);
  }
- const files=[...draft.remote.map(file=>({name:file.name})),...draft.names.map((name,index)=>({name,index}))];
+ const files=[...draft.remote.map((file,index)=>({name:file.name,kind:'remote',index})),...draft.names.map((name,index)=>({name,kind:'local',index}))];
  if(files.length){
   const chips=el('div','chips');
   for(const file of files){
    const chip=el('span','chip');chip.append(el('span','',file.name));
-   if(file.index!==undefined){const remove=el('button','','×');remove.type='button';remove.setAttribute('aria-label',t('移除','Remove'));remove.addEventListener('click',()=>{draft.names.splice(file.index,1);draft.paths.splice(file.index,1);render();});chip.append(remove);}
-   chips.append(chip);
+   const remove=el('button','','×');remove.type='button';remove.setAttribute('aria-label',t('移除','Remove'));
+   remove.addEventListener('click',()=>{
+    if(file.kind==='remote')draft.remote.splice(file.index,1);
+    else{draft.names.splice(file.index,1);draft.paths.splice(file.index,1);}
+    render();
+   });
+   chip.append(remove);chips.append(chip);
   }
   card.append(chips);
  }
@@ -205,7 +231,7 @@ function render(){
  const sendButton=el('button','send');sendButton.type='button';sendButton.setAttribute('aria-label',t('发送','Send'));sendButton.append(lucide(['m5 12 7-7 7 7','M12 19V5']));
  sendButton.disabled=sending||!canSend();sendButton.addEventListener('click',()=>void send());
  bar.append(attach,sendButton);
- if(!prefs().dismissOnOutside){const close=el('button','close');close.type='button';close.setAttribute('aria-label',t('收起','Close'));close.append(lucide(['M18 6 6 18','m6 6 12 12']));close.addEventListener('click',()=>void api.hideComposer());bar.append(close);}
+ if(!prefs().dismissOnOutside){const close=el('button','close');close.type='button';close.setAttribute('aria-label',t('收起','Close'));close.append(lucide(['M18 6 6 18','m6 6 12 12']));close.addEventListener('click',()=>void api.hideComposer(true));bar.append(close);}
  card.append(bar);
  card.ondragover=event=>event.preventDefault();
  card.ondrop=event=>{event.preventDefault();addPaths(api.filePaths([...event.dataTransfer.files]));};
@@ -216,7 +242,7 @@ function render(){
 }
 function onKey(event){
  if(event.isComposing||event.keyCode===229)return;
- if(event.key==='Escape'){event.preventDefault();if(picking){picking=false;render();}else void api.hideComposer();return;}
+ if(event.key==='Escape'){event.preventDefault();if(picking){picking=false;render();}else void api.hideComposer(true);return;}
  if(event.key==='Tab'&&!event.metaKey&&!event.ctrlKey&&!event.altKey){
   event.preventDefault();
   if(picking)confirmPick();
@@ -242,16 +268,20 @@ async function send(){
  if(!bot||sending||(!draft.text.trim()&&!draft.paths.length&&!draft.remote.length))return;
  sending=true;render();
  try{
-  const result=await api.sendDraft(bot.id,draft.text,draft.paths,draft.receiptId);
+  const result=await api.sendDraft(bot.id,draft.text,draft.paths,draft.receiptId,draft.receiptId?draft.remote.map(file=>file.index).filter(Number.isInteger):undefined);
   if(result?.status!=='sent')throw new Error(result?.status==='unconfirmed'?'SEND_UNCONFIRMED':result?.error||'SEND_FAILED');
   draft.text='';draft.paths=[];draft.names=[];draft.remote=[];draft.receiptId=null;
-  if(!prefs().keepAfterSend){await api.hideComposer();return;}
+  const recipient=state?.recipients?.find(row=>row.botId===bot.id);
+  const action=composerAfterSend(recipient,prefs());
+  await api.hideComposer();
+  if(action==='open'){try{await api.openBot(bot.id);}catch{}}
  }catch(error){toast(errors[error.message]?t(...errors[error.message]):t('没有发出去。','It was not sent.'));}
  finally{sending=false;focus=true;render();}
 }
 window.addEventListener('resize',()=>reportSize());
 if(part==='avatar'){
  api.onChange(message=>{
+  if(message.event==='composer-show'){playEnter();return;}
   if(message.event==='state')state=message.data;
   if(message.event==='composer'&&message.data?.botId)draft.botId=message.data.botId;
   if(message.event==='state'&&state?.activeBotId)draft.botId=state.activeBotId;
@@ -266,6 +296,8 @@ if(part==='avatar'){
  });
 }else{
  api.onChange(message=>{
+  if(message.event==='composer-clear'){draft.paths=[];draft.names=[];draft.remote=[];fileToken=null;queuedFiles=null;if(state)render();return;}
+  if(message.event==='composer-show'){playEnter();return;}
   if(message.event==='composer-files'){acceptComposerFiles(message.data,true);return;}
   if(message.event==='composer'){placed='';applyPayload(message.data);}
   if(message.event==='pick'&&message.data?.botId){const index=ordered().findIndex(bot=>bot.id===message.data.botId);if(index>=0)pickIndex=index;confirmPick();return;}

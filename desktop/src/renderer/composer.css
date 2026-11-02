@@ -55,3 +55,7 @@ html[data-part=avatar] .float-avatar,html[data-part=avatar] .avatar{width:88px;h
 .icon svg,.send svg,.close svg{display:block}
 .spacer{flex:1}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:320px;padding:8px 12px;border-radius:12px;background:var(--text);color:var(--glass);font-size:12px}
+
+@keyframes composer-in{from{opacity:0;transform:translateY(6px) scale(.992)}to{opacity:1;transform:none}}
+#card.entering,#avatar.entering{animation:composer-in .16s cubic-bezier(.22,.8,.3,1) both}
+@media(prefers-reduced-motion:reduce){#card.entering,#avatar.entering{animation:none}}

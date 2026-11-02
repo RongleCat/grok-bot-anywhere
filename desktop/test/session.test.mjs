@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {InboxStore} from '../src/service/store.mjs';
@@ -107,7 +107,7 @@ if(loaded) {
   const session=new loaded.AccountSession({store,sdk:{GrokBotClient:class {constructor(){return client;}}}});
   t.after(async()=>{session.close();store.close();await rm(root,{recursive:true,force:true});});
   await session.connect({accessToken:'test-secret'});
-  return {session,store,client};
+  return {session,store,client,root};
  }
  test('state exposes only account summary and never credentials or raw account fields',async t=>{
   const {session}=await setup(t); const state=session.snapshot();
@@ -121,6 +121,16 @@ if(loaded) {
   const item=await session.receive({botId:bot.id,source:'drop',text:'context'});
   assert.equal(sent,0);assert.equal(item.status,'needs-input');
   await session.submit(item.id,'context + question');assert.equal(sent,1);
+ });
+ test('dismissing a composer clears its files and prevents automatic presentation',async t=>{
+  const {session,store,root}=await setup(t);
+  const fixture=join(root,'attachment.txt');await writeFile(fixture,'payload');
+  const item=await session.receive({botId:bot.id,source:'drop',manual:true,text:'',files:[fixture]});
+  assert.equal(item.files.length,1);
+  const cleared=await session.dismissComposer(item.id);
+  assert.deepEqual(cleared.files,[]);
+  assert.equal(cleared.composerDismissed,true);
+  assert.deepEqual(store.get(item.id,'account-a').files,[]);
  });
  test('authentication failure disconnects delivery and retains local intake',async t=>{
   const {session,client}=await setup(t);

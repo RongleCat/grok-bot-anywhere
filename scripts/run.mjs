@@ -2,6 +2,7 @@
 // Cross-platform command launcher for root npm scripts.
 // Strips ELECTRON_RUN_AS_NODE so npm start/smoke always boots the real Electron app.
 import {spawn} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 
 const [cwd, command, ...args] = process.argv.slice(2);
 if (!cwd || !command) {
@@ -9,6 +10,7 @@ if (!cwd || !command) {
   process.exit(2);
 }
 
+try{execFileSync(process.execPath,['scripts/check-node.mjs'],{stdio:'inherit'});}catch{process.exit(1);}
 const env = {...process.env};
 delete env.ELECTRON_RUN_AS_NODE;
 

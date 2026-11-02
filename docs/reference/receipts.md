@@ -20,6 +20,7 @@
 | `replies[]` | 该 receipt 收到的回复事件 |
 | `sentAt` / `delivery` | 明确成功后的时间与服务端投递信息 |
 | `holdResolved` | 用户已核对，解除该 Bot 的暂停 |
+| `composerDismissed` | 用户主动关闭输入框后标记；附件已清空，启动时不再自动弹出 |
 
 ## 状态
 

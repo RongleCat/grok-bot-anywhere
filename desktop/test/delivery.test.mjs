@@ -30,6 +30,10 @@ if (Store && Delivery) {
     const {store} = await setup(t);
     assert.equal(store.recipient('a', bot.id).enabled, false);
     assert.equal(store.recipient('a', bot.id).mode, 'compose');
+    assert.equal(store.recipient('a', bot.id).composerAfterSend, 'inherit');
+    assert.throws(()=>store.saveRecipient('a',bot.id,{composerAfterSend:'nope'}),/RECIPIENT_INVALID/);
+    store.saveRecipient('a',bot.id,{composerAfterSend:'open'});
+    assert.equal(store.recipient('a',bot.id).composerAfterSend,'open');
     store.saveRecipient('a', bot.id, {enabled:true, sources:{wechat:true}});
     assert.equal(store.recipient('b', bot.id).enabled, false);
     assert.equal(store.recipient('a', bot.id).sources.drop, false);

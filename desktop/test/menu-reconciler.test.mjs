@@ -13,6 +13,22 @@ if(loaded){
   const installed=[];const queue=new loaded.MenuReconciler({sync:async()=>{},needsUpdate:()=>true,update:async state=>{installed.push(state.bots[0].id);return {registered:1};},delay:1000});
   queue.request(makeState('first'));queue.request(makeState('second'));await queue.flush();assert.deepEqual(installed,['second']);queue.close();
  });
+ test('manual resync forces one install even when the menu looks current',async()=>{
+  let calls=0;
+  const queue=new loaded.MenuReconciler({sync:async()=>{},needsUpdate:()=>false,update:async()=>{calls++;return {registered:1};},delay:1000});
+  queue.request(makeState('one'));await queue.flush({force:true});assert.equal(calls,1);
+  await queue.flush();assert.equal(calls,1);queue.close();
+ });
+ test('a state change during install retries the latest state instead of failing',async()=>{
+  const seen=[];let calls=0;
+  const queue=new loaded.MenuReconciler({sync:async()=>{},needsUpdate:()=>true,update:async state=>{calls++;seen.push(state.bots[0].id);if(calls===1){queue.request(makeState('second'));throw new Error('MENU_SUPERSEDED');}return {registered:1};},delay:1000});
+  queue.request(makeState('first'));await queue.flush();assert.deepEqual(seen,['first','second']);queue.close();
+ });
+ test('a busy installer is retried without surfacing a failure',async()=>{
+  let calls=0;
+  const queue=new loaded.MenuReconciler({sync:async()=>{},needsUpdate:()=>true,update:async()=>{calls++;if(calls===1)throw new Error('MENU_UPDATE_BUSY');return {registered:1};},delay:1000});
+  queue.request(makeState('one'));const result=await queue.flush();assert.equal(calls,2);assert.deepEqual(result,{registered:1});queue.close();
+ });
  test('a change while updating is processed next without parallel installers',async()=>{
   let release,started;const ready=new Promise(r=>{started=r;}),hold=new Promise(r=>{release=r;});const calls=[];let active=0,max=0;
   const queue=new loaded.MenuReconciler({sync:async()=>{},needsUpdate:()=>true,update:async state=>{active++;max=Math.max(max,active);calls.push(state.bots[0].id);if(calls.length===1){started();await hold;}active--;},delay:1000});

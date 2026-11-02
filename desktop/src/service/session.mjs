@@ -1,3 +1,4 @@
+import {rm} from 'node:fs/promises';
 import * as sdk from 'grok-bot-sdk';
 import {Delivery} from './delivery.mjs';
 import {readSidebarSettings} from './runtime-settings.mjs';
@@ -152,6 +153,15 @@ export class AccountSession {
     this.assertIdle();const accountId=this.requireAccount(),item=this.store.get(id,accountId);
     if(!item||item.status!=='unconfirmed')throw new Error('RECEIPT_NOT_UNCONFIRMED');
     const result=this.store.update(id,accountId,{holdResolved:true,resolvedAt:this.now()});this.emit();return result;
+  }
+  async dismissComposer(id){
+    const accountId=this.requireAccount(),item=this.store.get(id,accountId);
+    if(!item)throw new Error('RECEIPT_NOT_FOUND');
+    if(!['needs-input','failed'].includes(item.status))return item;
+    const updated=this.store.update(id,accountId,{files:[],composerDismissed:true});
+    for(const file of item.files??[])if(typeof file?.path==='string')try{await rm(file.path,{force:true});}catch{}
+    this.emit();
+    return updated;
   }
   composer(id){const item=this.store.get(id,this.requireAccount());if(!item||!['needs-input','failed'].includes(item.status))throw new Error('RECEIPT_NOT_SENDABLE');return item;}
   async resume(){

@@ -21,14 +21,17 @@ export class InboxStore {
     }
   }
   recipient(accountId,botId) {
+    const base={botId,enabled:false,mode:'compose',prefix:'',order:0,composerAfterSend:'inherit',sources:Object.fromEntries(SOURCES.map(s=>[s,false]))};
     const row=this.db.prepare('SELECT value FROM recipients WHERE account=? AND bot=?').get(accountId,botId);
-    return row?JSON.parse(row.value):{botId,enabled:false,mode:'compose',prefix:'',order:0,sources:Object.fromEntries(SOURCES.map(s=>[s,false]))};
+    if(!row)return base;
+    const saved=JSON.parse(row.value);
+    return {...base,...saved,sources:{...base.sources,...(saved.sources??{})}};
   }
   saveRecipient(accountId,botId,patch) {
     if(typeof accountId!=='string'||!accountId||typeof botId!=='string'||!botId||!patch||typeof patch!=='object') throw new Error('RECIPIENT_INVALID');
     const old=this.recipient(accountId,botId);
     const value={...old,...patch,botId,sources:{...old.sources,...patch.sources}};
-    if(typeof value.enabled!=='boolean'||!['compose','direct'].includes(value.mode)||typeof value.prefix!=='string'||value.prefix.length>10000||!Number.isSafeInteger(value.order)||SOURCES.some(s=>typeof value.sources[s]!=='boolean')) throw new Error('RECIPIENT_INVALID');
+    if(typeof value.enabled!=='boolean'||!['compose','direct'].includes(value.mode)||typeof value.prefix!=='string'||value.prefix.length>10000||!['inherit','hide','open'].includes(value.composerAfterSend)||!Number.isSafeInteger(value.order)||SOURCES.some(s=>typeof value.sources[s]!=='boolean')) throw new Error('RECIPIENT_INVALID');
     this.db.prepare('INSERT OR REPLACE INTO recipients VALUES (?,?,?)').run(accountId,botId,JSON.stringify(value));
     return value;
   }

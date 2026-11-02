@@ -23,14 +23,20 @@
 | `PREVIEW_ONLY` | 预览模式调用了真实动作 | 用正常启动，不要用 `--preview` |
 | `DELIVERY_IN_PROGRESS` | 退出/切换账号时仍有发送 | 等发送结束 |
 
+## npm test 只跑了 102 个或报 node:sqlite
+
+原因：Node 低于 22.13。根命令会由 `scripts/check-node.mjs` 拦截并提示；切到 Node 22 再跑。
+
 ## 微信菜单没有出现/不更新
 
 1. 设置里是否启用了至少一个接收 Bot？
-2. 点“更新微信转发菜单”，等完成；看是否有错误。
-3. **完全退出微信**再打开（微信缓存旧菜单）。
+2. 点「重新同步」。它会强制重建宿主并重新注册，不是只检查状态；重建可能需要十几秒。
+3. **完全退出微信**再打开（微信缓存旧菜单）。只关窗口不够。
 4. 重新打开「转发 → 其他应用」。
 5. 仍没有：检查 `~/Applications/Grok Bot Anywhere Menu/Contents/Helpers/` 是否有 `DestinationNN.app`；重跑 `npm run build:share`。
 6. 菜单行名对但头像空白：图标尺寸/资源不对，重建宿主；看 [分享菜单](../subsystems/share-menu.md)。
+7. 如果「微信」里已经更新，但 Finder 右键 → 共享里还是旧名字：应用会在菜单变化后自动重启 Finder。若仍异常，手动执行 `killall Finder` 再试。
+8. 仍不生效：设置 → 分享菜单 → **复制报错日志**，把内容发给维护者；也可直接看 `userData/ShareInbox/menu-update.log` 与宿主 `CFBundleVersion`，确认 `pluginkit -m -p com.apple.share-services` 里有当前 generation 的条目。
 
 ## npm start 直接退出：BrowserWindow 不是 electron 的导出
 

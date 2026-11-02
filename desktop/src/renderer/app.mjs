@@ -3,10 +3,11 @@ import {cutoutStack,groupMembers,isGroup,listedBots,placeStack,stackPlan} from '
 import {acceleratorFromEvent,formatAccelerator} from '../shortcuts.mjs';
 import {spliceWechatOrder} from '../share/order.mjs';
 import {coalBallSvg,confirmAccountStill,confirmCopy,toolboxShareOff} from '../shell/actions.mjs';
+import {renderMarkdown} from './markdown.mjs';
 import {captionGlyph,windowCaptionButtons,windowCaptionLabel} from '../shell/window-chrome.mjs';
 const api=window.anywhere;
 let state,page='bots',selected='',search='',searchOpen=true,grouped=false,avatars=[],busy=false,recordingSlot=null,inboxBot='',inboxFilterController,inboxAvatarObserver,menuReading=false,toastTimer,viewKey='',gridKey='';
-let settingsTab='account',copying=false,confirmState=null,copyOpener=null;
+let settingsTab='general',copying=false,confirmState=null,copyOpener=null,moreMenu=null,botDetail=null;
 try{grouped=localStorage.getItem('gba.grouped')==='1';}catch{}
 const chinese=()=>state?.host?.locale?.startsWith('zh')??navigator.language.startsWith('zh');
 const t=(cn,en)=>chinese()?cn:en;
@@ -99,7 +100,11 @@ function icon(name){
   down:['m6 9 6 6 6-6'],
   search:['M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z','m21 21-4.3-4.3'],
   sync:['M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8','M3 3v5h5','M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16','M21 21v-5h-5'],
-  group:['M3 7V5c0-1.1.9-2 2-2h2','M17 3h2c1.1 0 2 .9 2 2v2','M21 17v2c0 1.1-.9 2-2 2h-2','M7 21H5c-1.1 0-2-.9-2-2v-2']
+  group:['M3 7V5c0-1.1.9-2 2-2h2','M17 3h2c1.1 0 2 .9 2 2v2','M21 17v2c0 1.1-.9 2-2 2h-2','M7 21H5c-1.1 0-2-.9-2-2v-2'],
+  more:['M12 12h.01','M19 12h.01','M5 12h.01'],
+  copy:['M9 9h10v10H9z','M5 15V5h10'],
+  info:['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z','M12 16v-4','M12 8h.01'],
+  close:['M18 6 6 18','m6 6 12 12']
  };
  for(const d of paths[name]){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);svg.append(path);}
  if(name==='settings'){const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');circle.setAttribute('cx','12');circle.setAttribute('cy','12');circle.setAttribute('r','3');svg.append(circle);}
@@ -202,6 +207,7 @@ function paintWindowControls(){
  }
 }
 function render(){
+ if(moreMenu)closeMoreMenu();
  const visible=orderedBots();
  if(!visible.some(bot=>bot.id===selected)){
   const current=state.bots.find(bot=>bot.id===selected);
@@ -319,10 +325,8 @@ function renderChat(content){
  detail.style.setProperty('--on-accent',accentInk(accent));
  face.append(avatar(bot,112));
  hero.append(face,el('h1','hero-name',bot.name));
- if(bot.description)hero.append(el('p','hero-bio',bot.description));
  const actions=el('div','hero-actions');
- actions.append(smallButton(t('开始对话','Start'),()=>api.compose(bot.id),'primary'),smallButton(t('在 Grok Bot 中打开','Open in Grok Bot'),()=>api.openBot(bot.id),'secondary'),smallButton(t('查看发送记录','View send history'),()=>{inboxBot=bot.id;page='inbox';render();$('content').scrollTop=0;},'secondary'));
- if(!isGroup(bot))actions.append(smallButton(t('复制','Copy'),()=>copyBot(bot.id),'secondary'));
+ actions.append(smallButton(t('开始对话','Start'),()=>api.compose(bot.id),'primary'),smallButton(t('在 Grok Bot 中打开','Open in Grok Bot'),()=>api.openBot(bot.id),'secondary'),moreButton(bot));
  hero.append(actions);
  const ownShortcut=state.shortcuts?.bots?.[bot.id];
  if(ownShortcut)hero.append(el('p','hero-shortcut',formatAccelerator(ownShortcut,state.host?.platform)));
@@ -345,16 +349,19 @@ function renderChat(content){
   general.type='button';general.setAttribute('aria-pressed',String(generalOn));
   general.title=t('拖放和系统分享。','Drop and system share.');
   general.addEventListener('click',()=>{const next=!generalOn;return run(()=>api.configure(bot.id,{sources:Object.fromEntries(generalKeys.map(key=>[key,next]))}));});
+  const showShortcuts=state.host?.platform!=='darwin';
   const shortcutOn=!!recipient.sources?.shortcuts;
-  const shortcut=el('button',`source-chip${shortcutOn?' selected':''}`,t('快捷指令','Shortcuts'));
-  shortcut.type='button';shortcut.setAttribute('aria-pressed',String(shortcutOn));
-  shortcut.title=t('允许快捷指令和 grokbotanywhere 链接把文字交给这个 Bot。通过链接收到的内容会先放进输入框，由你确认后再发送。','Allow Shortcuts and grokbotanywhere links to deliver text to this Bot. Content received from a link is placed in the composer first. It is sent only after you confirm.');
-  shortcut.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{shortcuts:!shortcutOn}})));
+  const shortcut=showShortcuts?el('button',`source-chip${shortcutOn?' selected':''}`,t('快捷指令','Shortcuts')):null;
+  if(shortcut){
+   shortcut.type='button';shortcut.setAttribute('aria-pressed',String(shortcutOn));
+   shortcut.title=t('允许快捷指令和 grokbotanywhere 链接把文字交给这个 Bot。通过链接收到的内容会先放进输入框，由你确认后再发送。','Allow Shortcuts and grokbotanywhere links to deliver text to this Bot. Content received from a link is placed in the composer first. It is sent only after you confirm.');
+   shortcut.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{shortcuts:!shortcutOn}})));
+  }
   const wechatOn=!!recipient.sources.wechat;
   const wechat=el('button',`source-chip${wechatOn?' selected':''}`,t('微信','WeChat'));
   wechat.type='button';wechat.setAttribute('aria-pressed',String(wechatOn));
   wechat.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{wechat:!wechatOn}})));
-  sources.append(general,shortcut,wechat);
+  sources.append(general,...(shortcut?[shortcut]:[]),wechat);
   // Windows has a single share entry for every receiving Bot, so the per-source
   // switches would promise a choice that does not exist there.
   if(state.host?.platform!=='win32')card.append(settingRow(t('来源','Sources'),sources));
@@ -364,9 +371,15 @@ function renderChat(content){
    card.append(settingRow(t('前缀','Prefix'),prefix));
   }
  }
+ const afterMode=el('div','segment');afterMode.setAttribute('aria-label',t('输入框发送后','Composer after sending'));
+ for(const [value,label] of [['inherit',t('跟随全局','Use global')],['hide',t('隐藏','Hide')],['open',t('打开 Bot','Open Bot')]]){
+  const choice=el('button',(recipient?.composerAfterSend??'inherit')===value?'selected':'',label);choice.type='button';
+  choice.addEventListener('click',()=>run(()=>api.configure(bot.id,{composerAfterSend:value})));afterMode.append(choice);
+ }
+ card.append(settingRow(t('输入框发送后','Composer after sending'),afterMode,t('覆盖全局设置；默认跟随全局。','Overrides the global setting; follows it by default.')));
  card.append(shortcutRow(bot.id,t('打开悬浮输入框','Open composer'),t('只打开这个 Bot 的悬浮输入框。','Opens the floating composer for this Bot.')));
  card.append(shortcutRow(`grok:${bot.id}`,t('在 Grok Bot 中打开','Open in Grok Bot'),t('在 Grok Bot 里打开这个 Bot。','Opens this Bot in Grok Bot.')));
- card.append(settingRow(t('快捷指令','Shortcuts'),smallButton(t('复制快捷指令链接','Copy shortcut link'),async()=>{await api.copyComposeLink(bot.id);toast(t('已复制快捷指令链接','Shortcut link copied'));},'secondary'),t('在快捷指令里用「打开 URL」。','Use Open URL in Shortcuts.')));
+ if(state.host?.platform!=='darwin')card.append(settingRow(t('快捷指令','Shortcuts'),smallButton(t('复制快捷指令链接','Copy shortcut link'),async()=>{await api.copyComposeLink(bot.id);toast(t('已复制快捷指令链接','Shortcut link copied'));},'secondary'),t('在快捷指令里用「打开 URL」。','Use Open URL in Shortcuts.')));
  detail.append(hero,...memberCard?[memberCard]:[],card);content.append(detail);
 }
 function memberList(members){
@@ -484,8 +497,10 @@ function inboxBotFilter(){
  return wrap;
 }
 function settingsTabBar(){
- const tabs=[['account',t('账号','Account')],['appearance',t('外观','Appearance')],['shortcuts',t('快捷键','Shortcuts')],['composer',t('输入框','Composer')],['cli',t('命令行','Command line')],...(state.host?.platform==='darwin'?[['wechat',t('微信','WeChat')]]:[]),['toolbox',t('工具箱','Toolbox')]];
- if(!tabs.some(([id])=>id===settingsTab))settingsTab='account';
+ const tabs=[['general',t('常规','General')],['shortcuts',t('快捷键','Shortcuts')],['composer',t('输入框','Composer')],...(state.host?.platform==='darwin'?[['share',t('分享菜单','Share menu')]]:[]),['toolbox',t('工具箱','Toolbox')]];
+ const aliases={account:'general',appearance:'general',cli:'toolbox',wechat:'share'};
+ if(aliases[settingsTab])settingsTab=aliases[settingsTab];
+ if(!tabs.some(([id])=>id===settingsTab))settingsTab='general';
  const tablist=el('div','settings-tabs');
  tablist.setAttribute('role','tablist');tablist.setAttribute('aria-label',t('设置分组','Settings sections'));
  tabs.forEach(([id,label],index)=>{
@@ -531,32 +546,32 @@ function renderSettings(content){
  else{actions.append(loginButton());if(state.host?.platform==='darwin')actions.append(smallButton(t('本机登录','Local login'),()=>api.desktopLogin()));}
  accountRow.append(name,actions);account.append(accountRow);
  account.append(hostSwitch(t('开机自启动','Launch at login'),t('登录这台电脑后在后台打开。','Opens in the background when you sign in to this computer.'),!!state.host?.openAtLogin,t('开机自启动','Launch at login'),next=>api.setOpenAtLogin(next)));
- if(settingsTab==='account')panel.append(account);
+
  const appearance=el('section','group'),themeRow=el('div','group-row');themeRow.append(el('span','group-label',t('外观','Appearance')));
  const themes=el('div','segment');
  for(const [value,label] of [['system',t('系统','System')],['light',t('白','Light')],['dark',t('黑','Dark')]]){
   const choice=el('button',state.theme===value?'selected':'',label);choice.type='button';choice.addEventListener('click',()=>run(()=>api.theme(value)));themes.append(choice);
  }
- themeRow.append(themes);appearance.append(themeRow);if(settingsTab==='appearance')panel.append(appearance);
+ themeRow.append(themes);appearance.append(themeRow);if(settingsTab==='general')panel.append(account,appearance);
  const keys=el('section','group');
  keys.append(shortcutRow('compose',t('通用快捷键','General shortcut'),t('打开上次用过的 Bot。点按键，再按下组合。Esc 取消。','Opens the Bot you used last. Click the key, then press a combination. Esc cancels.')));
  keys.append(shortcutRow('open',t('在 Grok Bot 中打开','Open in Grok Bot'),t('打开上次选中的 Bot。链接是 grokbot://app/v1/agent?id= 加上这个 Bot 的编号。','Opens the Bot you selected last. The link is grokbot://app/v1/agent?id= plus that Bot id.')));
  if(state.host?.platform==='darwin')keys.append(hostSwitch(t('常驻 Touch Bar','Keep on the Touch Bar'),t('切到别的应用时，Touch Bar 上仍保留 Bot。点一下当前 Bot 会打开悬浮输入框。','The Touch Bar keeps the Bots while another app is in front. Press the current Bot to open the floating composer.'),!!state.host?.touchBarPinned,t('常驻 Touch Bar','Keep on the Touch Bar'),next=>api.setTouchBarPinned(next)));
  if(settingsTab==='shortcuts')panel.append(keys);
- const prefs=state.composerPrefs??{keepAfterSend:true,dismissOnOutside:true};
- const behavior=el('section','group'),keepRow=el('div','group-row');
- keepRow.append(el('span','group-label',t('发送后','After sending')));
- const keep=el('div','segment');
- for(const [value,label] of [[true,t('保留输入框','Keep open')],[false,t('直接隐藏','Hide')]]){
-  const choice=el('button',prefs.keepAfterSend===value?'selected':'',label);choice.type='button';
-  choice.addEventListener('click',()=>run(()=>api.setComposerPrefs({keepAfterSend:value,dismissOnOutside:prefs.dismissOnOutside!==false})));
-  keep.append(choice);
+ const prefs=state.composerPrefs??{afterSend:'hide',dismissOnOutside:true};
+ const behavior=el('section','group'),afterRow=el('div','group-row'),afterCopy=el('div','group-copy');
+ afterCopy.append(el('div','group-label',t('发送后','After sending')),el('div','group-help',t('默认隐藏输入框。单个 Bot 可以覆盖这个设置。','The composer hides by default. Each Bot can override this.')));
+ const after=el('div','segment');
+ for(const [value,label] of [['hide',t('隐藏输入框','Hide composer')],['open',t('打开 Grok Bot','Open Grok Bot')]]){
+  const choice=el('button',(prefs.afterSend??'hide')===value?'selected':'',label);choice.type='button';
+  choice.addEventListener('click',()=>run(()=>api.setComposerPrefs({afterSend:value,dismissOnOutside:prefs.dismissOnOutside!==false})));
+  after.append(choice);
  }
- keepRow.append(keep);behavior.append(keepRow);
+ afterRow.append(afterCopy,after);behavior.append(afterRow);
  const dismissRow=el('div','group-row'),dismissCopy=el('div');
  dismissCopy.append(el('div','group-label',t('点按外部关闭','Click outside closes')),el('div','group-help',t('关掉以后，悬浮输入框会显示关闭按钮。','When this is off, the floating composer shows a close button.')));
  const dismiss=el('input','switch');dismiss.type='checkbox';dismiss.checked=prefs.dismissOnOutside!==false;dismiss.setAttribute('aria-label',t('点按外部关闭','Click outside closes'));
- dismiss.addEventListener('change',()=>run(()=>api.setComposerPrefs({keepAfterSend:prefs.keepAfterSend!==false,dismissOnOutside:dismiss.checked})));
+ dismiss.addEventListener('change',()=>run(()=>api.setComposerPrefs({afterSend:prefs.afterSend??'hide',dismissOnOutside:dismiss.checked})));
  dismissRow.append(dismissCopy,dismiss);behavior.append(dismissRow);if(settingsTab==='composer')panel.append(behavior);
  const cli=state.host?.cli??{enabled:false,credential:false},cliPanel=el('section','group'),cliRow=el('div','group-row'),cliCopy=el('div');
  const cliPlain=t('命令行使用的登录信息会以明文保存在本机用户目录。新开的终端才会使用新的命令路径。','The login used by the command line is stored in plain text in this computer\'s user folder. New terminals pick up the new command path.');
@@ -564,11 +579,11 @@ function renderSettings(content){
  cliCopy.append(el('div','group-label',t('命令行','Command line')),el('div','group-help',cliHelp));
  const cliSwitch=el('input','switch');cliSwitch.type='checkbox';cliSwitch.checked=!!cli.enabled;cliSwitch.setAttribute('aria-label',t('命令行','Command line'));
  cliSwitch.addEventListener('change',()=>{const next=cliSwitch.checked;run(async()=>{try{await api.setCli(next);}catch(error){cliSwitch.checked=!next;throw error;}});});
- cliRow.append(cliCopy,cliSwitch);cliPanel.append(cliRow);if(settingsTab==='cli')panel.append(cliPanel);
- if(settingsTab==='wechat'&&state.host?.platform==='darwin'){
+ cliRow.append(cliCopy,cliSwitch);cliPanel.append(cliRow);
+ if(settingsTab==='share'&&state.host?.platform==='darwin'){
   const menu=state.host.menu??{},wechatPanel=el('section','group'),row=el('div','group-row'),info=el('div');
-  info.append(el('div','group-label',t('微信转发','WeChat')),el('div','group-help',!menu.available?t('这个版本没有分享扩展','Sharing extensions are not in this build'):menu.busy?t('正在同步菜单','Syncing the menu'):menu.needsUpdate?t('设置已保存，正在同步','Saved. Syncing the menu.'):t(`已启用 ${menu.registered??0} 个入口`,`${menu.registered??0} destinations on`)));
-  const update=smallButton(t('重新同步','Sync again'),async()=>{update.disabled=true;try{const result=await api.updateMenu();toast(t(`已同步 ${result.registered} 个入口`,`Synced ${result.registered} destinations`));}finally{update.disabled=false;}});
+  info.append(el('div','group-label',t('微信转发','WeChat')),el('div','group-help',!menu.available?t('这个版本没有分享扩展','Sharing extensions are not in this build'):menu.busy?t('正在同步菜单','Syncing the menu'):menu.needsUpdate?t('设置已保存，需要重新同步','Saved. Sync to update.'):t(`已启用 ${menu.registered??0} 个入口`,`${menu.registered??0} destinations on`)));
+  const update=smallButton(t('重新同步','Sync again'),async()=>{update.disabled=true;try{const result=await api.updateMenu();toast(t(`已同步 ${result.registered} 个入口。若微信里没变化，重新打开微信的转发菜单。`,`Synced ${result.registered} destinations. If WeChat still shows the old menu, reopen its forwarding menu.`));}catch{}finally{update.disabled=false;}});
   update.disabled=!menu.available||menu.busy;row.append(info,update);wechatPanel.append(row);
   const read=smallButton(menuReading?t('正在读取','Reading'):t('读取微信顺序','Read WeChat order'),readMenuOrder);
   read.disabled=menuReading;
@@ -582,7 +597,15 @@ function renderSettings(content){
    down.addEventListener('click',()=>run(()=>moveMenu(bot.id,1)));
    buttons.append(up,down);line.append(el('span','menu-order-name',bot.name),buttons);wechatPanel.append(line);
   });
-  panel.append(wechatPanel);
+  const diagnose=el('section','group');
+  const copyLog=smallButton(t('复制报错日志','Copy error log'),async()=>{
+   copyLog.disabled=true;
+   try{const result=await api.copyDiagnostics();toast(t(`已复制 ${result.characters} 个字符，可以直接粘贴给维护者。`,`Copied ${result.characters} characters. Paste it to the maintainer.`));}
+   catch{toast(t('复制失败','Could not copy'));}
+   finally{copyLog.disabled=false;}
+  });
+  diagnose.append(settingRow(t('排查','Troubleshoot'),copyLog,t('复制分享菜单状态、宿主版本和最近一次更新错误。可能包含本机路径，不包含登录凭据。','Copies share-menu status, host build and the latest update error. May include local paths, never credentials.')));
+  panel.append(wechatPanel,diagnose);
  }
  if(settingsTab==='toolbox'){
   const plans=toolboxShareOff(state.bots??[],state.recipients??[]);
@@ -592,7 +615,7 @@ function renderSettings(content){
   const turnOff=smallButton(t('一键关闭','Turn off all'),disableAllShare,'secondary');
   turnOff.disabled=!plans.length;
   row.append(copy,turnOff);
-  tool.append(row);panel.append(tool);
+  tool.append(row);panel.append(tool,cliPanel);
   if(state.host?.platform==='win32'){
    const menuOn=state.host?.explorerMenu!==false;
    const windows=el('section','group');
@@ -629,6 +652,74 @@ function accentInk(hex){
 }
 function loginButton(){return smallButton(busy?t('正在登录…','Signing in…'):t('连接账号','Connect'),async()=>{busy=true;render();try{await api.login();}finally{busy=false;render();}},'primary');}
 function smallButton(text,action,className='text-button'){const button=el('button',className,text);button.type='button';button.addEventListener('click',()=>run(action));return button;}
+function closeMoreMenu(){
+ if(!moreMenu)return;
+ const current=moreMenu;moreMenu=null;current.cleanup();
+ current.menu.remove();current.anchor.setAttribute('aria-expanded','false');
+}
+function positionMoreMenu(){
+ if(!moreMenu)return;
+ const {menu,anchor}=moreMenu,rect=anchor.getBoundingClientRect();
+ const width=menu.offsetWidth,height=menu.offsetHeight;
+ let left=Math.min(Math.max(8,rect.right-width),window.innerWidth-width-8);
+ let top=rect.bottom+6;
+ if(top+height>window.innerHeight-8)top=Math.max(8,rect.top-height-6);
+ menu.style.left=`${Math.round(left)}px`;menu.style.top=`${Math.round(top)}px`;
+}
+function openMoreMenu(bot,anchor){
+ closeMoreMenu();
+ const menu=el('div','more-menu');menu.id='bot-more-menu';menu.setAttribute('role','menu');menu.tabIndex=-1;
+ const item=(label,iconName,action)=>{
+  const button=el('button','more-item');button.type='button';button.setAttribute('role','menuitem');
+  button.append(icon(iconName),el('span','',label));
+  button.addEventListener('click',event=>{event.stopPropagation();closeMoreMenu();action();});
+  menu.append(button);return button;
+ };
+ item(t('查看发送记录','View send history'),'history',()=>{inboxBot=bot.id;page='inbox';render();$('content').scrollTop=0;});
+ if(!isGroup(bot))item(t('复制此 Bot','Copy this Bot'),'copy',()=>{void copyBot(bot.id);});
+ item(t('查看详情','View details'),'info',()=>openBotDetail(bot.id,anchor));
+ const outside=event=>{if(menu.contains(event.target)||anchor.contains(event.target))return;closeMoreMenu();};
+ const nearby=()=>positionMoreMenu();
+ const closeOnScroll=event=>{if(menu.contains(event.target))return;closeMoreMenu();};
+ document.addEventListener('pointerdown',outside,true);
+ window.addEventListener('resize',closeMoreMenu);
+ window.addEventListener('scroll',closeOnScroll,true);
+ const cleanup=()=>{
+  document.removeEventListener('pointerdown',outside,true);
+  window.removeEventListener('resize',closeMoreMenu);
+  window.removeEventListener('scroll',closeOnScroll,true);
+ };
+ menu.addEventListener('keydown',event=>{
+  const items=[...menu.querySelectorAll('.more-item')];const index=items.indexOf(document.activeElement);
+  if(event.key==='Escape'){event.preventDefault();closeMoreMenu();anchor.focus();return;}
+  if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+   event.preventDefault();const next=event.key==='ArrowDown'?(index+1)%items.length:(index-1+items.length)%items.length;items[next]?.focus();return;
+  }
+  if(event.key==='Home'){event.preventDefault();items[0]?.focus();return;}
+  if(event.key==='End'){event.preventDefault();items.at(-1)?.focus();}
+ });
+ moreMenu={botId:bot.id,anchor,menu,cleanup};
+ anchor.setAttribute('aria-expanded','true');
+ document.body.append(menu);
+ positionMoreMenu();
+ requestAnimationFrame(()=>{if(!moreMenu)return;moreMenu.menu.querySelector('.more-item')?.focus();});
+}
+function moreButton(bot){
+ const button=el('button','secondary more-button');button.type='button';button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
+ button.append(el('span','',t('更多','More')),icon('down'));
+ button.addEventListener('click',event=>{event.stopPropagation();if(moreMenu?.anchor===button)closeMoreMenu();else openMoreMenu(bot,button);});
+ return button;
+}
+function openBotDetail(botId,opener){
+ const bot=state.bots?.find(item=>item.id===botId);if(!bot)return;
+ closeMoreMenu();
+ botDetail={bot,opener:opener instanceof HTMLElement?opener:null};
+ paintOverlay();
+}
+function closeBotDetail(){
+ if(!botDetail)return;
+ const opener=botDetail.opener;botDetail=null;paintOverlay();focusOpener(opener);
+}
 function shortcutRow(slot,label,help){
  const shown=slot==='compose'?state.shortcuts?.compose:slot==='open'?state.shortcuts?.open:slot.startsWith('grok:')?state.shortcuts?.opens?.[slot.slice(5)]:state.shortcuts?.bots?.[slot];
  const recording=recordingSlot===slot;
@@ -790,7 +881,7 @@ function setBackgroundInert(on){
 }
 function paintOverlay(){
  let layer=document.getElementById('app-overlay');
- if(!copying&&!confirmState){
+ if(!copying&&!confirmState&&!botDetail){
   if(!layer)return;
   const opener=layer.__opener??null;
   layer.remove();
@@ -798,16 +889,41 @@ function paintOverlay(){
   focusOpener(opener);
   return;
  }
- if(confirmState&&!copying&&layer?.dataset.confirmKey===confirmKey(confirmState)&&layer.querySelector('.confirm-card')){
+ if(!botDetail&&confirmState&&!copying&&layer?.dataset.confirmKey===confirmKey(confirmState)&&layer.querySelector('.confirm-card')){
   setBackgroundInert(true);
   return;
  }
  if(!layer){layer=el('div','app-overlay');layer.id='app-overlay';document.body.append(layer);}
  layer.setAttribute('role','dialog');
  layer.setAttribute('aria-modal','true');
- layer.__opener=copying?(copyOpener??layer.__opener??null):(confirmState?.opener??layer.__opener??null);
+ layer.__opener=copying?(copyOpener??layer.__opener??null):(botDetail?.opener??confirmState?.opener??layer.__opener??null);
  setBackgroundInert(true);
  layer.replaceChildren();
+ layer.onclick=null;
+ if(botDetail){
+  const bot=botDetail.bot,card=el('section','bot-detail-card');
+  card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.setAttribute('aria-label',t(`${bot.name} 的详情`,`Details for ${bot.name}`));
+  const head=el('header','bot-detail-head'),identity=el('div','bot-detail-identity'),face=el('div','bot-detail-avatar');
+  face.append(avatar(bot,48));
+  const titles=el('div','bot-detail-titles');titles.append(el('h2','bot-detail-name',bot.name),el('p','bot-detail-type',isGroup(bot)?t('群聊','Group'):t('Bot','Bot')));
+  identity.append(face,titles);
+  const close=el('button','icon-button');close.type='button';close.setAttribute('aria-label',t('关闭详情','Close details'));close.append(icon('close'));close.addEventListener('click',closeBotDetail);
+  head.append(identity,close);
+  const body=el('div','bot-detail-body');
+  body.append(el('h3','bot-detail-section',t('指令描述','Instructions')));
+  const markdown=el('div','markdown-body');markdown.innerHTML=renderMarkdown(bot.description||t('这个 Bot 没有描述。','This Bot has no description.'));body.append(markdown);
+  const meta=el('dl','bot-detail-meta');
+  const addMeta=(label,value)=>{const term=el('dt','',label),detail=el('dd','',value);meta.append(term,detail);};
+  addMeta(t('ID','ID'),bot.id);
+  addMeta(t('类型','Type'),isGroup(bot)?t('群聊','Group'):t('Bot','Bot'));
+  if(isGroup(bot))addMeta(t('成员','Members'),groupMembers(bot,state.bots).map(item=>item.name).join(chinese()?'、':', ')||t('暂无','None'));
+  body.append(meta);
+  card.append(head,body);layer.append(card);
+  layer.setAttribute('aria-label',t(`${bot.name} 的详情`,`Details for ${bot.name}`));
+  layer.onclick=event=>{if(event.target===layer)closeBotDetail();};
+  queueMicrotask(()=>{if(close.isConnected)close.focus();});
+  return;
+ }
  if(copying){
   delete layer.dataset.confirmKey;
   const ball=el('div','coal-ball');ball.innerHTML=coalBallSvg();
@@ -867,6 +983,7 @@ $('sync').addEventListener('click',()=>{
  run(async()=>{state=await api.refresh();render();}).finally(()=>{syncing=false;const button=$('sync');if(button)button.disabled=false;});
 });
 window.addEventListener('keydown',event=>{
+ if(botDetail&&event.key==='Escape'){event.preventDefault();closeBotDetail();return;}
  if(confirmState&&event.key==='Escape'){event.preventDefault();settleConfirm(false);return;}
  if(!recordingSlot)return;
  event.preventDefault();
