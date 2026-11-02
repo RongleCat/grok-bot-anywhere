@@ -1,6 +1,6 @@
 # 打包与签名
 
-状态：Current。macOS 已验证签名+公证；Windows 只产出未签名 zip，未实机验证。
+状态：Current。macOS 已验证签名+公证；Windows 开发期用稀疏包并已实机验证，发布用完整 MSIX（未实现）。
 
 ## 配置
 
@@ -72,9 +72,28 @@ xcrun stapler validate "desktop/release/Grok Bot Anywhere-0.1.0-arm64.dmg"
 
 DMG/zip 是本地构建物，`.gitignore` 已排除。**发布前必须记录产物对应的 commit**；如果最后一次修改在产物之后，重打。历史教训见 [LESSONS.md](../../LESSONS.md)。
 
+## Windows：稀疏包与完整包
+
+开发期用**稀疏包**（当前实现）：包只带身份与清单，exe 在 `-InstallRoot` 下，脚本见 `desktop/scripts/pack-share.ps1` 与 `register-share.ps1`。它的好处是改动热、不必重打应用。
+
+发布期要换成**完整 MSIX**，把 Electron 应用整个放进包里。原因：稀疏包要求用户先装好应用再注册，且外部目录不能随包升级；完整包才有干净的一步安装、卸载和更新。
+
+完整包要处理三件事，缺一不可：
+
+| 事项 | 说明 |
+| --- | --- |
+| 包身份 | `Identity Name` + `Publisher` 一旦有真实用户就不能改；Publisher 必须与签名证书 Subject 逐字符一致 |
+| 数据迁移 | 完整 MSIX 会把 `app.getPath('userData')` 虚拟化到 `%LOCALAPPDATA%\Packages\<identity>\LocalCache\...`，老用户的 `%APPDATA%\Grok Bot Anywhere` 需要一次性迁移，否则升级后 Bot 列表为空 |
+| 更新 | 改用 `.appinstaller`（MSIX 自带升级），否则只能手动重装 |
+
+签名：`exe`/`dll`/`msix` **必须用同一张证书**，否则包与进程身份对不上。免费路径是 SignPath Foundation（要求公开仓库），本地开发用 `new-dev-certificate.ps1` 的自签证书。
+
+`pack-share.ps1 -Sign Unsigned` 产出的 zip 就是 SignPath 的输入形状（helper exe + msix），接 CI 时换成完整包的 payload 即可。
+
 ## 未完成
 
-- Windows 没有代码签名，也没有在 Windows 机器上安装/运行过。
+- Windows 只验证了稀疏包；完整 MSIX、数据迁移、`.appinstaller` 更新都还没做。
+- Windows 没有正式证书；SignPath 需要仓库公开后才能申请。
 - 没有 Developer ID 之外的商店分发、自动更新、公证重试流水线。
 - DMG 已签名公证，但没有上传到任何发布页。
 - Linux 没有打包目标。
