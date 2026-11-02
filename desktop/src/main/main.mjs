@@ -578,7 +578,7 @@ async function intake(botId,files){
   return {id:item.id};
 }
 async function presentShare(id){
-  try{const item=await rpc.call('composer',{id});console.log('SHARE_COMPOSER',id,item.mode);await openComposer(item.botId,item,{keepOpen:true});}
+  try{const item=await rpc.call('composer',{id});await openComposer(item.botId,item,{keepOpen:true});}
   catch(error){if(errorCode(error)!=='RECEIPT_NOT_SENDABLE'&&errorCode(error)!=='RECEIPT_NOT_FOUND')issue(errorCode(error));}
 }
 function presentPendingComposer(){
@@ -917,7 +917,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   const link=(argv??[]).map(item=>String(item).trim().replace(/^"(.*)"$/,'$1')).find(item=>item.startsWith('grokbotanywhere://'));
   if(forward){forward.argv=argv;explorerBatch.push(forward);}
   if(link){if(!window||window.isDestroyed()||!window.isVisible())hideDock();acceptDeeplink(link);}
-  if(forward||link||openedAsLoginItem({argv:argv}))return;
+  if(forward||link||argv.includes('--share-intake')||openedAsLoginItem({argv:argv}))return;
   showMainWindow();
  });
  app.on('open-url',(event,url)=>{
