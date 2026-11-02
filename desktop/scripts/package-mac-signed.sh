@@ -41,8 +41,8 @@ unset CSC_IDENTITY_AUTO_DISCOVERY || true
 export CSC_IDENTITY_AUTO_DISCOVERY=true
 npx electron-builder --mac dmg --"$ARCH"
 
-# electron-builder notarizes the app and the DMG, but does not staple the
-# disk image. Staple it so Gatekeeper can validate offline.
+# electron-builder notarizes the app. Submit and staple the DMG itself so
+# Gatekeeper can validate the disk image offline.
 VERSION="$(node -p "require('./package.json').version")"
 if [[ "$ARCH" == "arm64" ]]; then
   DMG="$ROOT/release/Grok Bot Anywhere-$VERSION-arm64.dmg"
@@ -50,5 +50,6 @@ else
   DMG="$ROOT/release/Grok Bot Anywhere-$VERSION.dmg"
 fi
 [[ -f "$DMG" ]] || { echo "missing $DMG" >&2; exit 1; }
+xcrun notarytool submit "$DMG" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
 xcrun stapler staple "$DMG"
 xcrun stapler validate "$DMG"
