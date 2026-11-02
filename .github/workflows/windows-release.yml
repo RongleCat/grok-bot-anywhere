@@ -1,0 +1,56 @@
+name: Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'MSIX version, for example 1.0.0.0'
+        required: true
+        default: '1.0.0.0'
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm run setup
+
+      - name: Build the app package
+        run: npm run package:win
+
+      - name: Build the share helper
+        shell: pwsh
+        run: ./native/windows/share-target/build.ps1
+
+      # Unsigned on purpose: the artifact below is what the signing service signs.
+      # Its shape (helper exe + MSIX) is the one the SignPath artifact
+      # configuration expects.
+      - name: Pack the share package unsigned
+        shell: pwsh
+        run: |
+          ./desktop/scripts/pack-share.ps1 -Sign Unsigned -Version '${{ inputs.version }}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-for-signing
+          path: |
+            desktop/artifacts/share/share-target-*.zip
+            desktop/artifacts/share/GrokBot.ShareTarget.msix
+          if-no-files-found: error
+
+      # TODO(signpath): submit the uploaded zip to SignPath once the project is
+      # approved, then download the signed output and publish it. Kept out of the
+      # workflow until the organization, project and signing policy exist — a
+      # half-configured step would fail every release.
+      - name: SignPath (not configured yet)
+        run: echo "::warning::SignPath is not configured; artifacts stay unsigned."
