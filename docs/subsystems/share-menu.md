@@ -1,6 +1,6 @@
 # 分享菜单
 
-状态：Current。macOS 已实机验证（微信版本有差异）；Windows 不支持微信等价入口。
+状态：Current。macOS 与 Windows 均已在实机验证；两端入口形态不同（macOS 每 Bot 一个 appex，Windows 单入口 + 应用内选择）。
 
 ## 目标
 
@@ -74,13 +74,17 @@ manifest v1 字段：`version,id,source=wechat,accountId,botId,mode,prefix,text,
 
 ## Windows
 
-Windows 微信没有等价的 share-extension 宿主。当前支持：
+Windows 微信没有 share-extension 宿主，所以**不是每个 Bot 一行**：只有一个 `Grok Bot` 条目，点开后由应用内的 Bot 选择面板决定目标。
 
-- Explorer 右键级联（`HKCU\Software\Classes\*\shell\GrokBotAnywhere`）。
-- 拖 ZIP/文件到 Bot 卡片。
-- 悬浮输入框。
+| 环节 | 实现 |
+| --- | --- |
+| 注册 | 稀疏 MSIX 声明 `windows.shareTarget`（`SupportsAnyFileType` + `StorageItems`/`Text`/`URI`/`Bitmap`） |
+| 接收 | `native/windows/share-target`（C++/WinRT）读 `ShareOperation`，文件落盘到 `share-pending/<batch>` |
+| 唤起 | `grokbotanywhere://share?batch=<id>`，深链只带批次、不带 Bot |
+| 选择 | `share-picker` 无标题栏面板：只列开启了接收转发的 Bot（Windows 不区分来源） |
+| 投递 | 按 Bot 模式分流：`compose` 交给悬浮输入框，`direct` 直接发送；Esc 取消会删除该批次 |
 
-「共享对象 / 每个 Bot 一行」仍是研究项：本地验证包在 `projects/windows-share/`（默认不入库），未在 Windows 实机运行。
+要点：Windows 上「来源」开关不参与过滤（只有一个入口），因此设置页在 Windows 隐藏「来源」一行；macOS 仍按来源过滤并保持 12 槽。详见 [Windows](../platforms/windows.md#微信分享)。
 
 ## 排障
 

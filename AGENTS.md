@@ -83,7 +83,7 @@ vendor/bloub              Bloub 头像引擎 submodule
 ## 平台
 
 - macOS：完整；见 [macOS](docs/platforms/macos.md)。
-- Windows：实现存在、**部分实机验证**（2026-11-01，开发模式；安装包与右键点击未运行）；微信分享不支持；见 [Windows](docs/platforms/windows.md)。
+- Windows：实现存在、**部分实机验证**（2026-11-01，开发模式；安装包与右键点击未运行）；微信分享入口（单入口 + 应用内选择）已实机验证；见 [Windows](docs/platforms/windows.md)。
 - Linux：未支持；见 [Linux](docs/platforms/linux.md)。
 - 平台分支集中在 `desktop/src/shell/`、`desktop/src/share/`、`native/`，不要散落。
 

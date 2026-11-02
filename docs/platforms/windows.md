@@ -1,6 +1,6 @@
 # Windows
 
-状态：Current 代码 + **部分实机验证**（2026-11-01，Windows 11 开发模式）。窗口、托盘、协议注册、Explorer 级联、CLI 已在真机跑过；见[实机验证结果](#实机验证结果2026-11-01)。安装包、右键点击、悬浮输入框焦点仍**未运行**。
+状态：Current 代码 + **部分实机验证**（2026-11-01/02，Windows 11 开发模式）。窗口、托盘、协议注册、Explorer 级联、CLI、微信分享入口与 Bot 选择面板已在真机跑过；见[实机验证结果](#实机验证结果2026-11-01)。安装包、右键点击、悬浮输入框焦点仍**未运行**。
 
 ## 已实现
 
@@ -20,13 +20,20 @@
 
 ## 微信分享
 
-Windows 微信没有 macOS `GrokBotShare.appex` 等价的宿主。当前**不支持**微信「转发 → 其他应用」里出现本应用。替代路径：
+实机验证：微信 4.1.15 的「转发 → 其他应用」里会显示一个 **Grok Bot** 条目，点开后由应用弹出 Bot 选择面板。与 macOS 的 12 个独立槽位不同，Windows 只有**一个入口**，选哪个 Bot 在应用内完成。
 
-- Explorer 右键 → 发给 Bot。
-- 拖 ZIP/文件到 Bot 卡片。
-- 悬浮输入框 / `grok-bot` 命令。
+组成：
 
-「每个 Bot 一行」的 MSIX 稀疏包方案仍是研究项，验证包在 `projects/windows-share/`，未在 Windows 运行，也没有 exe。
+| 部分 | 说明 |
+| --- | --- |
+| 稀疏 MSIX | `uap10:AllowExternalContent`，exe 在包外；声明 `windows.shareTarget` 与 `common:runFullTrust` |
+| 分享 helper | `native/windows/share-target`，C++/WinRT，读 `StorageItems`/`Text`/`WebLink`，落盘 `%APPDATA%\Grok Bot Anywhere\share-pending\<batch>` 后唤起 `grokbotanywhere://share?batch=` |
+| 选择面板 | 无标题栏窗口，宫格 + 动画头像；Enter 发送、双击直发、Esc 关闭并删除批次 |
+| 投递 | 按 Bot 的投递模式分流：`compose` 交给悬浮输入框，`direct` 才直接发送 |
+
+清单必须写成腾讯自家分享包那种宽声明（`SupportsAnyFileType` + `StorageItems`/`Text`/`URI`/`Bitmap`），窄声明会被微信宿主在枚举阶段过滤；改完必须杀掉 `Weixin`/`WeChatAppEx` 进程，菜单结果由 `WeChatAppEx` 缓存。
+
+macOS 仍是每个 Bot 一个签名 appex，见[分享菜单](../subsystems/share-menu.md)。
 
 ## 未验证项
 
