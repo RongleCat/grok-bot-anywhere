@@ -704,7 +704,7 @@ function openMoreMenu(bot,anchor){
 }
 function moreButton(bot){
  const button=el('button','secondary more-button');button.type='button';button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
- button.append(icon('more'),el('span','',t('更多','More')),icon('down'));
+ button.append(el('span','',t('更多','More')),icon('down'));
  button.addEventListener('click',event=>{event.stopPropagation();if(moreMenu?.anchor===button)closeMoreMenu();else openMoreMenu(bot,button);});
  return button;
 }
