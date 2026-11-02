@@ -11,10 +11,10 @@
 .overlay-thumb:hover,.overlay-thumb.dragging{background:light-dark(rgba(0,0,0,.55),rgba(255,255,255,.62))}
 button,input,textarea,select,label{font:inherit;color:inherit;-webkit-app-region:no-drag}button{cursor:pointer;border:0;background:transparent}button:disabled{cursor:default;opacity:.4}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--primary);outline-offset:2px}h1,h2,p{margin:0}[hidden]{display:none!important}
 .shell{display:grid;grid-template-columns:248px minmax(0,1fr);grid-template-rows:52px minmax(0,1fr);height:100%;background:transparent}
-.os-windows .shell{grid-template-rows:32px minmax(0,1fr)}
+.os-windows .shell{grid-template-rows:44px minmax(0,1fr)}
 .titlebar{grid-column:1 / -1;display:grid;grid-template-columns:248px minmax(0,1fr);align-items:center;min-width:0;margin:0;user-select:none;-webkit-app-region:drag}
 .titlebar-side{display:flex;align-items:center;gap:4px;height:100%;min-width:0;padding-left:78px;border-right:1px solid var(--line);-webkit-app-region:drag}
-.os-windows .titlebar-side{padding-left:12px}
+.os-windows .titlebar-side{padding-left:8px}
 .titlebar-title{min-width:0;padding:0 28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:600;letter-spacing:-.02em;line-height:1.2;-webkit-app-region:drag}
 .titlebar-button{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;color:var(--secondary);-webkit-app-region:no-drag}
 .titlebar-button svg{width:16px;height:16px}
@@ -24,8 +24,8 @@ button,input,textarea,select,label{font:inherit;color:inherit;-webkit-app-region
 .sidebar{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;padding:8px 8px 12px;border-right:1px solid var(--line);background:transparent;-webkit-app-region:drag}
 .os-windows .titlebar{position:relative}
 .os-windows .titlebar-title{padding-right:146px}
-.os-windows .win-controls{position:absolute;top:0;right:0;display:flex;height:32px;z-index:5;-webkit-app-region:no-drag}
-.os-windows .win-control{width:46px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:0;color:var(--text);-webkit-app-region:no-drag}
+.os-windows .win-controls{position:absolute;top:8px;right:8px;display:flex;gap:2px;height:28px;z-index:5;-webkit-app-region:no-drag}
+.os-windows .win-control{width:40px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:var(--text);-webkit-app-region:no-drag}
 .os-windows .win-control svg{width:10px;height:10px;display:block}
 .os-windows .win-control:hover{background:rgba(0,0,0,.06)}
 .os-windows .win-control:active{background:rgba(0,0,0,.12)}
@@ -39,7 +39,7 @@ button,input,textarea,select,label{font:inherit;color:inherit;-webkit-app-region
 /* 无边框最大化时 Windows 会把窗口伸出屏幕，按实测差值内缩，避免内容被裁掉 */
 /* 2026-11-01 --win-inset 来自 maximizedContentInset，仅 .os-windows.maximized */
 .os-windows.maximized body{padding:var(--win-inset,0px)}
-.os-windows .sidebar{padding-top:8px}
+.os-windows .sidebar{padding-top:0}
 .search-row{display:flex;align-items:center;gap:6px;min-width:0;margin:0 0 8px;-webkit-app-region:no-drag}
 .search{display:block;flex:1;min-width:0;margin:0;-webkit-app-region:no-drag}.search input{width:100%;height:32px;border:0;border-radius:8px;background:var(--fill);padding:0 10px}.search input::placeholder{color:var(--tertiary)}
 .bot-list{flex:1;min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;display:flex;flex-direction:column;align-content:start;gap:2px;padding:0;-webkit-app-region:no-drag}
@@ -88,6 +88,9 @@ main{display:flex;flex-direction:column;gap:16px;min-width:0;min-height:0;paddin
 /* 详情区需 no-drag，否则继承 main 的 drag 会吞滚轮 */
 /* 2026-10-31 #content：overflow 滚动与 -webkit-app-region */
 #content{flex:1;min-height:0;overflow:auto;padding:12px 28px 16px;-webkit-app-region:no-drag}
+/* Windows 顶部条没有原生标题栏，给详情页留出与顶部条等高的首屏间距，
+   滚动时头像不会紧贴顶部条边缘被裁掉。 */
+.os-windows #content{padding-top:20px;scroll-padding-top:20px}
 .detail,.page,.empty{width:min(560px,100%);margin-inline:auto}
 .detail{display:flex;flex-direction:column;align-items:stretch}
 .hero{display:flex;flex-direction:column;align-items:center;width:100%;text-align:center}
