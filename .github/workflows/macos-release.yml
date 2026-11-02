@@ -18,11 +18,11 @@ jobs:
       matrix:
         include:
           - arch: arm64
-            runner: macos-15
+            runner: macos-14
             binary_arch: arm64
             target_arch: arm64
           - arch: x64
-            runner: macos-15
+            runner: macos-14
             binary_arch: x86_64
             target_arch: x86_64
     steps:
@@ -36,6 +36,14 @@ jobs:
 
       - name: Install dependencies
         run: npm run setup
+
+      - name: Select Xcode 16
+        run: |
+          set -euo pipefail
+          XCODE="$(find /Applications -maxdepth 1 -name 'Xcode_16*.app' -print | sort -V | tail -n 1)"
+          test -n "$XCODE" || { echo 'Xcode 16 is not installed on this runner' >&2; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          swift --version
 
       - name: Set requested version
         if: github.event_name == 'workflow_dispatch'
