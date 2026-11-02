@@ -15,10 +15,10 @@
 
 ## GitHub Actions（macOS）
 
-`.github/workflows/macos-release.yml` 支持手动触发和 `v*` tag。两个架构分别跑在原生 runner 上，先构建 Swift companion / 12 个 share appex，再签名、公证和 staple：
+`.github/workflows/macos-release.yml` 支持手动触发和 `v*` tag。两个架构都在 `macos-14` 上运行，先选 Xcode 16，再构建 Swift companion / 12 个 share appex，最后签名、公证和 staple：
 
-- arm64：`macos-14`
-- x64：`macos-13`
+- arm64：原生构建
+- x64：同一 runner 上以 `GBA_TARGET_ARCH=x86_64` 交叉构建 native helper
 
 仓库需要这些 Actions secrets（已在本机配置）：
 
