@@ -3,10 +3,11 @@ import {cutoutStack,groupMembers,isGroup,listedBots,placeStack,stackPlan} from '
 import {acceleratorFromEvent,formatAccelerator} from '../shortcuts.mjs';
 import {spliceWechatOrder} from '../share/order.mjs';
 import {coalBallSvg,confirmAccountStill,confirmCopy,toolboxShareOff} from '../shell/actions.mjs';
+import {renderMarkdown} from './markdown.mjs';
 import {captionGlyph,windowCaptionButtons,windowCaptionLabel} from '../shell/window-chrome.mjs';
 const api=window.anywhere;
 let state,page='bots',selected='',search='',searchOpen=true,grouped=false,avatars=[],busy=false,recordingSlot=null,inboxBot='',inboxFilterController,inboxAvatarObserver,menuReading=false,toastTimer,viewKey='',gridKey='';
-let settingsTab='general',copying=false,confirmState=null,copyOpener=null;
+let settingsTab='general',copying=false,confirmState=null,copyOpener=null,moreMenu=null,botDetail=null;
 try{grouped=localStorage.getItem('gba.grouped')==='1';}catch{}
 const chinese=()=>state?.host?.locale?.startsWith('zh')??navigator.language.startsWith('zh');
 const t=(cn,en)=>chinese()?cn:en;
@@ -99,7 +100,11 @@ function icon(name){
   down:['m6 9 6 6 6-6'],
   search:['M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z','m21 21-4.3-4.3'],
   sync:['M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8','M3 3v5h5','M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16','M21 21v-5h-5'],
-  group:['M3 7V5c0-1.1.9-2 2-2h2','M17 3h2c1.1 0 2 .9 2 2v2','M21 17v2c0 1.1-.9 2-2 2h-2','M7 21H5c-1.1 0-2-.9-2-2v-2']
+  group:['M3 7V5c0-1.1.9-2 2-2h2','M17 3h2c1.1 0 2 .9 2 2v2','M21 17v2c0 1.1-.9 2-2 2h-2','M7 21H5c-1.1 0-2-.9-2-2v-2'],
+  more:['M12 12h.01','M19 12h.01','M5 12h.01'],
+  copy:['M9 9h10v10H9z','M5 15V5h10'],
+  info:['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z','M12 16v-4','M12 8h.01'],
+  close:['M18 6 6 18','m6 6 12 12']
  };
  for(const d of paths[name]){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);svg.append(path);}
  if(name==='settings'){const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');circle.setAttribute('cx','12');circle.setAttribute('cy','12');circle.setAttribute('r','3');svg.append(circle);}
@@ -202,6 +207,7 @@ function paintWindowControls(){
  }
 }
 function render(){
+ if(moreMenu)closeMoreMenu();
  const visible=orderedBots();
  if(!visible.some(bot=>bot.id===selected)){
   const current=state.bots.find(bot=>bot.id===selected);
@@ -319,10 +325,8 @@ function renderChat(content){
  detail.style.setProperty('--on-accent',accentInk(accent));
  face.append(avatar(bot,112));
  hero.append(face,el('h1','hero-name',bot.name));
- if(bot.description)hero.append(el('p','hero-bio',bot.description));
  const actions=el('div','hero-actions');
- actions.append(smallButton(t('开始对话','Start'),()=>api.compose(bot.id),'primary'),smallButton(t('在 Grok Bot 中打开','Open in Grok Bot'),()=>api.openBot(bot.id),'secondary'),smallButton(t('查看发送记录','View send history'),()=>{inboxBot=bot.id;page='inbox';render();$('content').scrollTop=0;},'secondary'));
- if(!isGroup(bot))actions.append(smallButton(t('复制','Copy'),()=>copyBot(bot.id),'secondary'));
+ actions.append(smallButton(t('开始对话','Start'),()=>api.compose(bot.id),'primary'),smallButton(t('在 Grok Bot 中打开','Open in Grok Bot'),()=>api.openBot(bot.id),'secondary'),moreButton(bot));
  hero.append(actions);
  const ownShortcut=state.shortcuts?.bots?.[bot.id];
  if(ownShortcut)hero.append(el('p','hero-shortcut',formatAccelerator(ownShortcut,state.host?.platform)));
@@ -646,6 +650,74 @@ function accentInk(hex){
 }
 function loginButton(){return smallButton(busy?t('正在登录…','Signing in…'):t('连接账号','Connect'),async()=>{busy=true;render();try{await api.login();}finally{busy=false;render();}},'primary');}
 function smallButton(text,action,className='text-button'){const button=el('button',className,text);button.type='button';button.addEventListener('click',()=>run(action));return button;}
+function closeMoreMenu(){
+ if(!moreMenu)return;
+ const current=moreMenu;moreMenu=null;current.cleanup();
+ current.menu.remove();current.anchor.setAttribute('aria-expanded','false');
+}
+function positionMoreMenu(){
+ if(!moreMenu)return;
+ const {menu,anchor}=moreMenu,rect=anchor.getBoundingClientRect();
+ const width=menu.offsetWidth,height=menu.offsetHeight;
+ let left=Math.min(Math.max(8,rect.right-width),window.innerWidth-width-8);
+ let top=rect.bottom+6;
+ if(top+height>window.innerHeight-8)top=Math.max(8,rect.top-height-6);
+ menu.style.left=`${Math.round(left)}px`;menu.style.top=`${Math.round(top)}px`;
+}
+function openMoreMenu(bot,anchor){
+ closeMoreMenu();
+ const menu=el('div','more-menu');menu.id='bot-more-menu';menu.setAttribute('role','menu');menu.tabIndex=-1;
+ const item=(label,iconName,action)=>{
+  const button=el('button','more-item');button.type='button';button.setAttribute('role','menuitem');
+  button.append(icon(iconName),el('span','',label));
+  button.addEventListener('click',event=>{event.stopPropagation();closeMoreMenu();action();});
+  menu.append(button);return button;
+ };
+ item(t('查看发送记录','View send history'),'history',()=>{inboxBot=bot.id;page='inbox';render();$('content').scrollTop=0;});
+ if(!isGroup(bot))item(t('复制此 Bot','Copy this Bot'),'copy',()=>{void copyBot(bot.id);});
+ item(t('查看详情','View details'),'info',()=>openBotDetail(bot.id,anchor));
+ const outside=event=>{if(menu.contains(event.target)||anchor.contains(event.target))return;closeMoreMenu();};
+ const nearby=()=>positionMoreMenu();
+ const closeOnScroll=event=>{if(menu.contains(event.target))return;closeMoreMenu();};
+ document.addEventListener('pointerdown',outside,true);
+ window.addEventListener('resize',closeMoreMenu);
+ window.addEventListener('scroll',closeOnScroll,true);
+ const cleanup=()=>{
+  document.removeEventListener('pointerdown',outside,true);
+  window.removeEventListener('resize',closeMoreMenu);
+  window.removeEventListener('scroll',closeOnScroll,true);
+ };
+ menu.addEventListener('keydown',event=>{
+  const items=[...menu.querySelectorAll('.more-item')];const index=items.indexOf(document.activeElement);
+  if(event.key==='Escape'){event.preventDefault();closeMoreMenu();anchor.focus();return;}
+  if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+   event.preventDefault();const next=event.key==='ArrowDown'?(index+1)%items.length:(index-1+items.length)%items.length;items[next]?.focus();return;
+  }
+  if(event.key==='Home'){event.preventDefault();items[0]?.focus();return;}
+  if(event.key==='End'){event.preventDefault();items.at(-1)?.focus();}
+ });
+ moreMenu={botId:bot.id,anchor,menu,cleanup};
+ anchor.setAttribute('aria-expanded','true');
+ document.body.append(menu);
+ positionMoreMenu();
+ requestAnimationFrame(()=>{if(!moreMenu)return;moreMenu.menu.querySelector('.more-item')?.focus();});
+}
+function moreButton(bot){
+ const button=el('button','secondary more-button');button.type='button';button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
+ button.append(icon('more'),el('span','',t('更多','More')),icon('down'));
+ button.addEventListener('click',event=>{event.stopPropagation();if(moreMenu?.anchor===button)closeMoreMenu();else openMoreMenu(bot,button);});
+ return button;
+}
+function openBotDetail(botId,opener){
+ const bot=state.bots?.find(item=>item.id===botId);if(!bot)return;
+ closeMoreMenu();
+ botDetail={bot,opener:opener instanceof HTMLElement?opener:null};
+ paintOverlay();
+}
+function closeBotDetail(){
+ if(!botDetail)return;
+ const opener=botDetail.opener;botDetail=null;paintOverlay();focusOpener(opener);
+}
 function shortcutRow(slot,label,help){
  const shown=slot==='compose'?state.shortcuts?.compose:slot==='open'?state.shortcuts?.open:slot.startsWith('grok:')?state.shortcuts?.opens?.[slot.slice(5)]:state.shortcuts?.bots?.[slot];
  const recording=recordingSlot===slot;
@@ -807,7 +879,7 @@ function setBackgroundInert(on){
 }
 function paintOverlay(){
  let layer=document.getElementById('app-overlay');
- if(!copying&&!confirmState){
+ if(!copying&&!confirmState&&!botDetail){
   if(!layer)return;
   const opener=layer.__opener??null;
   layer.remove();
@@ -815,16 +887,41 @@ function paintOverlay(){
   focusOpener(opener);
   return;
  }
- if(confirmState&&!copying&&layer?.dataset.confirmKey===confirmKey(confirmState)&&layer.querySelector('.confirm-card')){
+ if(!botDetail&&confirmState&&!copying&&layer?.dataset.confirmKey===confirmKey(confirmState)&&layer.querySelector('.confirm-card')){
   setBackgroundInert(true);
   return;
  }
  if(!layer){layer=el('div','app-overlay');layer.id='app-overlay';document.body.append(layer);}
  layer.setAttribute('role','dialog');
  layer.setAttribute('aria-modal','true');
- layer.__opener=copying?(copyOpener??layer.__opener??null):(confirmState?.opener??layer.__opener??null);
+ layer.__opener=copying?(copyOpener??layer.__opener??null):(botDetail?.opener??confirmState?.opener??layer.__opener??null);
  setBackgroundInert(true);
  layer.replaceChildren();
+ layer.onclick=null;
+ if(botDetail){
+  const bot=botDetail.bot,card=el('section','bot-detail-card');
+  card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.setAttribute('aria-label',t(`${bot.name} 的详情`,`Details for ${bot.name}`));
+  const head=el('header','bot-detail-head'),identity=el('div','bot-detail-identity'),face=el('div','bot-detail-avatar');
+  face.append(avatar(bot,48));
+  const titles=el('div','bot-detail-titles');titles.append(el('h2','bot-detail-name',bot.name),el('p','bot-detail-type',isGroup(bot)?t('群聊','Group'):t('Bot','Bot')));
+  identity.append(face,titles);
+  const close=el('button','icon-button');close.type='button';close.setAttribute('aria-label',t('关闭详情','Close details'));close.append(icon('close'));close.addEventListener('click',closeBotDetail);
+  head.append(identity,close);
+  const body=el('div','bot-detail-body');
+  body.append(el('h3','bot-detail-section',t('指令描述','Instructions')));
+  const markdown=el('div','markdown-body');markdown.innerHTML=renderMarkdown(bot.description||t('这个 Bot 没有描述。','This Bot has no description.'));body.append(markdown);
+  const meta=el('dl','bot-detail-meta');
+  const addMeta=(label,value)=>{const term=el('dt','',label),detail=el('dd','',value);meta.append(term,detail);};
+  addMeta(t('ID','ID'),bot.id);
+  addMeta(t('类型','Type'),isGroup(bot)?t('群聊','Group'):t('Bot','Bot'));
+  if(isGroup(bot))addMeta(t('成员','Members'),groupMembers(bot,state.bots).map(item=>item.name).join(chinese()?'、':', ')||t('暂无','None'));
+  body.append(meta);
+  card.append(head,body);layer.append(card);
+  layer.setAttribute('aria-label',t(`${bot.name} 的详情`,`Details for ${bot.name}`));
+  layer.onclick=event=>{if(event.target===layer)closeBotDetail();};
+  queueMicrotask(()=>{if(close.isConnected)close.focus();});
+  return;
+ }
  if(copying){
   delete layer.dataset.confirmKey;
   const ball=el('div','coal-ball');ball.innerHTML=coalBallSvg();
@@ -884,6 +981,7 @@ $('sync').addEventListener('click',()=>{
  run(async()=>{state=await api.refresh();render();}).finally(()=>{syncing=false;const button=$('sync');if(button)button.disabled=false;});
 });
 window.addEventListener('keydown',event=>{
+ if(botDetail&&event.key==='Escape'){event.preventDefault();closeBotDetail();return;}
  if(confirmState&&event.key==='Escape'){event.preventDefault();settleConfirm(false);return;}
  if(!recordingSlot)return;
  event.preventDefault();
