@@ -333,7 +333,16 @@ function hideFloat({clearAttachments=false,releaseFocus=false}={}){
   suppressActivate=true;
   setTimeout(()=>{suppressActivate=false;},400);
   pickerOpen=false;
-  if(clearAttachments)notify('composer-clear',{attachments:true});
+  if(clearAttachments){
+    notify('composer-clear',{attachments:true});
+    if(pendingFloat){
+      if(pendingFloat.id){
+        const id=pendingFloat.id;
+        pendingFloat={...pendingFloat,files:[]};
+        if(rpc)void rpc.call('dismissComposer',{id}).catch(()=>{});
+      }else pendingFloat={...pendingFloat,localPaths:[]};
+    }
+  }
   for(const extra of [avatarWindow,pickerWindow])if(extra&&!extra.isDestroyed()&&extra.isVisible())extra.hide();
   if(!floatWindow||floatWindow.isDestroyed()||!floatWindow.isVisible())return;
   floatWindow.hide();
@@ -475,7 +484,7 @@ async function presentShare(id){
   catch(error){if(errorCode(error)!=='RECEIPT_NOT_SENDABLE'&&errorCode(error)!=='RECEIPT_NOT_FOUND')issue(errorCode(error));}
 }
 function presentPendingComposer(){
-  const pending=(latestState.inbox??[]).filter(item=>item.status==='needs-input'&&item.phase==='ready'&&shareHandoff({mode:item.mode})==='composer');
+  const pending=(latestState.inbox??[]).filter(item=>item.status==='needs-input'&&item.phase==='ready'&&!item.composerDismissed&&shareHandoff({mode:item.mode})==='composer');
   const item=pending.sort((a,b)=>a.createdAt-b.createdAt).at(-1);
   if(item)void presentShare(item.id);
 }

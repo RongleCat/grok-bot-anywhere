@@ -38,6 +38,7 @@ port.on('message',async({data:request})=>{
         case 'retry':result=await session.retry(p.id);break;
         case 'resolve':result=session.resolve(p.id);break;
         case 'composer':result=session.composer(p.id);break;
+        case 'dismissComposer':result=await session.dismissComposer(p.id);break;
         case 'resume':result=await session.resume();break;
         case 'theme':result=session.setTheme(p.theme);break;
         case 'setShortcut':result=session.setShortcut(p.slot,p.accelerator);break;

@@ -38,7 +38,7 @@
 | `configure` | 改 recipient（enabled/mode/prefix/sources/order） |
 | `disableAllReceive` | 单事务关闭该账号所有 enabled recipient |
 | `receive` | 新建 receipt（入口统一走这里） |
-| `submit` / `retry` / `resolve` / `composer` | 补字发送、重试失败项、核对解锁、取草稿 |
+| `submit` / `retry` / `resolve` / `composer` / `dismissComposer` | 补字发送、重试失败项、核对解锁、取草稿、关闭草稿并清理附件 |
 | `resume` | 启动时恢复未完成状态 |
 | `theme` / `setShortcut` | 偏好 |
 | `watch` | 订阅某 Bot/session 回复 |
