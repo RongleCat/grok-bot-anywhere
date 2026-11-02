@@ -78,12 +78,11 @@ DMG/zip 是本地构建物，`.gitignore` 已排除。**发布前必须记录产
 
 发布期要换成**完整 MSIX**，把 Electron 应用整个放进包里。原因：稀疏包要求用户先装好应用再注册，且外部目录不能随包升级；完整包才有干净的一步安装、卸载和更新。
 
-完整包要处理三件事，缺一不可：
+完整包要处理两件事（没有老用户，因此不做数据迁移）：
 
 | 事项 | 说明 |
 | --- | --- |
 | 包身份 | `Identity Name` + `Publisher` 一旦有真实用户就不能改；Publisher 必须与签名证书 Subject 逐字符一致 |
-| 数据迁移 | 完整 MSIX 会把 `app.getPath('userData')` 虚拟化到 `%LOCALAPPDATA%\Packages\<identity>\LocalCache\...`，老用户的 `%APPDATA%\Grok Bot Anywhere` 需要一次性迁移，否则升级后 Bot 列表为空 |
 | 更新 | 改用 `.appinstaller`（MSIX 自带升级），否则只能手动重装 |
 
 签名：`exe`/`dll`/`msix` **必须用同一张证书**，否则包与进程身份对不上。免费路径是 SignPath Foundation（要求公开仓库），本地开发用 `new-dev-certificate.ps1` 的自签证书。

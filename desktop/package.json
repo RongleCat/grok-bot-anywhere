@@ -24,7 +24,7 @@
     "package:mac-intel": "bash scripts/package-mac-signed.sh x64",
     "package:mac-all": "npm run package:mac-arm && npm run package:mac-intel",
     "package:mac-signed": "npm run package:mac-all",
-    "package:win": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64",
+    "package:win": "npm run build && node scripts/package-win.mjs",
     "package:all": "npm run package:mac-all && npm run package:win"
   },
   "dependencies": {
