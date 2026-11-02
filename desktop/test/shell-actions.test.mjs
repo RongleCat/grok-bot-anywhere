@@ -320,6 +320,8 @@ test('shipped main and renderer call the confirm, tray, login, and explorer deci
   const main=await readFile(`${root}main/main.mjs`,'utf8');
   const renderer=await readFile(`${root}renderer/app.mjs`,'utf8');
   assert.match(main,/windowCloseAction\(/);
+  assert.doesNotMatch(main,/action==='service'\)\{showMainWindow/);
+  assert.match(main,/process\.platform==='darwin'&&!window\?\.isMinimized\(\)\)return/);
   assert.match(main,/trayMenuModel\(/);
   assert.match(main,/applyLoginItem\(/);
   assert.match(main,/loginItemStartup\(/);

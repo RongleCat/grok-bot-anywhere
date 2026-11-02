@@ -839,7 +839,7 @@ function serviceEvent(message){
   if(message.event==='reply'&&!preview&&Notification.isSupported())systemNotification({title:message.data.name||'Grok Bot',body:zh?'收到新回复':'New reply'}).show();
   if(message.event==='share.received'){
     const action=shareHandoff({mode:message.data.mode});
-    if(action==='service'){showMainWindow();notify('navigate',{page:'inbox'});}
+    if(action==='service')notify('navigate',{page:'inbox'});
     else void presentShare(message.data.id);
   }
   if(message.event==='share.error')issue('SHARE_IMPORT_FAILED');
@@ -1006,7 +1006,14 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   }
  }).catch(error=>{console.error(errorCode(error));app.exit(1);});
 }
-app.on('activate',()=>{if(suppressActivate||composerVisible())return;showMainWindow();});
+app.on('activate',()=>{
+ if(suppressActivate||composerVisible())return;
+ // macOS activation is also delivered for share/extension handoffs. Only
+ // restore a minimized window here; a closed main window opens only via an
+ // explicit tray/menu/deep-link action.
+ if(process.platform==='darwin'&&!window?.isMinimized())return;
+ showMainWindow();
+});
 app.on('window-all-closed',()=>{if(smoke)app.quit();});
 app.on('session-end',()=>{quitting=true;});
 app.on('before-quit',()=>{quitting=true;if(tray){tray.destroy();tray=null;}stopExplorerSelection();unregisterShortcuts();menuReconciler?.close();companion?.stop();worker?.kill();rpc?.close();});
