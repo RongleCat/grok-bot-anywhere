@@ -4,7 +4,7 @@
 # import it into Trusted People with a single elevation. The private key stays
 # in the current user's store; it is never written to the repository.
 param(
-    [string]$Publisher = 'CN=Grok Bot Anywhere Dev',
+    [string]$Publisher = 'CN=GrokBotAnywhere',
     [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA 'Grok Bot Anywhere'),
     [int]$Years = 2
 )

@@ -13,7 +13,7 @@
 #   share-target-<version>.zip      SignPath input when -Sign Unsigned
 param(
     [string]$Version = '1.0.0.0',
-    [string]$Publisher = 'CN=Grok Bot Anywhere Dev',
+    [string]$Publisher = 'CN=GrokBotAnywhere',
     [string]$PackageName = 'dev.ronglecat.grokbotanywhere.share',
     [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA 'Grok Bot Anywhere'),
     [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\artifacts\share'),
