@@ -51,5 +51,13 @@ else
 fi
 [[ -f "$DMG" ]] || { echo "missing $DMG" >&2; exit 1; }
 xcrun notarytool submit "$DMG" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
-xcrun stapler staple "$DMG"
+# CloudKit's ticket-delivery endpoint occasionally drops a connection after
+# notarization has already been accepted. Retry the staple instead of leaving
+# an accepted but unstapled DMG.
+for attempt in 1 2 3 4; do
+  if xcrun stapler staple "$DMG"; then break; fi
+  [[ "$attempt" -lt 4 ]] || { echo "stapler failed after $attempt attempts" >&2; exit 1; }
+  echo "stapler attempt $attempt failed; retrying..." >&2
+  sleep $((attempt * 10))
+done
 xcrun stapler validate "$DMG"
