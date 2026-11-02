@@ -324,6 +324,8 @@ test('shipped main and renderer call the confirm, tray, login, and explorer deci
   assert.match(main,/process\.platform==='darwin'&&!window\?\.isMinimized\(\)\)return/);
   assert.match(main,/if\(!mainWasVisible\)hideDock\(\)/);
   assert.match(main,/app\.isPackaged\?join\(process\.resourcesPath,'native\/avatar\/index\.html'\)/);
+  assert.match(main,/app\.focus\(\{steal:true\}\)/);
+  assert.match(main,/notify\('composer-focus'/);
   assert.match(main,/if\(!window\|\|window\.isDestroyed\(\)\|\|!window\.isVisible\(\)\)hideDock\(\)/);
   assert.match(main,/trayMenuModel\(/);
   assert.match(main,/applyLoginItem\(/);

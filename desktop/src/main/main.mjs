@@ -546,6 +546,12 @@ async function openComposer(botId,receipt,options={}){
   const card=ready?.card??{width:368,height:110};
   placeFloat(card.width,card.height);
   notify('composer-show',{});
+  // WeChat/share handoffs can open the composer while another app is frontmost.
+  // showInactive avoids the Dock flash, so explicitly activate the accessory app
+  // and refocus the text field after the card has rendered.
+  if(process.platform==='darwin'){try{app.focus({steal:true});}catch{}}
+  float.focus();
+  notify('composer-focus',{});
   setTimeout(()=>{try{float.setOpacity(1);avatarWindow?.setOpacity(1);}catch{}},20);
   if(prepared){
     const token=attachToken;
@@ -928,6 +934,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
     if(existsSync(join(template,'Contents/MacOS/GrokBotMenuHost'))){
       shareMenu=new ShareMenu({root:join(app.getPath('userData'),'ShareInbox'),template,applicationsRoot:join(homedir(),'Applications'),applicationPath:sharingApplicationPath({packaged:app.isPackaged,appPath:app.getAppPath(),execPath:process.execPath}),locale:app.getLocale(),onChange:()=>{if(!shareMenu.status.needsUpdate&&hostIssue==='MENU_UPDATE_FAILED')hostIssue=null;update();}});
       await shareMenu.initialize();
+      await shareMenu.elect().catch(()=>{});
       menuReconciler=new MenuReconciler({
         sync:state=>shareMenu.sync(state),publish:state=>shareMenu.sync(state),needsUpdate:()=>shareMenu.status.needsUpdate,
         update:async(state,isCurrent,force)=>{const avatarPage=app.isPackaged?join(process.resourcesPath,'native/avatar/index.html'):join(here,'../../out/native-avatar/index.html');const icons=await captureMenuIcons(state,avatarPage);if(!isCurrent())return;const result=await shareMenu.update(state,icons,{isCurrent,force});if(result)scheduleFinderRefresh();return result;},

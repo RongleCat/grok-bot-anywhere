@@ -29,6 +29,21 @@ export class ShareMenu {
   try{this.installed=JSON.parse(await readFile(join(this.root,'menu-state.json'),'utf8'));await access(this.installed.hostPath??join(this.applicationsRoot,'Grok Bot Anywhere Menu.app'));this.electedSlots=await this.readElections(this.installed);this.status.registered=this.electedSlots.length;}
   catch{this.installed=null;this.electedSlots=[];}
  }
+ async elect(){
+  if(!this.installed)return this.status;
+  const host=this.installed.hostPath??this.host;
+  for(const entry of this.installed.entries??[]){
+   const extension=slotExtensionPath(host,entry.slot);
+   const identifier=entry.extensionId??extensionIdentifier(entry.slot,entry.generation??1);
+   await run('/usr/bin/pluginkit',['-a',extension]).catch(()=>{});
+   await run('/usr/bin/pluginkit',['-e','use','-i',identifier]).catch(()=>{});
+  }
+  this.electedSlots=await this.readElections(this.installed);
+  this.status.registered=this.electedSlots.length;
+  this.status.needsUpdate=this.status.registered!==(this.installed.entries?.length??0);
+  this.onChange();
+  return this.status;
+ }
  async readElections(installed){
   if((installed?.layoutVersion??0)>=4){
    const {stdout}=await run('/usr/bin/pluginkit',['-m','-p','com.apple.share-services']);
