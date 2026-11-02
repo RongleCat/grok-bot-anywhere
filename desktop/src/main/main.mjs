@@ -37,7 +37,7 @@ const quietLaunch=backgroundShare||process.argv.includes('--explorer-forward')||
 let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null,suppressActivate=false,composerReadyState=null;
 let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
-let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,ipcSender=null;
+let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,keepFloatOpen=false,ipcSender=null;
 let composerPrefs={afterSend:'hide',dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0;
 let cliStatus={enabled:false,command:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:''};
 const pendingSharedComposers=new Set();let openingSharedComposer=false,shortcutsSuppressed=false;
@@ -407,6 +407,7 @@ function placePicker(width,height){
   layoutExtras();
 }
 function hideFloat({clearAttachments=false,releaseFocus=false}={}){
+  keepFloatOpen=false;
   suppressActivate=true;
   setTimeout(()=>{suppressActivate=false;},400);
   pickerOpen=false;
@@ -444,7 +445,7 @@ async function ensureFloat(){
   for(const target of [floatWindow,avatarWindow,pickerWindow]){if(traits.alwaysOnTop){if(mac)target.setAlwaysOnTop(true,'floating');else target.setAlwaysOnTop(true);}try{target.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true,skipTransformProcessType:true});}catch{target.setVisibleOnAllWorkspaces(true);}}
   avatarWindow.setIgnoreMouseEvents(true);
   wireFloat(floatWindow,'Composer');wireFloat(avatarWindow,'Avatar');wireFloat(pickerWindow,'Picker');
-  floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat({clearAttachments:true});},120);});
+  floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||keepFloatOpen||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat({clearAttachments:true});},120);});
   floatWindow.on('closed',()=>{floatWindow=null;});
   avatarWindow.on('closed',()=>{avatarWindow=null;});
   pickerWindow.on('closed',()=>{pickerWindow=null;});
@@ -503,6 +504,9 @@ async function openComposer(botId,receipt,options={}){
   if(receipt&&(receipt.accountId!==latestState.account?.id||receipt.botId!==botId))throw new Error('RECEIPT_SCOPE_MISMATCH');
   const bot=latestState.bots?.find(item=>item.id===botId);if(!bot)throw new Error('BOT_NOT_FOUND');
   const mainWasVisible=!!window&&!window.isDestroyed()&&window.isVisible();
+  const dismissWasSuspended=suspendFloatDismiss;
+  keepFloatOpen=options.keepOpen===true;
+  suspendFloatDismiss=true;
   if(!mainWasVisible)hideDock();
   const generation=++composeGeneration;
   const capture=!receipt&&options.captureSelection!==false;
@@ -534,7 +538,7 @@ async function openComposer(botId,receipt,options={}){
     // Enter accessory mode before showing anything: otherwise the Dock icon
     // appears for a frame and has to disappear again.
     hideDock();
-    if(process.platform==='darwin')float.showInactive();else float.show();
+    float.show();
   }else float.show();
   float.focus();
   if(!mainVisible)hideDock();
@@ -546,6 +550,14 @@ async function openComposer(botId,receipt,options={}){
   const card=ready?.card??{width:368,height:110};
   placeFloat(card.width,card.height);
   notify('composer-show',{});
+  // WeChat/share handoffs can open the composer while another app is frontmost.
+  // showInactive avoids the Dock flash, so explicitly activate the accessory app
+  // and refocus the text field after the card has rendered.
+  if(process.platform==='darwin'){try{app.focus({steal:true});}catch{}}
+  float.focus();
+  notify('composer-focus',{});
+  if(!mainVisible)setTimeout(hideDock,120);
+  setTimeout(()=>{suspendFloatDismiss=dismissWasSuspended;},1500);
   setTimeout(()=>{try{float.setOpacity(1);avatarWindow?.setOpacity(1);}catch{}},20);
   if(prepared){
     const token=attachToken;
@@ -566,7 +578,7 @@ async function intake(botId,files){
   return {id:item.id};
 }
 async function presentShare(id){
-  try{const item=await rpc.call('composer',{id});await openComposer(item.botId,item);}
+  try{const item=await rpc.call('composer',{id});await openComposer(item.botId,item,{keepOpen:true});}
   catch(error){if(errorCode(error)!=='RECEIPT_NOT_SENDABLE'&&errorCode(error)!=='RECEIPT_NOT_FOUND')issue(errorCode(error));}
 }
 function presentPendingComposer(){
@@ -905,7 +917,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   const link=(argv??[]).map(item=>String(item).trim().replace(/^"(.*)"$/,'$1')).find(item=>item.startsWith('grokbotanywhere://'));
   if(forward){forward.argv=argv;explorerBatch.push(forward);}
   if(link){if(!window||window.isDestroyed()||!window.isVisible())hideDock();acceptDeeplink(link);}
-  if(forward||link||openedAsLoginItem({argv:argv}))return;
+  if(forward||link||argv.includes('--share-intake')||openedAsLoginItem({argv:argv}))return;
   showMainWindow();
  });
  app.on('open-url',(event,url)=>{
@@ -928,6 +940,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
     if(existsSync(join(template,'Contents/MacOS/GrokBotMenuHost'))){
       shareMenu=new ShareMenu({root:join(app.getPath('userData'),'ShareInbox'),template,applicationsRoot:join(homedir(),'Applications'),applicationPath:sharingApplicationPath({packaged:app.isPackaged,appPath:app.getAppPath(),execPath:process.execPath}),locale:app.getLocale(),onChange:()=>{if(!shareMenu.status.needsUpdate&&hostIssue==='MENU_UPDATE_FAILED')hostIssue=null;update();}});
       await shareMenu.initialize();
+      await shareMenu.elect().catch(()=>{});
       menuReconciler=new MenuReconciler({
         sync:state=>shareMenu.sync(state),publish:state=>shareMenu.sync(state),needsUpdate:()=>shareMenu.status.needsUpdate,
         update:async(state,isCurrent,force)=>{const avatarPage=app.isPackaged?join(process.resourcesPath,'native/avatar/index.html'):join(here,'../../out/native-avatar/index.html');const icons=await captureMenuIcons(state,avatarPage);if(!isCurrent())return;const result=await shareMenu.update(state,icons,{isCurrent,force});if(result)scheduleFinderRefresh();return result;},

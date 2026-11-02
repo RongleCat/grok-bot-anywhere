@@ -281,6 +281,7 @@ async function send(){
 window.addEventListener('resize',()=>reportSize());
 if(part==='avatar'){
  api.onChange(message=>{
+  if(message.event==='composer-focus'){focus=true;if(field.isConnected)field.focus();return;}
   if(message.event==='composer-show'){playEnter();return;}
   if(message.event==='state')state=message.data;
   if(message.event==='composer'&&message.data?.botId)draft.botId=message.data.botId;
@@ -297,6 +298,7 @@ if(part==='avatar'){
 }else{
  api.onChange(message=>{
   if(message.event==='composer-clear'){draft.paths=[];draft.names=[];draft.remote=[];fileToken=null;queuedFiles=null;if(state)render();return;}
+  if(message.event==='composer-focus'){focus=true;if(field.isConnected)field.focus();return;}
   if(message.event==='composer-show'){playEnter();return;}
   if(message.event==='composer-files'){acceptComposerFiles(message.data,true);return;}
   if(message.event==='composer'){placed='';applyPayload(message.data);}

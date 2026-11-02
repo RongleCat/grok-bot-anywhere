@@ -86,6 +86,15 @@ Windows 微信没有 share-extension 宿主，所以**不是每个 Bot 一行**�
 
 要点：Windows 上「来源」开关不参与过滤（只有一个入口），因此设置页在 Windows 隐藏「来源」一行；macOS 仍按来源过滤并保持 12 槽。详见 [Windows](../platforms/windows.md#微信分享)。
 
+## 微信里显示禁止符号
+
+macOS 可能把新生成的 share extension 设为未启用，WeChat 会显示带禁止符号的入口。应用启动时会对已安装的每个槽位重新执行 `pluginkit -a` + `pluginkit -e use`；如果仍然灰色，退出并重开微信（微信会缓存分享列表）。手动修复单个槽位时可用：
+
+```sh
+pluginkit -a "$HOME/Applications/Grok Bot Anywhere Menu/Contents/Helpers/Destination02.app/Contents/PlugIns/GrokBotShare.appex"
+pluginkit -e use -i dev.ronglecat.grokbotanywhere.menu.destination02.g2.share
+```
+
 ## 排障
 
 - 设置 → 分享菜单 → **复制报错日志**：复制应用与 Electron 版本、菜单状态、宿主 build、`configuration.json`/`menu-state.json` 摘要、最近一次更新错误。可能包含本机路径，不包含登录凭据。
