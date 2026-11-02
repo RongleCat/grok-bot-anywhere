@@ -502,6 +502,8 @@ async function openComposer(botId,receipt,options={}){
   if(latestState.accountBusy)throw new Error('ACCOUNT_BUSY');
   if(receipt&&(receipt.accountId!==latestState.account?.id||receipt.botId!==botId))throw new Error('RECEIPT_SCOPE_MISMATCH');
   const bot=latestState.bots?.find(item=>item.id===botId);if(!bot)throw new Error('BOT_NOT_FOUND');
+  const mainWasVisible=!!window&&!window.isDestroyed()&&window.isVisible();
+  if(!mainWasVisible)hideDock();
   const generation=++composeGeneration;
   const capture=!receipt&&options.captureSelection!==false;
   const deferFiles=capture&&process.platform==='win32';
@@ -527,8 +529,15 @@ async function openComposer(botId,receipt,options={}){
   floatShownAt=Date.now();
   float.setIgnoreMouseEvents(false);
   suppressActivate=true;
-  float.show();float.focus();
-  if(!window||window.isDestroyed()||!window.isVisible())setTimeout(hideDock,60);
+  const mainVisible=!!window&&!window.isDestroyed()&&window.isVisible();
+  if(!mainVisible){
+    // Enter accessory mode before showing anything: otherwise the Dock icon
+    // appears for a frame and has to disappear again.
+    hideDock();
+    if(process.platform==='darwin')float.showInactive();else float.show();
+  }else float.show();
+  float.focus();
+  if(!mainVisible)hideDock();
   setTimeout(()=>{suppressActivate=false;},400);
   layoutExtras();
   notify('composer',pendingFloat);
@@ -838,6 +847,7 @@ function serviceEvent(message){
   if(message.event==='auth.expired'){hostIssue='LOGIN_REQUIRED';void vault.remove().catch(()=>{});void forgetCliCredential().then(()=>update()).catch(()=>update());}
   if(message.event==='reply'&&!preview&&Notification.isSupported())systemNotification({title:message.data.name||'Grok Bot',body:zh?'收到新回复':'New reply'}).show();
   if(message.event==='share.received'){
+    if(!window||window.isDestroyed()||!window.isVisible())hideDock();
     const action=shareHandoff({mode:message.data.mode});
     if(action==='service')notify('navigate',{page:'inbox'});
     else void presentShare(message.data.id);
@@ -894,13 +904,16 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   const forward=parseExplorerForward(argv);
   const link=(argv??[]).map(item=>String(item).trim().replace(/^"(.*)"$/,'$1')).find(item=>item.startsWith('grokbotanywhere://'));
   if(forward){forward.argv=argv;explorerBatch.push(forward);}
-  if(link)acceptDeeplink(link);
+  if(link){if(!window||window.isDestroyed()||!window.isVisible())hideDock();acceptDeeplink(link);}
   if(forward||link||openedAsLoginItem({argv:argv}))return;
   showMainWindow();
  });
  app.on('open-url',(event,url)=>{
   event.preventDefault();
-  if(String(url??'').startsWith('grokbotanywhere:'))acceptDeeplink(url);
+  if(String(url??'').startsWith('grokbotanywhere:')){
+   if(!window||window.isDestroyed()||!window.isVisible())hideDock();
+   acceptDeeplink(url);
+  }
  });
  app.whenReady().then(async()=>{
   if(!preview){
@@ -1007,6 +1020,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
  }).catch(error=>{console.error(errorCode(error));app.exit(1);});
 }
 app.on('activate',()=>{
+ if(!window||window.isDestroyed()||!window.isVisible())hideDock();
  if(suppressActivate||composerVisible())return;
  // macOS activation is also delivered for share/extension handoffs. Only
  // restore a minimized window here; a closed main window opens only via an

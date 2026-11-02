@@ -322,6 +322,8 @@ test('shipped main and renderer call the confirm, tray, login, and explorer deci
   assert.match(main,/windowCloseAction\(/);
   assert.doesNotMatch(main,/action==='service'\)\{showMainWindow/);
   assert.match(main,/process\.platform==='darwin'&&!window\?\.isMinimized\(\)\)return/);
+  assert.match(main,/if\(!mainWasVisible\)hideDock\(\)/);
+  assert.match(main,/if\(!window\|\|window\.isDestroyed\(\)\|\|!window\.isVisible\(\)\)hideDock\(\)/);
   assert.match(main,/trayMenuModel\(/);
   assert.match(main,/applyLoginItem\(/);
   assert.match(main,/loginItemStartup\(/);

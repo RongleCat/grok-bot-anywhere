@@ -50,6 +50,7 @@ macOS 使用 `hiddenInset` + vibrancy；Windows 使用 `frame:false` + 自绘最
 - 从登录项启动时保持后台，不弹主窗口。
 - 主窗口隐藏后 Dock 图标隐藏（`app.setActivationPolicy('accessory')`）；托盘、深链或重新显示主窗口时恢复。
 - 唤醒悬浮输入框只显示浮窗，不打开主窗口；应用激活事件的处理器会跳过浮窗可见或正在唤起的状态。
+- 主窗口隐藏时，外部分享/深链一进入就切到 accessory 模式并在显示浮窗前后再次隐藏 Dock，避免图标闪一下。
 
 ## 全局快捷键
 
