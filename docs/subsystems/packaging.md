@@ -52,9 +52,9 @@ macOS 签名脚本 `desktop/scripts/package-mac-signed.sh`：
 
 | 文件 | 架构 | 状态 |
 | --- | --- | --- |
-| `release/Grok Bot Anywhere-0.1.0-arm64.dmg` | arm64 | Developer ID 签名 + 公证 + staple |
-| `release/Grok Bot Anywhere-0.1.0.dmg` | x64 | Developer ID 签名 + 公证 + staple |
-| `release/Grok Bot Anywhere-0.1.0-win.zip` | x64 | 未签名；早于最后一次 `package.json` 修改，发布前重打 |
+| `release/Grok Bot Anywhere-0.1.1-arm64.dmg` | arm64 | Developer ID 签名 + 公证 + staple |
+| `release/Grok Bot Anywhere-0.1.1.dmg` | x64 | Developer ID 签名 + 公证 + staple |
+| `release/Grok Bot Anywhere-0.1.1-win.zip` | x64 | 未签名；早于最后一次 `package.json` 修改，发布前重打 |
 | `release/mac/`、`release/mac-arm64/`、`release/win-unpacked/` | — | 构建中间产物，不提交 |
 
 > 现有 DMG/zip 是 2026-11-01 结构迁移前的产物；迁移后尚未重打，发布前必须按当前源码重新构建。
@@ -65,7 +65,7 @@ macOS 签名脚本 `desktop/scripts/package-mac-signed.sh`：
 codesign -dv --verbose=2 "desktop/release/mac-arm64/Grok Bot Anywhere.app"
 codesign --verify --deep --strict "desktop/release/mac-arm64/Grok Bot Anywhere.app"
 spctl -a -vvv -t install "desktop/release/mac-arm64/Grok Bot Anywhere.app"
-xcrun stapler validate "desktop/release/Grok Bot Anywhere-0.1.0-arm64.dmg"
+xcrun stapler validate "desktop/release/Grok Bot Anywhere-0.1.1-arm64.dmg"
 ```
 
 ## 产物与提交的关系

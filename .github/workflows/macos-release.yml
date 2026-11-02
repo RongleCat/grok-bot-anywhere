@@ -4,19 +4,25 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version, for example 0.1.0'
+        description: 'Version, for example 0.1.1'
         required: true
-        default: '0.1.0'
+        default: '0.1.1'
   push:
     tags: ['v*']
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [arm64, x64]
+        include:
+          - arch: arm64
+            runner: macos-14
+            binary_arch: arm64
+          - arch: x64
+            runner: macos-13
+            binary_arch: x86_64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,6 +35,19 @@ jobs:
       - name: Install dependencies
         run: npm run setup
 
+      - name: Set requested version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          npm version '${{ inputs.version }}' --no-git-tag-version --allow-same-version
+          npm --prefix desktop version '${{ inputs.version }}' --no-git-tag-version --allow-same-version
+
+      - name: Build macOS companion and share host
+        run: |
+          set -euo pipefail
+          npm run build:native
+          npm run build:share
+
       # Signing material never lands in the repository: the certificate goes into
       # a throwaway keychain and the notarization key into a file outside the tree.
       - name: Import Developer ID certificate
@@ -38,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
-          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          printf '%s' "$CERT_P12" | base64 -D > "$RUNNER_TEMP/cert.p12"
           security create-keychain -p actions "$KEYCHAIN"
           security set-keychain-settings -lut 3600 "$KEYCHAIN"
           security unlock-keychain -p actions "$KEYCHAIN"
@@ -77,13 +96,18 @@ jobs:
           EOF
           bash desktop/scripts/package-mac-signed.sh ${{ matrix.arch }}
 
-      - name: Check the signature and the staple
+      - name: Check signatures, architecture and staples
         run: |
           set -euo pipefail
-          APP=$(find desktop/release -maxdepth 2 -name '*.app' | head -n 1)
-          test -n "$APP"
+          APP=$(find desktop/release -maxdepth 3 -name '*.app' | head -n 1)
+          DMG=$(find desktop/release -maxdepth 1 -name '*.dmg' | head -n 1)
+          test -n "$APP"; test -n "$DMG"
           codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl -a -vvv -t exec "$APP"
+          file "$APP/Contents/MacOS/Grok Bot Anywhere" | grep -E "${{ matrix.binary_arch }}"
           xcrun stapler validate "$APP"
+          xcrun stapler validate "$DMG"
+          shasum -a 256 "$DMG"
 
       - uses: actions/upload-artifact@v4
         with:
