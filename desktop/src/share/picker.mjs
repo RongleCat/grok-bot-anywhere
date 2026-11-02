@@ -1,13 +1,14 @@
 import {listedBots} from '../renderer/group-avatar.mjs';
 
 // Windows shows one share entry that opens a picker, so it lists every Bot with
-// the WeChat source on. The macOS menu stops at 12 because each row is a signed
-// appex; there is no such ceiling here.
-export function pickerBots(state){
+// receiving enabled — the per-source switches are a macOS concept there (each
+// source maps to a different extension), so Windows ignores them.
+// The macOS menu stops at 12 because each row is a signed appex; no such ceiling.
+export function pickerBots(state,{allSources=false}={}){
   if(!state.account?.id||state.accountBusy)return [];
   const visible=new Set(listedBots(state.bots).map(bot=>bot.id));
   return state.recipients
-    .filter(recipient=>recipient.enabled&&recipient.sources?.wechat)
+    .filter(recipient=>recipient.enabled&&(allSources||recipient.sources?.wechat))
     .map((recipient,index)=>({recipient,index,bot:state.bots.find(bot=>bot.id===recipient.botId)}))
     .filter(row=>row.bot&&visible.has(row.bot.id))
     .sort((a,b)=>a.recipient.order-b.recipient.order||a.index-b.index)

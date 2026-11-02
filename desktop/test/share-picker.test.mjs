@@ -24,6 +24,12 @@ test('the picker follows the configured order and drops unknown Bots',()=>{
   assert.deepEqual(rows.map(row=>row.botId),['b','a','c']);
 });
 
+test('Windows lists every receiving Bot because it has no per-source choice',()=>{
+  const recipients=[recipient('a',{sources:{wechat:false,drop:false}}),recipient('b',{sources:{wechat:true}}),recipient('c',{enabled:false,sources:{wechat:true}})];
+  assert.deepEqual(pickerBots(state({recipients})).map(row=>row.botId),['b']);
+  assert.deepEqual(pickerBots(state({recipients}),{allSources:true}).map(row=>row.botId),['a','b']);
+});
+
 test('the picker is empty without a settled account',()=>{
   assert.deepEqual(pickerBots(state({account:null})),[]);
   assert.deepEqual(pickerBots(state({accountBusy:true})),[]);

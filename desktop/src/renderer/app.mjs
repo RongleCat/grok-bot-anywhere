@@ -355,7 +355,9 @@ function renderChat(content){
   wechat.type='button';wechat.setAttribute('aria-pressed',String(wechatOn));
   wechat.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{wechat:!wechatOn}})));
   sources.append(general,shortcut,wechat);
-  card.append(settingRow(t('来源','Sources'),sources));
+  // Windows has a single share entry for every receiving Bot, so the per-source
+  // switches would promise a choice that does not exist there.
+  if(state.host?.platform!=='win32')card.append(settingRow(t('来源','Sources'),sources));
   if(recipient.mode==='direct'){
    const prefix=el('input','prefix');prefix.placeholder=t('加在正文前','Prefix');prefix.setAttribute('aria-label',t('直接发送时加在正文前','Prefix for direct sends'));prefix.value=recipient.prefix;
    prefix.addEventListener('change',()=>run(()=>api.configure(bot.id,{prefix:prefix.value})));

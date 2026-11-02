@@ -15,6 +15,7 @@ import {captureMenuIcons} from './menu-icons.mjs';
 import {MenuReconciler} from '../share/reconciler.mjs';
 import {menuHostTemplate,sharingApplicationPath} from '../share/host-path.mjs';
 import {shareHandoff} from '../share/handoff.mjs';
+import {pickerBots} from '../share/picker.mjs';
 import {frontmostFiles,prepareExplorerSelection,regularFiles,stopExplorerSelection,warmExplorerSelection} from './selection.mjs';
 import {menuEntries} from '../share/model.mjs';
 import {matchShareTitles} from '../share/order.mjs';
@@ -183,11 +184,88 @@ function acceptDeeplink(raw){
   deeplinkChain=deeplinkChain.then(()=>handleDeeplink(text)).catch(error=>deeplinkIssue(errorCode(error)));
   return true;
 }
+// A Windows share names a batch, not a Bot: read the batch the helper wrote,
+// show the frameless picker, and run the same receive/submit path the composer
+// uses. Cancelling (Esc, blur, or the button) discards the batch.
+let sharePickerWindow=null,sharePending=null;
+function ensureSharePickerWindow(){
+  if(sharePickerWindow&&!sharePickerWindow.isDestroyed())return sharePickerWindow;
+  sharePickerWindow=new BrowserWindow({
+    width:380,height:260,frame:false,transparent:true,resizable:false,maximizable:false,minimizable:false,
+    fullscreenable:false,skipTaskbar:true,alwaysOnTop:true,show:false,hasShadow:true,backgroundColor:'#00000000',
+    webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}
+  });
+  sharePickerWindow.on('closed',()=>{sharePickerWindow=null;});
+  sharePickerWindow.on('blur',()=>{if(sharePending)void cancelShare();});
+  void sharePickerWindow.loadFile(join(here,'../../out/share-picker.html'));
+  return sharePickerWindow;
+}
+function closeSharePicker(){
+  const target=sharePickerWindow;
+  sharePickerWindow=null;
+  if(target&&!target.isDestroyed())target.close();
+}
+function dropShareBatch(){
+  if(!sharePending)return;
+  try{rmSync(sharePending.dir,{recursive:true,force:true});}catch{}
+  sharePending=null;
+}
+function cancelShare(){closeSharePicker();dropShareBatch();}
+async function openSharePicker(batch){
+  const dir=join(app.getPath('userData'),'share-pending',batch);
+  let manifest;
+  try{manifest=JSON.parse(readFileSync(join(dir,'manifest.json'),'utf8'));}catch{return;}
+  sharePending={dir,batch,manifest,files:(manifest.files??[]).map(file=>file.path).filter(Boolean),text:manifest.text??''};
+  const panel=ensureSharePickerWindow();
+  panel.show();
+  panel.focus();
+}
+function sharePickerPayload(){
+  if(!sharePending)return {bots:[],fileCount:0};
+  const bots=pickerBots(latestState,{allSources:process.platform==='win32'}).map(entry=>{
+    const bot=(latestState.bots??[]).find(item=>item.id===entry.botId)??{};
+    return {
+      botId:entry.botId,
+      name:entry.name,
+      avatarShape:bot.avatarShape,
+      avatarColor:bot.avatarColor,
+      running:(latestState.runtime?.statuses??[]).some(row=>row.agentId===entry.botId&&row.isRunning)
+    };
+  });
+  return {bots,fileCount:sharePending.files.length};
+}
+async function confirmShare(botId){
+  if(!sharePending)return {ok:false};
+  const {files,text,dir}=sharePending;
+  // The Bot decides where this lands: "先放进输入框" must open the composer,
+  // only a direct Bot submits straight away.
+  const recipient=(latestState.recipients??[]).find(row=>row.botId===botId);
+  const mode=recipient?.mode==='direct'?'direct':'compose';
+  try{
+    const receipt=await rpc.call('receive',{botId,source:'wechat',text,files,manual:mode!=='direct'});
+    if(mode==='direct'){
+      const result=await rpc.call('submit',{id:receipt.id,text,files},0);
+      if(result.status!=='sent'){
+        issue(result.status==='unconfirmed'?'SEND_UNCONFIRMED':'SEND_FAILED');
+        return {ok:false};
+      }
+    }else{
+      await openComposer(botId,receipt);
+      // The share handoff ends in the composer, so it has to take focus.
+      if(floatWindow&&!floatWindow.isDestroyed()){floatWindow.focus();floatWindow.webContents.focus();}
+    }
+    try{rmSync(dir,{recursive:true,force:true});}catch{}
+    sharePending=null;
+    closeSharePicker();
+    return {ok:true};
+  }catch(error){issue(errorCode(error));return {ok:false};}
+}
 async function handleDeeplink(raw){
   if(preview)return;
   const parsed=parseDeeplink(raw);
   if(!parsed.ok){deeplinkIssue('DEEPLINK_IGNORED');return;}
   if(parsed.action==='open'){showMainWindow();return;}
+  if(parsed.action==='share'){await openSharePicker(parsed.batch);return;}
   if(parsed.action==='compose'){
     const bot=parsed.bot?(latestState.bots??[]).find(item=>item.id===parsed.bot):lastAwakeBot();
     if(!bot){if(parsed.bot)deeplinkIssue('BOT_NOT_FOUND');else showMainWindow();return;}
@@ -505,6 +583,17 @@ async function startCompanion(){
 async function dispatch(method,p){
   switch(method){
     case 'state':return publicState();
+    case 'sharePickerData':return sharePickerPayload();
+    case 'sharePickerConfirm':return confirmShare(p.botId);
+    case 'sharePickerCancel':cancelShare();return {ok:true};
+    case 'sharePickerResize':{
+      // The panel is sized by its content: no fixed 460px of empty space.
+      if(sharePickerWindow&&!sharePickerWindow.isDestroyed()){
+        const height=Math.max(150,Math.min(600,Math.round(Number(p.height)||0)));
+        if(height>0){const bounds=sharePickerWindow.getBounds();if(bounds.height!==height)sharePickerWindow.setBounds({...bounds,height});}
+      }
+      return {ok:true};
+    }
     case 'login':return accountAction('login');
     case 'desktopLogin':return accountAction('desktopLogin');
     case 'logout':{
@@ -616,7 +705,7 @@ function serviceEvent(message){
   if(message.event==='share.error')issue('SHARE_IMPORT_FAILED');
 }
 function ownerWindow(){const owner=ipcSender?BrowserWindow.fromWebContents(ipcSender):null;return owner&&!owner.isDestroyed()?owner:window;}
-function trusted(event){const contents=event.sender;if(event.senderFrame!==contents.mainFrame)return false;return [window,floatWindow,avatarWindow,pickerWindow].some(target=>target&&contents===target.webContents);}
+function trusted(event){const contents=event.sender;if(event.senderFrame!==contents.mainFrame)return false;return [window,floatWindow,avatarWindow,pickerWindow,sharePickerWindow].some(target=>target&&contents===target.webContents);}
 // win32 去掉应用菜单后，编辑快捷键不再由菜单 accelerator 派发，这里补回输入框命令
 // 2026-11-01 before-input-event：selectAll/copy/paste/cut/undo/redo，contents 无返回值
 function bindWindowsEditKeys(contents){
