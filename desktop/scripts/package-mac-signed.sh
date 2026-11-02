@@ -53,7 +53,10 @@ else
   DMG="$ROOT/release/Grok Bot Anywhere-$VERSION.dmg"
 fi
 [[ -d "$APP" ]] || { echo "missing $APP" >&2; exit 1; }
-xcrun notarytool submit "$APP" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+APP_ZIP="$ROOT/release/Grok Bot Anywhere-$VERSION-$ARCH.zip"
+ditto -c -k --keepParent "$APP" "$APP_ZIP"
+xcrun notarytool submit "$APP_ZIP" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+rm -f "$APP_ZIP"
 for attempt in 1 2 3 4; do
   if xcrun stapler staple "$APP"; then break; fi
   [[ "$attempt" -lt 4 ]] || { echo "app stapler failed after $attempt attempts" >&2; exit 1; }
