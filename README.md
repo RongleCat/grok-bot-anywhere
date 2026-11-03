@@ -207,6 +207,10 @@ legacy/bridge/            早期 SDK 调研，不参与构建
 scripts/                  文档校验、跨平台命令启动器、Agent runner
 ```
 
+## 代码签名
+
+Windows 发布包通过 [SignPath Foundation](https://signpath.org/) 申请开源代码签名；macOS 发布包使用 Developer ID 签名并经 Apple 公证。签名状态以对应 release 的校验结果为准。
+
 ## 隐私与安全
 
 - 收件库、附件副本和偏好保存在本机 `userData`；应用登录使用 Electron `safeStorage`，没有明文回退。
