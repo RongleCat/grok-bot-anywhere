@@ -69,6 +69,16 @@ xcrun stapler validate "release/Grok Bot Anywhere-0.1.1-arm64.dmg"
 
 ## Windows
 
+`.github/workflows/windows-release.yml` 会构建 app zip、完整 MSIX、share helper zip 和稀疏 share MSIX，并上传 `unsigned-for-signing`。配置 SignPath 变量后会提交签名；未配置时只产出未签名 artifact。
+
+签名前必须确认：
+
+- `WINDOWS_PUBLISHER` 与签名证书 Subject 完全一致。
+- SignPath artifact configuration 覆盖 app zip、完整 MSIX、share zip 和稀疏 MSIX。
+- 完整 MSIX 的 share target 和安装器仍需 Windows 实机验证。
+
+## Windows
+
 ```powershell
 cd desktop
 npm run package:win

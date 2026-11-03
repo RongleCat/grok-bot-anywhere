@@ -59,6 +59,8 @@ macOS 仍是每个 Bot 一个签名 appex，见[分享菜单](../subsystems/shar
 
 **证书 Subject 与 MSIX Publisher 不一致时，包能签但无法安装。** 本地自签调试用 `new-dev-certificate.ps1`；正式包必须用 SignPath 提供的证书 Subject 填 `WINDOWS_PUBLISHER`。
 
+2026-11-03 的无签名 CI 已经跑通，产物包含 app zip、完整 MSIX、share zip 和稀疏 share MSIX。完整 MSIX 的 share target 与“安装 app + 注册稀疏 share 包”的安装器仍未在 Windows 实机验证；SignPath 项目尚未创建，所以目前只有未签名 artifact。
+
 ## 未验证项
 
 - 托盘图标点击与退出菜单。
