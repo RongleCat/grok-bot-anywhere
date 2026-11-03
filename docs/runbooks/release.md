@@ -91,7 +91,16 @@ npm run package:win
 
 产物 `release/Grok Bot Anywhere-0.1.1-win.zip`，未签名。**发布前必须在 Windows 机器上解压启动一次**；当前没有这条证据。
 
-## 发布记录
+## 0.1.2 发布记录
+
+```text
+Commit: 95661dd
+macOS: arm64 DMG 120 MB, x64 DMG 125 MB; Developer ID signed, notarized, stapled
+Checks: codesign --verify --deep --strict passed for both; spctl accepted; stapler validate passed
+Tests: desktop 161 passed; client-protocol 60 passed; avatar 1 passed; Swift 8 passed; docs check passed; packaged arm64 smoke passed
+Feishu: tutorial updated with 0.1.2 download links and update note; both files set to tenant-readable links
+Not run: Windows real-device install, Touch Bar hardware, live WeChat send on this exact build
+```
 
 0.1.2 的用户操作文档：[Grok Bot Anywhere 下载与使用教程](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)；更新说明见 [0.1.2 更新说明](../updates/0.1.2.md)。
 
