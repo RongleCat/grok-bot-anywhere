@@ -21,7 +21,7 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 $manifest = Join-Path $here 'ShareTarget.manifest'
 
 $command = "`"$vcvars`" >nul 2>&1 && cd /d `"$here`" && " +
-    "cl /nologo /std:c++17 /EHsc /O2 /MT /DUNICODE /D_UNICODE " +
+    "cl /nologo /std:c++17 /EHsc /O2 /MT /DUNICODE /D_UNICODE /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS " +
     "/I`"$(Join-Path $sdkRoot.FullName 'cppwinrt')`" " +
     "/Fe:`"$out\GrokBotShareTarget.exe`" ShareTarget.cpp " +
     "/link /SUBSYSTEM:WINDOWS shell32.lib ole32.lib windowsapp.lib /MANIFEST:EMBED /MANIFESTINPUT:`"$manifest`""
