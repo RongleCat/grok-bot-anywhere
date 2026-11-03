@@ -35,6 +35,30 @@
 
 macOS 仍是每个 Bot 一个签名 appex，见[分享菜单](../subsystems/share-menu.md)。
 
+## 发布签名（SignPath）
+
+仓库是公开的，优先走 [SignPath Foundation](https://signpath.org/) 的免费开源签名。需要在 SignPath 完成：
+
+1. 申请 Foundation 项目并获批。
+2. 建立 project、signing policy、artifact configuration。
+3. 安装 SignPath GitHub App，并把 GitHub 作为 trusted build system 关联到 project。
+4. 在 GitHub 配置：
+
+| 类型 | 名称 | 说明 |
+| --- | --- | --- |
+| Secret | `SIGNPATH_API_TOKEN` | 有 submitter 权限的 token |
+| Variable | `SIGNPATH_ORGANIZATION_ID` | SignPath organization ID |
+| Variable | `SIGNPATH_PROJECT_SLUG` | project slug |
+| Variable | `SIGNPATH_SIGNING_POLICY_SLUG` | signing policy slug |
+| Variable | `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | artifact configuration slug |
+| Variable | `WINDOWS_PUBLISHER` | **必须逐字符等于**签名证书 Subject；MSIX 的 Publisher 不能事后修改 |
+
+`windows-release.yml` 会先上传未签名的 app zip、完整 MSIX、share zip 和稀疏 MSIX，再把这些文件交给 SignPath；artifact configuration 必须覆盖这些文件。签名完成后会输出 `windows-signed` artifact。
+
+当前 workflow 在 `SIGNPATH_PROJECT_SLUG` 未设置时只产出未签名包，不会假装成功签名。
+
+**证书 Subject 与 MSIX Publisher 不一致时，包能签但无法安装。** 本地自签调试用 `new-dev-certificate.ps1`；正式包必须用 SignPath 提供的证书 Subject 填 `WINDOWS_PUBLISHER`。
+
 ## 未验证项
 
 - 托盘图标点击与退出菜单。

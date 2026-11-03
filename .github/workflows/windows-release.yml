@@ -4,15 +4,29 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'MSIX version, for example 1.0.0.0'
+        description: 'App version, for example 0.1.1'
         required: true
-        default: '1.0.0.0'
+        default: '0.1.1'
+      msix_version:
+        description: 'MSIX version, four parts, for example 0.1.1.0'
+        required: true
+        default: '0.1.1.0'
   push:
     tags: ['v*']
+
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      APP_VERSION: ${{ github.event.inputs.version || '0.1.1' }}
+      MSIX_VERSION: ${{ github.event.inputs.msix_version || '0.1.1.0' }}
+      # Must exactly match the certificate subject used to sign the MSIX.
+      WINDOWS_PUBLISHER: ${{ vars.WINDOWS_PUBLISHER || 'CN=GrokBotAnywhere' }}
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,32 +39,79 @@ jobs:
       - name: Install dependencies
         run: npm run setup
 
-      - name: Build the app package
+      - name: Set requested version
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          npm version $env:APP_VERSION --no-git-tag-version --allow-same-version
+          npm --prefix desktop version $env:APP_VERSION --no-git-tag-version --allow-same-version
+
+      - name: Build the app zip
         run: npm run package:win
 
       - name: Build the share helper
         shell: pwsh
         run: ./native/windows/share-target/build.ps1
 
-      # Unsigned on purpose: the artifact below is what the signing service signs.
-      # Its shape (helper exe + MSIX) is the one the SignPath artifact
-      # configuration expects.
+      # The app zip is the portable build. The full MSIX and the sparse share
+      # package are the installable/share-target shapes. Keep all three in the
+      # unsigned input so a signing service can sign every payload with the
+      # same certificate.
+      - name: Pack the full app MSIX unsigned
+        shell: pwsh
+        run: |
+          ./desktop/scripts/pack-full.ps1 `
+            -AppDirectory 'desktop/release/win-unpacked' `
+            -Sign Unsigned `
+            -Version $env:MSIX_VERSION `
+            -Publisher $env:WINDOWS_PUBLISHER
+
       - name: Pack the share package unsigned
         shell: pwsh
         run: |
-          ./desktop/scripts/pack-share.ps1 -Sign Unsigned -Version '${{ inputs.version }}'
+          ./desktop/scripts/pack-share.ps1 `
+            -Sign Unsigned `
+            -Version $env:MSIX_VERSION `
+            -Publisher $env:WINDOWS_PUBLISHER
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload unsigned artifacts
+        id: upload-unsigned-artifact
+        uses: actions/upload-artifact@v4
         with:
           name: unsigned-for-signing
           path: |
+            desktop/release/*-win.zip
+            desktop/artifacts/full/*.msix
             desktop/artifacts/share/share-target-*.zip
             desktop/artifacts/share/GrokBot.ShareTarget.msix
           if-no-files-found: error
 
-      # TODO(signpath): submit the uploaded zip to SignPath once the project is
-      # approved, then download the signed output and publish it. Kept out of the
-      # workflow until the organization, project and signing policy exist — a
-      # half-configured step would fail every release.
-      - name: SignPath (not configured yet)
-        run: echo "::warning::SignPath is not configured; artifacts stay unsigned."
+      # SignPath Foundation is the free path for a public repository. The
+      # organization, project, policy and artifact configuration live in
+      # SignPath; the artifact configuration must sign the app zip, the full
+      # MSIX, the share zip and the sparse MSIX.
+      - name: Submit to SignPath
+        id: signpath
+        if: ${{ vars.SIGNPATH_PROJECT_SLUG != '' }}
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-artifact.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: desktop/artifacts/signed
+
+      - name: Upload signed artifacts
+        if: ${{ steps.signpath.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-signed
+          path: desktop/artifacts/signed/**
+          if-no-files-found: error
+
+      - name: Signing not configured
+        if: ${{ vars.SIGNPATH_PROJECT_SLUG == '' }}
+        run: echo "::warning::SIGNPATH_PROJECT_SLUG is not set; unsigned artifacts are available for manual signing."
