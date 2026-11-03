@@ -1,0 +1,76 @@
+name: Windows Store package
+
+# Builds the MSIX that gets uploaded to Partner Center. The Store re-signs it
+# after certification, so this workflow never touches a certificate.
+#
+# Repository variables (Settings -> Secrets and variables -> Actions -> Variables):
+#   STORE_PACKAGE_NAME             Package/Identity/Name
+#   STORE_PUBLISHER                Package/Identity/Publisher   CN=<GUID>
+#   STORE_PUBLISHER_DISPLAY_NAME   Package/Properties/PublisherDisplayName
+#   STORE_DISPLAY_NAME             optional, defaults to "Grok Bot"
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version, for example 0.1.2'
+        required: true
+        default: '0.1.2'
+      msix_version:
+        description: 'MSIX version, four parts, must be higher than the last Store submission'
+        required: true
+        default: '0.1.2.0'
+
+permissions:
+  contents: read
+
+jobs:
+  store:
+    runs-on: windows-latest
+    env:
+      STORE_PACKAGE_NAME: ${{ vars.STORE_PACKAGE_NAME }}
+      STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+      STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+      STORE_DISPLAY_NAME: ${{ vars.STORE_DISPLAY_NAME }}
+      MSIX_VERSION: ${{ github.event.inputs.msix_version }}
+
+    steps:
+      - name: Check the Store identity
+        shell: pwsh
+        run: |
+          $missing = @()
+          foreach ($name in 'STORE_PACKAGE_NAME', 'STORE_PUBLISHER', 'STORE_PUBLISHER_DISPLAY_NAME') {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { $missing += $name }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Error "Missing repository variables: $($missing -join ', '). Copy them from Partner Center -> Product identity."
+          }
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set the requested version
+        shell: pwsh
+        run: |
+          npm version ${{ github.event.inputs.version }} --no-git-tag-version --allow-same-version
+          npm --prefix desktop version ${{ github.event.inputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm run setup
+
+      - name: Build the Store MSIX
+        run: npm run package:win-store
+
+      - name: Upload the MSIX for Partner Center
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-msix
+          path: desktop/artifacts/full/*.msix
+          if-no-files-found: error
+
+      - name: Remind the uploader
+        run: echo "::notice::Upload the store-msix artifact in Partner Center. Do not sign it yourself."

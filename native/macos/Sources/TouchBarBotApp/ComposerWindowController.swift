@@ -133,6 +133,9 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
     private var hostHeight: NSLayoutConstraint?
     private var hostWidth: NSLayoutConstraint?
     private var hostBottom: NSLayoutConstraint?
+    private var hostCenterX: NSLayoutConstraint?
+    private var baseBottom: CGFloat = 0
+    private var userOffset = CGSize.zero
     init(store: AppStore) {
         self.store = store
         let panel = ComposerPanel(contentRect: NSRect(x: 0, y: 0, width: 480, height: 380), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -159,7 +162,8 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
             onRegions: { [weak self] rects in
                 self?.host?.swiftRects = rects
                 self?.gate.updatePassthrough()
-            }
+            },
+            onMove: { [weak self] delta in self?.moveComposer(by: delta) }
         ))
         hosting.sizingOptions = []
         hosting.wantsLayer = true
@@ -173,16 +177,13 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
         let height = hosting.heightAnchor.constraint(equalToConstant: 640)
         let width = hosting.widthAnchor.constraint(equalToConstant: 400)
         let bottom = hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        NSLayoutConstraint.activate([
-            hosting.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            bottom,
-            width,
-            height
-        ])
+        let centerX = hosting.centerXAnchor.constraint(equalTo: container.centerXAnchor)
+        NSLayoutConstraint.activate([centerX, bottom, width, height])
         host = hosting
         hostHeight = height
         hostWidth = width
         hostBottom = bottom
+        hostCenterX = centerX
         gate.window = panel
         gate.host = hosting
         gate.dismissOnOutside = store.dismissComposerOnOutsideClick
@@ -234,7 +235,23 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
             adjustingFrame = false
         }
         let inset = max(0, (screen.visibleFrame.minY + 24) - screen.frame.minY)
-        hostBottom?.constant = -inset
+        baseBottom = -inset
+        applyOffset()
+    }
+    private func applyOffset() {
+        guard let window, let height = hostHeight?.constant, let width = hostWidth?.constant else { return }
+        let frame = (window.screen ?? NSScreen.main)?.visibleFrame ?? window.frame
+        let maxX = max(0, (frame.width - width) / 2 - 8)
+        let maxUp = max(0, frame.height - height - 24)
+        userOffset.width = min(max(-maxX, userOffset.width), maxX)
+        userOffset.height = min(max(-maxUp, userOffset.height), 0)
+        hostCenterX?.constant = userOffset.width
+        hostBottom?.constant = baseBottom - userOffset.height
+    }
+    private func moveComposer(by delta: CGSize) {
+        userOffset.width += delta.width
+        userOffset.height += delta.height
+        applyOffset()
     }
     private func resize(animated: Bool) {
         guard let window, window.isVisible || store.composerVisible, contentHeight > 1 else { return }
@@ -259,6 +276,7 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
                 hostWidth?.constant = width
             }
         }
+        applyOffset()
         gate.updatePassthrough()
     }
     private func startTracking() {

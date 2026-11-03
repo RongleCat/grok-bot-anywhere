@@ -16,6 +16,7 @@
 | `messageId` | 稳定发送 id；重试复用，避免重复 |
 | `status` / `phase` | 用户可见状态 / 内部阶段 |
 | `error` | 稳定错误码 |
+| `progress` | 发送小条用的阶段进度：`{stage:'upload'|'send'|'done', name, bytes, totalBytes, index, total, percent}` |
 | `sourceId` | 去重键（微信 `wechat:<batchId>`） |
 | `replies[]` | 该 receipt 收到的回复事件 |
 | `sentAt` / `delivery` | 明确成功后的时间与服务端投递信息 |
@@ -30,7 +31,7 @@
 | `failed` | `ready` | 上传/发送明确失败，文件保留 | `retry`（用户） |
 | `unconfirmed` | `held` | 尝试过但结果不明；该 Bot 暂停 | 去官方客户端核对 → `resolve` |
 | `sent` | `done` | 服务端接受（≠ 已读） | 等回复/结束 |
-| `expired` | `done` | direct 超过 90 秒未成功 | 重新创建，不自动补发 |
+| `expired` | `done` | direct 创建后超过 90 秒仍未开始处理 | 重新创建，不自动补发 |
 
 ## 迁移
 
@@ -38,9 +39,9 @@
 receive ──► needs-input
               ├─ submit(compose) ──► 上传 ──► 发送 ──► sent
               ├─ direct 自动 ──────► 上传 ──► 发送 ──► sent
-              ├─ 上传失败 ─────────► failed ──retry──► 上传…
+              ├─ 上传失败/超预算 ─► failed ──retry──► 上传…
               ├─ 发送抛错(已尝试) ─► unconfirmed ──resolve──► 保持原状态，解锁 Bot
-              └─ 超过 90s(direct) ─► expired
+              └─ 未开始就超 90s(direct) ─► expired
 ```
 
 - 启动恢复：`phase=sending` → `unconfirmed/held`；`phase=uploading` → `failed/ready`。

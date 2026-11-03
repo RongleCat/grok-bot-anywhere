@@ -148,6 +148,15 @@ export class AccountSession {
     }catch(error){this.authFailure(error);throw error;}finally{this.pending--;if(this.sendQueues.get(item.botId)===task)this.sendQueues.delete(item.botId);}
   }
   submit(id,text,files){return this.process(id,{text,...files!==undefined?{files}:{}});}
+  submitAsync(id,text,files){
+    const accountId=this.requireAccount();
+    if(!this.store.get(id,accountId))throw new Error('RECEIPT_NOT_FOUND');
+    void this.submit(id,text,files).catch(error=>{
+      const code=typeof error?.message==='string'&&/^[A-Z][A-Z0-9_]{1,70}$/.test(error.message)?error.message:'SEND_FAILED';
+      this.onEvent({event:'send.error',data:{id,error:code}});
+    });
+    return {id,status:'sending'};
+  }
   async retry(id){const item=this.store.get(id,this.requireAccount());if(!item||item.status!=='failed')throw new Error('RECEIPT_NOT_SENDABLE');return this.process(id,item.mode==='compose'?{text:item.text}:undefined);}
   resolve(id){
     this.assertIdle();const accountId=this.requireAccount(),item=this.store.get(id,accountId);

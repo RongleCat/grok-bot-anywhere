@@ -34,6 +34,32 @@ function row(bot,position){
   return {element,avatar};
 }
 
+function pictureUrl(value){
+  if(typeof value!=='string'||!value)return '';
+  try{const url=new URL(value);return ['https:','data:','blob:'].includes(url.protocol)?url.href:'';}catch{return '';}
+}
+function paintEngine(bot,avatar){
+  avatar.classList.remove('picture');
+  try{
+    avatars.push(createAvatar(avatar,{
+      agentId:bot.botId,
+      shape:bot.avatarShape,
+      color:bot.avatarColor,
+      size:36,
+      main:false,
+      state:bot.running?'working':'idle',
+      theme:'auto',
+      reducedMotion:reduced
+    }));
+  }catch{
+    // The engine can refuse a Bot whose avatar data is incomplete; a plain
+    // disc keeps the row recognisable instead of leaving a hole.
+    const fallback=document.createElement('span');
+    fallback.className='avatar-fallback';
+    fallback.style.background=bot.avatarColor||'#8a8a8f';
+    avatar.append(fallback);
+  }
+}
 function paint(){
   list.replaceChildren();
   for(const handle of avatars.splice(0))handle?.dispose?.();
@@ -42,25 +68,14 @@ function paint(){
     list.append(element);
     requestAnimationFrame(()=>{
       if(!avatar.isConnected || !bot.botId)return;
-      try{
-        avatars.push(createAvatar(avatar,{
-          agentId:bot.botId,
-          shape:bot.avatarShape,
-          color:bot.avatarColor,
-          size:36,
-          main:false,
-          state:bot.running?'working':'idle',
-          theme:'auto',
-          reducedMotion:reduced
-        }));
-      }catch{
-        // The engine can refuse a Bot whose avatar data is incomplete; a plain
-        // disc keeps the row recognisable instead of leaving a hole.
-        const fallback=document.createElement('span');
-        fallback.className='avatar-fallback';
-        fallback.style.background=bot.avatarColor||'#8a8a8f';
-        avatar.append(fallback);
+      const picture=pictureUrl(bot.avatarPicture);
+      if(picture){
+        const image=document.createElement('img');
+        image.alt='';image.decoding='async';
+        image.addEventListener('error',()=>{if(!avatar.isConnected)return;image.remove();paintEngine(bot,avatar);},{once:true});
+        avatar.classList.add('picture');image.src=picture;avatar.append(image);return;
       }
+      paintEngine(bot,avatar);
     });
   });
   empty.hidden=bots.length>0;

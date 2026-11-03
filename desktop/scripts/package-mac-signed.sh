@@ -3,6 +3,7 @@
 # 2026-11-01 arch: arm64|x64；依赖 ~/.gba-signing/env
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+NODE="${NODE:-node}"
 ARCH="${1:-arm64}"
 ENV_FILE="${GBA_SIGNING_ENV:-$HOME/.gba-signing/env}"
 [[ -f "$ENV_FILE" ]] || { echo "missing $ENV_FILE" >&2; exit 1; }
@@ -36,15 +37,15 @@ codesign --verify --deep --strict "$COMPANION"
 codesign --verify --deep --strict "$MENU"
 
 cd "$ROOT"
-npm run build
+"$NODE" scripts/build.mjs
 unset CSC_IDENTITY_AUTO_DISCOVERY || true
 export CSC_IDENTITY_AUTO_DISCOVERY=true
 # Let electron-builder finish signing only. Its built-in staple step is a
 # single CloudKit request and flakes on CI networks; notarize and staple the
 # app here with retries before building the DMG.
-npx electron-builder --mac dir --"$ARCH" --config.mac.notarize=false
+"$NODE" node_modules/electron-builder/cli.js --mac dir --"$ARCH" --config.mac.notarize=false
 
-VERSION="$(node -p "require('./package.json').version")"
+VERSION="$("$NODE" -p "require('./package.json').version")"
 if [[ "$ARCH" == "arm64" ]]; then
   APP="$ROOT/release/mac-arm64/Grok Bot Anywhere.app"
   DMG="$ROOT/release/Grok Bot Anywhere-$VERSION-arm64.dmg"
@@ -64,7 +65,7 @@ for attempt in 1 2 3 4; do
   sleep $((attempt * 10))
 done
 xcrun stapler validate "$APP"
-npx electron-builder --mac dmg --"$ARCH" --prepackaged "$APP" --config.mac.notarize=false
+"$NODE" node_modules/electron-builder/cli.js --mac dmg --"$ARCH" --prepackaged "$APP" --config.mac.notarize=false
 [[ -f "$DMG" ]] || { echo "missing $DMG after prepackaged build" >&2; exit 1; }
 xcrun notarytool submit "$DMG" --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
 # CloudKit's ticket-delivery endpoint occasionally drops a connection after

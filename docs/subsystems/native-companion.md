@@ -7,7 +7,7 @@
 `native/macos/` 是一个 Swift Package，产物 `TouchBarBot` 被打包成 `desktop/native/GrokBotCompanion.app`，由 Electron 主进程以 `--companion` 启动。它补 Electron 做不到的 macOS 系统能力：
 
 - Touch Bar 上的 Bot 头像条（`NSScrubber`）与选择。
-- 原生悬浮输入框（AppKit `NSPanel` + SwiftUI/NSGlassEffectView），贴当前屏幕底部。
+- 原生悬浮输入框（AppKit `NSPanel` + SwiftUI/NSGlassEffectView），默认贴当前屏幕底部；卡片顶部短横条可拖动内容，收起按钮始终显示。
 - 设备端中文语音识别。
 - Finder 当前选区的读取（Apple Events；也可手动选文件）。
 - 分享扩展宿主（`GrokBotMenuHost` + 12 appex）。
@@ -35,7 +35,7 @@
 ## 草稿与发送
 
 - `composer.open` 带 `botId` + 可选 receipt。已有草稿时**不覆盖**，返回 `DRAFT_BUSY`，新内容留在持久收件箱。
-- 输入框内 `⌘Return` 发送、`Esc` 收起并保留内容；切 Bot/关面板不丢草稿。
+- 输入框内 `⌘Return` 发送、`Esc` 只收起输入框并保留内容；切 Bot/关面板不丢草稿。顶部把手拖动只移动输入框内容，不移动覆盖全屏的透明面板。
 - 发送请求返回前，原生层不能用 UI 超时当作失败；以服务进程结果为准。
 - 账号切换会清空所有原生草稿与 receipt 绑定，包括同 ID 的 Bot。
 

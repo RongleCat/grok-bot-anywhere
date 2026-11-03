@@ -1,6 +1,6 @@
 {
   "name": "grok-bot-anywhere",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Command facade for the Grok Bot Anywhere monorepo. Dependencies stay in desktop/; this file only routes commands.",
   "type": "module",
@@ -25,6 +25,7 @@
     "docs:check": "node scripts/check-docs.mjs",
     "package:mac": "npm --prefix desktop run package:mac-all",
     "package:win": "npm --prefix desktop run package:win",
+    "package:win-store": "npm --prefix desktop run package:win-store",
     "build:avatar": "node native/macos/scripts/build-avatar.mjs",
     "smoke:native": "node scripts/run.mjs desktop npm run smoke:native"
   }

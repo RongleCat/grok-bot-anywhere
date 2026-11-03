@@ -12,7 +12,7 @@
 <a href="docs/platforms/linux.md"><img src="https://img.shields.io/badge/Linux-not%20supported-lightgrey?logo=linux&logoColor=black" alt="Linux not supported"></a>
 <a href="desktop/package.json"><img src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white" alt="Electron 45"></a>
 <a href="package.json"><img src="https://img.shields.io/badge/Node-%E2%89%A522.13-339933?logo=nodedotjs&logoColor=white" alt="Node 22.13+"></a>
-<img src="https://img.shields.io/badge/status-0.1.0%20preview-orange" alt="0.1.0 preview">
+<img src="https://img.shields.io/badge/status-0.1.2-orange" alt="0.1.2">
 <a href="docs/README.md"><img src="https://img.shields.io/badge/docs-LLM%20wiki-2f6feb" alt="Docs"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
@@ -78,7 +78,7 @@ Windows 没有 Swift 伴侣和微信分享宿主；可用 Explorer 右键、拖�
 
 ### 安装包
 
-目前没有公开下载页。可从源码构建：
+0.1.2 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，变更见 [更新说明](docs/updates/0.1.2.md)。也可以从源码构建：
 
 ```sh
 npm run package:mac    # arm64 + x64 DMG，签名 + 公证
@@ -93,7 +93,7 @@ npm run package:win    # 未签名 zip
 
 全局快捷键在任何应用上唤起（macOS `Control+Option+Space`，Windows `Ctrl+Alt+Space`）；回车发送，Shift+回车换行。输入法组字期间不会误发。Tab 打开 10×2 的 Bot 宫格，支持数字键、方向键、回车和 Esc。
 
-macOS 上还可以用设备端中文语音输入；拖入文件时只登记路径，发送时才复制和上传。
+macOS 上还可以用设备端中文语音输入；拖入文件时只登记路径，发送时才复制和上传。发送后输入框收起为带头像、进度条和状态的小条，关闭小条不会中止发送；附件超过 50 MB 会先确认。微信转发会先打开输入框，附件在后台载入。
 
 <p align="center"><img src="docs/assets/screenshots/composer.png" alt="悬浮输入框：会议记录 ZIP 附件、正文与发送按钮" width="560"></p>
 
@@ -108,7 +108,7 @@ macOS 的分享扩展不能在运行时创建，所以预留 12 个签名槽位�
 每条交办都有状态：待补充、已发送、未确认、失败、过期。
 
 - 内容先落到本地，再联网；断网或未登录不丢内容。
-- 直接发送超过 90 秒未成功，标为过期，不补发。
+- 直接发送在创建后 90 秒内还没开始处理，标为过期，不补发；已经开始上传的不受这个时间限制。
 - 发送结果不明确时进入「未确认」并暂停该 Bot，等你去官方客户端核对后再解锁。
 - 失败的文件保留在本地，可以重试；不会自动重发。
 
@@ -209,7 +209,7 @@ scripts/                  文档校验、跨平台命令启动器、Agent runner
 
 ## 代码签名
 
-Windows 发布包通过 [SignPath Foundation](https://signpath.org/) 申请开源代码签名；macOS 发布包使用 Developer ID 签名并经 Apple 公证。签名状态以对应 release 的校验结果为准。
+Windows 分发首选 Microsoft Store：个人开发者账号免费，商店认证后重签 MSIX，用户安装没有 SmartScreen 警告，见 [Store 提交](docs/runbooks/store-submission.md)。侧载包通过 [SignPath Foundation](https://signpath.org/) 申请开源签名，或使用商业 OV 证书。macOS 发布包使用 Developer ID 签名并经 Apple 公证。签名状态以对应 release 的校验结果为准。
 
 ## 隐私与安全
 

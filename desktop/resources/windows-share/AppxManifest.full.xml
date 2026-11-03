@@ -9,8 +9,10 @@
   IgnorableNamespaces="uap uap10 rescap">
   <Identity Name="__PACKAGE_NAME__" Publisher="__PUBLISHER__" Version="__VERSION__" ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>Grok Bot</DisplayName>
-    <PublisherDisplayName>Grok Bot Anywhere</PublisherDisplayName>
+    <!-- Partner Center rejects a submission whose DisplayName or
+         PublisherDisplayName differs from the reserved name / account. -->
+    <DisplayName>__DISPLAY_NAME__</DisplayName>
+    <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
     <Logo>Assets\Square150x150Logo.png</Logo>
   </Properties>
   <Resources>
@@ -26,7 +28,7 @@
   </Capabilities>
   <Applications>
     <Application Id="GrokBot" Executable="app\Grok Bot Anywhere.exe" uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
-      <uap:VisualElements DisplayName="Grok Bot" Description="Share to Grok Bot" BackgroundColor="transparent" Square44x44Logo="Assets\Square44x44Logo.png" Square150x150Logo="Assets\Square150x150Logo.png" />
+      <uap:VisualElements DisplayName="__DISPLAY_NAME__" Description="Share to Grok Bot" BackgroundColor="transparent" Square44x44Logo="Assets\Square44x44Logo.png" Square150x150Logo="Assets\Square150x150Logo.png" />
       <Extensions>
         <uap:Extension Category="windows.protocol">
           <uap:Protocol Name="grokbotanywhere" />

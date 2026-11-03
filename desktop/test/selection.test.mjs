@@ -45,11 +45,31 @@ test('regular files drop folders, missing paths, and shell virtual items', async
 });
 
 test('frontmost capture returns script paths and treats a failed script as no selection', async () => {
-  const ok = (file, args, options, callback) => callback(null, '/tmp/a.txt\n/tmp/b.txt\n');
+  const calls = [];
+  const ok = (file, args, options, callback) => {
+    calls.push([file, args[0]]);
+    if (file === '/usr/bin/lsappinfo') {
+      if (args[0] === 'front') return callback(null, 'ASN:0x0-0x1:\n');
+      return callback(null, '"CFBundleIdentifier"="com.apple.finder"\n');
+    }
+    callback(null, '/tmp/a.txt\n/tmp/b.txt\n');
+  };
   assert.deepEqual(await captureFrontmostSelection({platform: 'darwin', run: ok}), ['/tmp/a.txt', '/tmp/b.txt']);
+  assert.ok(calls.some(([file, arg]) => file === '/usr/bin/lsappinfo' && arg === 'front'));
   const failed = (file, args, options, callback) => callback(Object.assign(new Error('denied'), {code: 'ERR'}));
   assert.deepEqual(await captureFrontmostSelection({platform: 'darwin', run: failed}), []);
   assert.deepEqual(await captureFrontmostSelection({platform: 'linux', run: ok}), []);
+});
+
+test('frontmost capture skips Finder AppleScript when another app is frontmost', async () => {
+  const calls = [];
+  const run = (file, args, options, callback) => {
+    calls.push(file);
+    if (file === '/usr/bin/lsappinfo') return callback(null, args[0] === 'front' ? 'ASN:0x0-0x2:\n' : '"CFBundleIdentifier"="com.apple.Safari"\n');
+    callback(null, '/tmp/from-finder.txt\n');
+  };
+  assert.deepEqual(await captureFrontmostSelection({platform: 'darwin', run}), []);
+  assert.equal(calls.includes('osascript'), false);
 });
 
 test('finder and explorer scripts stay limited to the foreground file window', () => {

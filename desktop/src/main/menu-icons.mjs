@@ -24,6 +24,14 @@ export async function captureMenuIcons(state,avatarPage){
   return resolved;
  }finally{window.destroy();}
 }
+function squareIcon(image){
+ const {width,height}=image.getSize();
+ if(!width||!height)throw new Error('MENU_AVATAR_MISSING');
+ const side=Math.min(width,height);
+ const square=width===height?image:image.crop({x:Math.floor((width-side)/2),y:Math.floor((height-side)/2),width:side,height:side});
+ const resized=square.resize({width:128,height:128});
+ return resized.isEmpty()?image.resize({width:128,height:128}):resized;
+}
 export async function resolvePictureIcons(state,icons){
  const result=[...icons];
  for(const entry of menuEntries(state)){
@@ -38,7 +46,7 @@ export async function resolvePictureIcons(state,icons){
    image=nativeImage.createFromBuffer(Buffer.concat(chunks));
   }
   if(image.isEmpty())throw new Error('MENU_AVATAR_MISSING');
-  const png=image.resize({width:128,height:128}).toDataURL(),index=result.findIndex(i=>i.botId===entry.botId);
+  const png=squareIcon(image).toDataURL(),index=result.findIndex(i=>i.botId===entry.botId);
   if(index>=0)result[index]={botId:entry.botId,png};else result.push({botId:entry.botId,png});
  }
  return result;

@@ -110,9 +110,11 @@ struct ComposerView: View {
     var onLayout: (Bool) -> Void = { _ in }
     var onHeight: (CGFloat) -> Void = { _ in }
     var onRegions: ([CGRect]) -> Void = { _ in }
+    var onMove: (CGSize) -> Void = { _ in }
     @State private var confirmSendHold = false
     @State private var picking = false
     @State private var pickIndex = 0
+    @State private var dragTranslation = CGSize.zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private static let pickColumns = 10
     static let pickerWidth: CGFloat = 760
@@ -256,6 +258,21 @@ struct ComposerView: View {
 
     private func inputCard(_ bot: Bot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            Capsule()
+                .fill(.secondary.opacity(0.35))
+                .frame(width: 34, height: 3)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 2)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let dx = value.translation.width - dragTranslation.width
+                        let dy = value.translation.height - dragTranslation.height
+                        dragTranslation = value.translation
+                        onMove(CGSize(width: dx, height: dy))
+                    }
+                    .onEnded { _ in dragTranslation = .zero })
+                .help("拖动输入框")
             ComposerField(
                 text: Binding(get: { store.draftText }, set: { store.draftText = $0 }),
                 isEnabled: !speech.isRecording,
@@ -311,10 +328,8 @@ struct ComposerView: View {
                 ZStack { if store.sendingBotID != nil { ProgressView().controlSize(.small) } }.frame(width: 22, height: 22)
                 Button { Task { await store.send() } } label: { Image(systemName: "arrow.up").font(.system(size: 12, weight: .semibold)).frame(width: 22, height: 22) }
                     .buttonStyle(.borderedProminent).clipShape(Circle()).help("发送").disabled(!store.canSend)
-                if !store.dismissComposerOnOutsideClick {
-                    Button(action: close) { Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).frame(width: 22, height: 22) }
-                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("收起 · Esc")
-                }
+                Button(action: close) { Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).frame(width: 22, height: 22) }
+                    .buttonStyle(.borderless).foregroundStyle(.secondary).help("收起 · Esc")
             }
             .buttonStyle(.borderless)
         }

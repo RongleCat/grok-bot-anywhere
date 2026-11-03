@@ -9,6 +9,7 @@
 | `NODE_UNAVAILABLE` | Swift 独立模式找不到 Node | 装 Node 22+，或设置 `TOUCH_BAR_BOT_NODE`；Electron 模式不该出现 |
 | `DRAFT_BUSY` | 原生输入框已有草稿，新的 receipt 不覆盖 | 处理/关闭当前草稿；新内容在收件箱里 |
 | `SEND_UNCONFIRMED` | 发送尝试过但结果不明 | 去官方客户端核对；不要重发；核对后用“已核对，解锁发送” |
+| `SEND_EXPIRED` | direct 创建后 90 秒内还没开始处理 | 重新转发；内容不会被补发 |
 | `BOT_SEND_HELD` | 该 Bot 有未核对条目 | 先 `resolve`，再发新内容 |
 | `SOURCE_DISABLED` | 该来源没开，或 Bot 未启用接收 | 设置 → 接收单位；用悬浮输入框手动发送 |
 | `INPUT_REQUIRED` | compose 模式直接提交没带正文 | 打开草稿补字 |
@@ -30,8 +31,8 @@
 ## 微信菜单没有出现/不更新
 
 1. 设置里是否启用了至少一个接收 Bot？
-2. 点「重新同步」。它会强制重建宿主并重新注册，不是只检查状态；重建可能需要十几秒。
-3. **完全退出微信**再打开（微信缓存旧菜单）。只关窗口不够。
+2. 等账号连接完成、同步按钮不再禁用，再点「重新同步」。它会强制重建宿主并重新注册，不是只检查状态；重建通常约 10 秒，启动或切账号时不要点，避免把过渡态的空菜单写进去。
+3. **完全退出微信**再打开（微信缓存旧菜单）。只关窗口不够；更新后也必须这样重开一次。
 4. 重新打开「转发 → 其他应用」。
 5. 仍没有：检查 `~/Applications/Grok Bot Anywhere Menu/Contents/Helpers/` 是否有 `DestinationNN.app`；重跑 `npm run build:share`。
 6. 菜单行名对但头像空白：图标尺寸/资源不对，重建宿主；看 [分享菜单](../subsystems/share-menu.md)。
@@ -69,7 +70,23 @@ env -u ELECTRON_RUN_AS_NODE npm start
 - `vendor/bloub` 未初始化：`git submodule update --init --recursive`。
 - 没装 desktop 依赖：esbuild 不在 `desktop/node_modules`。
 - 重新跑 `npm run build:avatar`。
-- 自定义图片 URL 不可读：会回退角色；检查网络/URL。
+- 自定义图片 URL 不可读或加载失败：会回退角色；检查网络/URL、图片协议是否 `https`/`data`/`blob`。
+- 自定义图片在输入框/宫格里被裁切：按容器 `cover` 填充是预期；不要在源图里做非正方形留白。
+- 微信菜单里的自定义头像被拉伸：确认用的是当前构建；菜单图标会把源图居中裁成正方形再缩到 128。
+
+## 直接转发没有反应
+
+1. 先看设置 → 发送记录里该 Bot 的最新一条：`sent` 表示已交给服务端；`failed`/`expired`/`unconfirmed` 会同时弹系统通知。
+2. `failed` 可重试；`expired` 是 direct 创建后 90 秒内没开始处理，重新转发一次；`unconfirmed` 先去官方客户端核对，再用“已核对，解锁发送”。
+3. Word/文档/聊天记录没有被导入：看 `ShareInbox/Rejected/<id>/failure.txt`，并确认微信版本仍把内容作为文件/文本提供。
+4. 一次 100 个附件会给上传留 30 分钟预算；超过预算会变成 `failed/ready`，文件仍在本地，可重试。
+
+## 发送小条/大附件
+
+- 发送后输入框会收起为 320px 小条；关闭小条只停止显示，发送仍继续，进度看发送记录即可。
+- 附件总大小或单个附件超过 50 MB 会先出现二次确认；回车继续，Esc 取消。
+- 上传单请求超时 30 分钟，整条 receipt 的传输预算也是 30 分钟；超预算会变成 `failed/ready`，文件仍在本地，可重试。
+- 微信转发会先打开输入框并显示“正在载入附件…”；附件导入完成后自动补到同一个草稿。
 
 ## Electron 改了代码但界面没变
 

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {inflateSync} from 'node:zlib';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
-import {acceptLateFiles,applyExplorerRegistry,applyLoginItem,confirmAccountStill,confirmCopy,createExplorerBatch,createExplorerSync,explorerAccept,explorerCleanupKeys,explorerLogLine,explorerRegistryOps,explorerRejectNotice,explorerTargets,explorerVerdict,floatingComposerTraits,loginItemPayload,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shouldApplyLoginItem,toolboxShareOff,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction,coalBallSvg,composerAfterSend} from '../src/shell/actions.mjs';
+import {acceptLateFiles,applyExplorerRegistry,applyLoginItem,composerAfterSend,composerBounds,confirmAccountStill,confirmCopy,createExplorerBatch,createExplorerSync,explorerAccept,explorerCleanupKeys,explorerLogLine,explorerRegistryOps,explorerRejectNotice,explorerTargets,explorerVerdict,floatingComposerTraits,loginItemPayload,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shareResultNotice,shouldApplyLoginItem,toolboxShareOff,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction,coalBallSvg} from '../src/shell/actions.mjs';
 import {normalizeBot} from 'grok-bot-sdk';
 import {appIconInset,coalBallAppPng,coalBallGeometry,coalBallIcon,coalBallPng,coalBallRaster,coalBallSample} from '../src/shell/coal-ball.mjs';
 
@@ -555,4 +555,69 @@ test('late composer files are dropped when the token or bot no longer matches',(
   assert.deepEqual(acceptLateFiles({token:2,current:2,botId:'bot-a',currentBotId:'bot-b',paths:['C:\\Files\\a.txt']}),[]);
   assert.deepEqual(acceptLateFiles({token:null,current:null,botId:'bot-a',currentBotId:'bot-a',paths:['C:\\Files\\a.txt']}),[]);
   assert.deepEqual(acceptLateFiles({token:2,current:undefined,botId:'bot-a',currentBotId:'bot-a',paths:['C:\\Files\\a.txt']}),[]);
+});
+
+test('a dragged composer keeps its clamped position instead of recentering',()=>{
+  const area={x:0,y:0,width:1440,height:900};
+  assert.deepEqual(composerBounds({workArea:area,width:368,height:120}),{x:536,y:772,width:368,height:120});
+  assert.deepEqual(composerBounds({workArea:area,current:{x:200,y:140},width:368,height:160,moved:true}),{x:200,y:140,width:368,height:160});
+  assert.deepEqual(composerBounds({workArea:area,current:{x:-50,y:2000},width:368,height:160,moved:true}),{x:8,y:732,width:368,height:160});
+});
+
+test('a direct share failure produces a visible notice, a success does not',()=>{
+  assert.equal(shareResultNotice({status:'sent',botName:'Alpha',locale:'zh-CN'}),null);
+  assert.match(shareResultNotice({status:'failed',botName:'Alpha',locale:'zh-CN'}).body,/Alpha/);
+  assert.match(shareResultNotice({status:'expired',botName:'Alpha',locale:'en'}).body,/Alpha/);
+  assert.match(shareResultNotice({status:'unconfirmed',botName:'Alpha',locale:'en'}).body,/not confirmed/);
+  assert.match(shareResultNotice({status:'needs-input',botName:'Alpha',locale:'zh-CN'}).body,/发送记录/);
+});
+
+test('composer chrome keeps an always-visible close control and a drag grip',async()=>{
+  const root=fileURLToPath(new URL('../src/',import.meta.url));
+  const composer=await readFile(`${root}renderer/composer.mjs`,'utf8');
+  const css=await readFile(`${root}renderer/composer.css`,'utf8');
+  const main=await readFile(`${root}main/main.mjs`,'utf8');
+  const app=await readFile(`${root}renderer/app.mjs`,'utf8');
+  assert.match(composer,/const close=el\('button','close'\)/);
+  assert.doesNotMatch(composer,/if\(!prefs\(\)\.dismissOnOutside\)\{const close/);
+  assert.match(composer,/classList\.add\('grip'\)|el\('div','grip'\)/);
+  assert.match(css,/\.grip\{[^}]*-webkit-app-region:drag/);
+  assert.match(css,/\.avatar\.picture\{[^}]*overflow:hidden/);
+  assert.match(css,/\.avatar img\{[^}]*object-fit:cover/);
+  assert.match(css,/\.float-avatar\{[^}]*drop-shadow/);
+  assert.match(main,/avatarBox=104/);
+  assert.match(main,/movable:true/);
+  assert.match(main,/floatWindow\.on\('move'/);
+  assert.match(main,/process\.platform==='darwin'\?\{parent:floatWindow\}/);
+  assert.match(main,/process\.platform!=='darwin'\)layoutExtras\(\)/);
+  assert.match(main,/case 'fileSizes'/);
+  assert.match(main,/submitAsync/);
+  assert.match(main,/case 'keepComposerOpen'/);
+  assert.match(main,/latestState\.accountBusy\)throw new Error\('ACCOUNT_BUSY'\)/);
+  assert.match(app,/update\.disabled=!menu\.available\|\|menu\.busy\|\|!!state\.accountBusy/);
+  assert.match(app,/function paintGridDots/);
+  assert.match(app,/recipient-settings/);
+  const signature=app.slice(app.indexOf('function viewSignature'),app.indexOf('function botRowKey'));
+  assert.doesNotMatch(signature,/recipient\?\.enabled/);
+  assert.doesNotMatch(signature,/recipient\?\.sources/);
+  assert.match(composer,/function renderBar/);
+  assert.match(composer,/card\.hidden=false/);
+  assert.match(composer,/largeConfirmCard/);
+  assert.match(composer,/50\*1024\*1024/);
+  assert.match(composer,/keepComposerOpen/);
+  assert.match(composer,/draft\.preparing/);
+  assert.match(main,/share\.preparing/);
+  assert.match(css,/\.send-bar\{/);
+  const hide=main.slice(main.indexOf('function hideFloat'),main.indexOf('function wireFloat'));
+  assert.match(hide,/Do not blur the main window/);
+  assert.doesNotMatch(hide,/window\.blur\(/);
+});
+
+test('an accent-colored selected control uses the computed readable ink',async()=>{
+  const root=fileURLToPath(new URL('../src/',import.meta.url));
+  const app=await readFile(`${root}renderer/app.mjs`,'utf8');
+  const css=await readFile(`${root}renderer/styles.css`,'utf8');
+  assert.match(app,/setProperty\('--on-accent',accentInk\(accent\)\)/);
+  assert.match(css,/\.detail \.segment button\.selected[^}]*color:var\(--on-accent/);
+  assert.match(css,/\.detail \.source-chip\.selected[^}]*color:var\(--on-accent/);
 });

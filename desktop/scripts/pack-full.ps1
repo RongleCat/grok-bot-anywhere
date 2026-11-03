@@ -4,12 +4,21 @@
 # but userData migration and .appinstaller updates are not wired yet. The app
 # directory must come from an electron-builder win-unpacked output, because the
 # package contains the app rather than pointing at an external folder.
+#
+# Two distribution shapes use this script:
+# - SignPath / self-signed: -PackageName/-Publisher are ours to choose.
+# - Microsoft Store: pass Partner Center's identity verbatim. Name, Publisher,
+#   DisplayName and PublisherDisplayName must match the reserved name and
+#   account, otherwise Partner Center rejects the package at upload time.
+#   Store submissions do not need -Sign: Partner Center re-signs the MSIX.
 param(
     [Parameter(Mandatory = $true)]
     [string]$AppDirectory,
     [string]$Version = '1.0.0.0',
     [string]$Publisher = 'CN=GrokBotAnywhere',
     [string]$PackageName = 'dev.ronglecat.grokbotanywhere',
+    [string]$DisplayName = 'Grok Bot',
+    [string]$PublisherDisplayName = 'Grok Bot Anywhere',
     [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\artifacts\full'),
     [ValidateSet('SelfSigned', 'Unsigned')]
     [string]$Sign = 'SelfSigned',
@@ -36,6 +45,8 @@ function Resolve-SdkTool([string]$name) {
 }
 
 if ($Version -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw "Invalid package version: $Version" }
+if (-not $DisplayName) { throw 'DisplayName must not be empty.' }
+if (-not $PublisherDisplayName) { throw 'PublisherDisplayName must not be empty.' }
 
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $output | Out-Null
@@ -48,6 +59,8 @@ try {
     $manifest = $template.
         Replace('__PACKAGE_NAME__', $PackageName).
         Replace('__PUBLISHER__', $Publisher).
+        Replace('__DISPLAY_NAME__', $DisplayName).
+        Replace('__PUBLISHER_DISPLAY_NAME__', $PublisherDisplayName).
         Replace('__VERSION__', $Version)
     [IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
 
@@ -81,7 +94,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Signing failed.' }
         Write-Host "Signed with $thumb."
     } else {
-        Write-Host 'Left unsigned for SignPath.'
+        Write-Host 'Left unsigned for SignPath or Partner Center.'
     }
 
     Write-Host "Package: $msix"

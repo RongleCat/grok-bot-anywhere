@@ -15,7 +15,7 @@
 | **sent** | 服务端已明确接受投递。**不等于 Bot 已读或已回复。** | `receipt.status` |
 | **unconfirmed** | 发送已经尝试，但结果不明确（超时/网络错误/未知 ack）。该 Bot 暂停新发送，等用户核对。 | `receipt.status` + `phase=held` |
 | **failed** | 上传或发送明确失败，可重试；文件保留。 | `receipt.status` |
-| **expired** | direct 模式超过 90 秒仍未提交成功，不再自动发。 | `delivery.mjs` |
+| **expired** | direct receipt 创建后超过 90 秒仍未开始处理，不再自动发；已开始上传的不按此时间中断。 | `delivery.mjs` |
 | **resolve / 已核对** | 用户到官方客户端确认后解除 `unconfirmed` 锁定；原 receipt 不会重发。 | `session.resolve` |
 | **share slot** | macOS 上 12 个预建的分享扩展槽之一，一个槽对应一个接收 Bot。 | `src/share/model.mjs` |
 | **share host** | `~/Applications/Grok Bot Anywhere Menu` 下的宿主 App，承载 12 个 appex。 | `src/share/host-path.mjs` |

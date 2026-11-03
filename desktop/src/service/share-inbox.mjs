@@ -2,12 +2,31 @@ import {mkdir,readdir,readFile,lstat,realpath,rename,writeFile} from 'node:fs/pr
 import {join,relative,isAbsolute,sep} from 'node:path';
 
 export class ShareInbox {
-  constructor({root,session,onReceipt=()=>{},onError=()=>{}}){Object.assign(this,{root,session,onReceipt,onError});this.busy=false;}
-  async initialize(){for(const folder of ['Ready','Staging','Imported','Rejected'])await mkdir(join(this.root,folder),{recursive:true,mode:0o700});}
+  constructor({root,session,onReceipt=()=>{},onError=()=>{},onPreparing=()=>{}}){Object.assign(this,{root,session,onReceipt,onError,onPreparing});this.busy=false;this.preparing=new Set();}
+  async initialize(){for(const folder of ['Ready','Staging','Imported','Rejected','Preparing'])await mkdir(join(this.root,folder),{recursive:true,mode:0o700});}
   async drain(){
     if(this.busy||!this.session.account||this.session.transition)return;
     this.busy=true;
     try{
+      for(const file of await readdir(join(this.root,'Preparing'))){
+        const match=/^([A-Za-z0-9_-]{1,100})\.json$/.exec(file);
+        if(!match||this.preparing.has(match[1]))continue;
+        const id=match[1],markerPath=join(this.root,'Preparing',file);
+        try{
+          const info=await lstat(markerPath);
+          if(!info.isFile()||info.isSymbolicLink()||info.size>64*1024)continue;
+          const m=JSON.parse(await readFile(markerPath,'utf8'));
+          if(m.version!==1||m.id!==id||m.source!=='wechat'||typeof m.accountId!=='string'||typeof m.botId!=='string'||!['compose','direct'].includes(m.mode))continue;
+          if(this.session.account?.id!==m.accountId||this.session.transition)continue;
+          if(typeof this.session.store.recipient==='function'){
+            const recipient=this.session.store.recipient(m.accountId,m.botId);
+            if(!recipient.enabled||!recipient.sources?.wechat)continue;
+          }
+          if(this.session.store.list(m.accountId).some(row=>row.sourceId===`wechat:${id}`))continue;
+          this.preparing.add(id);
+          this.onPreparing({id,accountId:m.accountId,botId:m.botId,mode:m.mode,createdAt:Number.isSafeInteger(m.createdAt)?m.createdAt:Date.now()});
+        }catch{continue;}
+      }
       for(const name of await readdir(join(this.root,'Ready'))){
         if(!/^[A-Za-z0-9_-]{1,100}$/.test(name))continue;
         const directory=join(this.root,'Ready',name);

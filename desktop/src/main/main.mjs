@@ -21,13 +21,14 @@ import {menuEntries} from '../share/model.mjs';
 import {matchShareTitles} from '../share/order.mjs';
 import {grokBotAgentUrl} from '../grok-link.mjs';
 import {disableCli,enableCli,skillBundleDir,writeCliCredential} from './cli-bridge.mjs';
-import {applyExplorerRegistry,applyLoginItem,createExplorerBatch,createExplorerSync,explorerLogLine,explorerRegistryOps,explorerRejectNotice,floatingComposerTraits,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shouldApplyLoginItem,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction} from '../shell/actions.mjs';
+import {applyExplorerRegistry,applyLoginItem,composerBounds,createExplorerBatch,createExplorerSync,explorerLogLine,explorerRegistryOps,explorerRejectNotice,floatingComposerTraits,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shareResultNotice,shouldApplyLoginItem,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction} from '../shell/actions.mjs';
 import {coalBallAppPng,coalBallIcon,coalBallPng,trayIconImages} from '../shell/coal-ball.mjs';
 import {acceptWindowControl,editCommand,mainWindowOptions,maximizedContentInset} from '../shell/window-chrome.mjs';
 import {composeLink,deeplinkNotice,parseDeeplink,shortcutSourceAllowed} from '../shell/deeplink.mjs';
 import {listedBots} from '../renderer/group-avatar.mjs';
 
 const runProcess=promisify(execFile);
+const RECEIVE_TIMEOUT=30*60_000;
 
 const here=dirname(fileURLToPath(import.meta.url));
 const smoke=process.argv.includes('--smoke-test');
@@ -37,8 +38,8 @@ const quietLaunch=backgroundShare||process.argv.includes('--explorer-forward')||
 let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null,suppressActivate=false,composerReadyState=null;
 let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
-let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,keepFloatOpen=false,ipcSender=null;
-let composerPrefs={afterSend:'hide',dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0;
+let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,keepFloatOpen=false,ipcSender=null,dockHidden=false;
+let composerPrefs={afterSend:'hide',dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0,floatMoved=false,lastFloatBounds=null,composerBar=false;
 let cliStatus={enabled:false,command:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:''};
 const pendingSharedComposers=new Set();let openingSharedComposer=false,shortcutsSuppressed=false;
 const pendingLinks=[];let deeplinkReady=false,deeplinkChain=Promise.resolve();
@@ -87,14 +88,16 @@ function trayImage(){
   return image;
 }
 function showDock(){
-  if(process.platform!=='darwin')return;
+  if(process.platform!=='darwin'||!dockHidden)return;
   try{app.setActivationPolicy('regular');}catch{}
   try{app.dock?.show();}catch{}
+  dockHidden=false;
 }
 function hideDock(){
-  if(process.platform!=='darwin'||quitting)return;
+  if(process.platform!=='darwin'||quitting||dockHidden)return;
   try{app.setActivationPolicy('accessory');}catch{}
   try{app.dock?.hide();}catch{}
+  dockHidden=true;
 }
 function composerVisible(){
   return [floatWindow,avatarWindow,pickerWindow].some(target=>target&&!target.isDestroyed()&&target.isVisible());
@@ -194,7 +197,7 @@ async function deliverExplorer(forward){
   const appArg=app.isPackaged?'':app.getAppPath();
   const files=(forward.files??[]).filter(file=>typeof file==='string'&&isAbsolute(file)&&file!==appArg);
   if(!files.length)return;
-  const item=await rpc.call('receive',{botId:verdict.botId,source:'share',files,manual:true});
+  const item=await rpc.call('receive',{botId:verdict.botId,source:'share',files,manual:true},RECEIVE_TIMEOUT);
   await openComposer(verdict.botId,item);
 }
 const explorerBatch=createExplorerBatch();
@@ -260,6 +263,7 @@ function sharePickerPayload(){
       name:entry.name,
       avatarShape:bot.avatarShape,
       avatarColor:bot.avatarColor,
+      avatarPicture:bot.avatar?.kind==='picture'?bot.avatar.picture?.url??'':'',
       running:(latestState.runtime?.statuses??[]).some(row=>row.agentId===entry.botId&&row.isRunning)
     };
   });
@@ -273,11 +277,14 @@ async function confirmShare(botId){
   const recipient=(latestState.recipients??[]).find(row=>row.botId===botId);
   const mode=recipient?.mode==='direct'?'direct':'compose';
   try{
-    const receipt=await rpc.call('receive',{botId,source:'wechat',text,files,manual:mode!=='direct'});
+    const receipt=await rpc.call('receive',{botId,source:'wechat',text,files,manual:mode!=='direct'},RECEIVE_TIMEOUT);
     if(mode==='direct'){
-      const result=await rpc.call('submit',{id:receipt.id,text,files},0);
+      // receive() already sends direct receipts when the account is connected.
+      // Submit only when it could not start (offline/transition), or the same
+      // receipt is submitted twice and the second call reports a false failure.
+      const result=receipt.status==='needs-input'?await rpc.call('submit',{id:receipt.id,text,files},0):receipt;
       if(result.status!=='sent'){
-        issue(result.status==='unconfirmed'?'SEND_UNCONFIRMED':'SEND_FAILED');
+        issue(result.status==='unconfirmed'?'SEND_UNCONFIRMED':result.status==='expired'?'SEND_EXPIRED':'SEND_FAILED');
         return {ok:false};
       }
     }else{
@@ -314,7 +321,7 @@ async function handleDeeplink(raw){
   const recipient=(latestState.recipients??[]).find(item=>item.botId===bot.id);
   if(!shortcutSourceAllowed(recipient)){deeplinkIssue('SOURCE_DISABLED');return;}
   try{
-    const item=await rpc.call('receive',{botId:bot.id,source:'shortcuts',text:parsed.text,manual:true});
+    const item=await rpc.call('receive',{botId:bot.id,source:'shortcuts',text:parsed.text,manual:true},RECEIVE_TIMEOUT);
     if(item?.error)deeplinkIssue(item.error);
     if(item?.mode==='compose')await openComposer(bot.id,item);
   }catch(error){deeplinkIssue(errorCode(error));}
@@ -380,34 +387,58 @@ function shortcutTargets(map){
 }
 function layoutExtras(){
   if(!floatWindow||floatWindow.isDestroyed()||!floatWindow.isVisible())return;
-  const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  if(composerBar){
+    for(const extra of [avatarWindow,pickerWindow])if(extra&&!extra.isDestroyed()&&extra.isVisible())extra.hide();
+    return;
+  }
   const card=floatWindow.getBounds();
-  const avatar=88;
+  const area=screen.getDisplayMatching(card).workArea;
+  // The 104px window carries an 8px transparent inset so the avatar's drop
+  // shadow is not clipped by the window edge.
+  const avatarBox=104,avatarPad=8,avatarGap=6;
+  const avatarY=Math.round(card.y-avatarBox+avatarPad-avatarGap);
+  const avatarTop=avatarY+avatarPad;
   if(avatarWindow&&!avatarWindow.isDestroyed()){
-    avatarWindow.setBounds({x:Math.round(card.x+(card.width-avatar)/2),y:Math.round(card.y-avatar-6),width:avatar,height:avatar},false);
-    if(!avatarWindow.isVisible())avatarWindow.showInactive();
+    const x=Math.round(card.x+(card.width-avatarBox)/2);
+    if(avatarY>=area.y){
+      avatarWindow.setBounds({x,y:avatarY,width:avatarBox,height:avatarBox},false);
+      if(!avatarWindow.isVisible())avatarWindow.showInactive();
+    }else if(avatarWindow.isVisible())avatarWindow.hide();
   }
   if(!pickerWindow||pickerWindow.isDestroyed())return;
   if(!pickerOpen){if(pickerWindow.isVisible())pickerWindow.hide();return;}
-  const width=Math.min(Math.max(320,pickerSize.width),area.width-16);
-  const height=Math.min(Math.max(80,pickerSize.height),Math.max(80,card.y-area.y-avatar-24));
-  pickerWindow.setBounds({x:Math.round(area.x+(area.width-width)/2),y:Math.round(card.y-avatar-14-height),width,height},false);
+  const width=Math.min(Math.max(320,pickerSize.width),Math.max(320,area.width-16));
+  const above=avatarTop-area.y-8;
+  const below=area.y+area.height-(card.y+card.height)-8;
+  const preferAbove=above>=80||above>=below;
+  const available=Math.max(80,(preferAbove?above:below-8));
+  const height=Math.min(Math.max(80,pickerSize.height),available,Math.max(80,area.height-16));
+  const y=preferAbove?avatarTop-8-height:card.y+card.height+8;
+  const x=Math.round(card.x+(card.width-width)/2);
+  pickerWindow.setBounds({
+    x:Math.min(Math.max(area.x+8,x),Math.max(area.x+8,area.x+area.width-width-8)),
+    y:Math.min(Math.max(area.y+8,y),Math.max(area.y+8,area.y+area.height-height-8)),
+    width,height
+  },false);
   if(!pickerWindow.isVisible())pickerWindow.showInactive();
 }
 function placeFloat(width,height){
   if(!floatWindow||floatWindow.isDestroyed())return;
-  const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-  const w=Math.min(Math.max(300,Math.round(width)||368),area.width-16);
-  const h=Math.min(Math.max(56,Math.round(height)||96),area.height-24);
-  floatWindow.setBounds({x:Math.round(area.x+(area.width-w)/2),y:Math.round(area.y+area.height-h-8),width:w,height:h},false);
+  const current=floatWindow.getBounds();
+  const display=floatMoved?screen.getDisplayMatching(current):screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const area=display.workArea;
+  const bounds=composerBounds({workArea:area,current,width,height,moved:floatMoved});
+  lastFloatBounds=bounds;
+  floatWindow.setBounds(bounds,false);
   layoutExtras();
 }
 function placePicker(width,height){
   pickerSize={width:Math.round(width)||760,height:Math.round(height)||188};
   layoutExtras();
 }
-function hideFloat({clearAttachments=false,releaseFocus=false}={}){
+function hideFloat({clearAttachments=false}={}){
   keepFloatOpen=false;
+  composerBar=false;
   suppressActivate=true;
   setTimeout(()=>{suppressActivate=false;},400);
   pickerOpen=false;
@@ -424,7 +455,9 @@ function hideFloat({clearAttachments=false,releaseFocus=false}={}){
   for(const extra of [avatarWindow,pickerWindow])if(extra&&!extra.isDestroyed()&&extra.isVisible())extra.hide();
   if(!floatWindow||floatWindow.isDestroyed()||!floatWindow.isVisible())return;
   floatWindow.hide();
-  if(releaseFocus&&window&&!window.isDestroyed()&&window.isVisible()){try{window.blur();}catch{}}
+  // Do not blur the main window after hiding the composer. On macOS, blurring
+  // the only visible regular window makes AppKit order it out, which looks like
+  // the main window closing with the composer.
 }
 function wireFloat(target,label){
   target.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -439,13 +472,26 @@ async function ensureFloat(){
   const traits=floatingComposerTraits(process.platform);
   const common={show:false,frame:false,resizable:false,movable:false,minimizable:false,maximizable:false,fullscreenable:false,skipTaskbar:traits.skipTaskbar,transparent:traits.transparent,hasShadow:false,roundedCorners:false,backgroundColor:'#00000000',excludedFromShownWindowsMenu:true,...(traits.thickFrame===false?{thickFrame:false}:{}),webPreferences:{preload:join(here,'../preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,webviewTag:false}};
   // One CSS corner. Native rounding, vibrancy, or acrylic draws a second outline around the card.
-  floatWindow=new BrowserWindow({...common,width:368,height:120,acceptFirstMouse:true,title:'Grok Bot Anywhere'});
-  avatarWindow=new BrowserWindow({...common,width:88,height:88,focusable:false});
-  pickerWindow=new BrowserWindow({...common,width:760,height:188,acceptFirstMouse:true});
+  floatWindow=new BrowserWindow({...common,movable:true,width:368,height:120,acceptFirstMouse:true,title:'Grok Bot Anywhere'});
+  // On macOS attached child windows follow the card inside AppKit's native drag
+  // loop. Updating them from the move event made the avatar trail the drag by
+  // frames. Windows keeps the event-driven layout until it is verified on hardware.
+  const child=process.platform==='darwin'?{parent:floatWindow}:{};
+  avatarWindow=new BrowserWindow({...common,...child,width:104,height:104,focusable:false});
+  pickerWindow=new BrowserWindow({...common,...child,width:760,height:188,acceptFirstMouse:true});
   for(const target of [floatWindow,avatarWindow,pickerWindow]){if(traits.alwaysOnTop){if(mac)target.setAlwaysOnTop(true,'floating');else target.setAlwaysOnTop(true);}try{target.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true,skipTransformProcessType:true});}catch{target.setVisibleOnAllWorkspaces(true);}}
   avatarWindow.setIgnoreMouseEvents(true);
   wireFloat(floatWindow,'Composer');wireFloat(avatarWindow,'Avatar');wireFloat(pickerWindow,'Picker');
   floatWindow.on('blur',()=>{setTimeout(()=>{if(suspendFloatDismiss||keepFloatOpen||!composerPrefs.dismissOnOutside||Date.now()-floatShownAt<500)return;const focused=BrowserWindow.getFocusedWindow();if(floatWindow?.isFocused()||focused===pickerWindow||focused===avatarWindow)return;hideFloat({clearAttachments:true});},120);});
+  // The card is frameless but draggable from its grip. Programmatic placement
+  // also emits move; only a different position means the user moved it.
+  floatWindow.on('move',()=>{
+    if(!floatWindow||floatWindow.isDestroyed())return;
+    const bounds=floatWindow.getBounds();
+    if(lastFloatBounds&&bounds.x===lastFloatBounds.x&&bounds.y===lastFloatBounds.y&&bounds.width===lastFloatBounds.width&&bounds.height===lastFloatBounds.height)return;
+    lastFloatBounds=bounds;floatMoved=true;
+    if(process.platform!=='darwin')layoutExtras();
+  });
   floatWindow.on('closed',()=>{floatWindow=null;});
   avatarWindow.on('closed',()=>{avatarWindow=null;});
   pickerWindow.on('closed',()=>{pickerWindow=null;});
@@ -509,7 +555,8 @@ async function openComposer(botId,receipt,options={}){
   suspendFloatDismiss=true;
   if(!mainWasVisible)hideDock();
   const generation=++composeGeneration;
-  const capture=!receipt&&options.captureSelection!==false;
+  const preparing=options.preparing??null;
+  const capture=!receipt&&!preparing&&options.captureSelection!==false;
   const deferFiles=capture&&process.platform==='win32';
   // macOS reads Finder before focus moves. Windows snapshots the foreground hwnd before show, then reads that window.
   let prepared=null;
@@ -524,7 +571,8 @@ async function openComposer(botId,receipt,options={}){
   activeBotId=botId;
   const draftText=typeof options.text==='string'?options.text:undefined;
   const attachToken=deferFiles?generation:0;
-  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes},index)=>({name,bytes,index})),botName:receipt.botName??bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
+  composerBar=false;
+  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes},index)=>({name,bytes,index})),botName:receipt.botName??bot.name}:preparing?{botId,text:'',preparing,botName:bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
   composerReadyState={generation,card:null,avatar:false};
   const float=await ensureFloat();
   const entering=!float.isVisible();
@@ -573,7 +621,7 @@ async function openComposer(botId,receipt,options={}){
 }
 async function intake(botId,files){
   if(!Array.isArray(files)||files.length>100||files.some(p=>typeof p!=='string'))throw new Error('ATTACHMENT_INVALID');
-  const item=await rpc.call('receive',{botId,source:'drop',files});
+  const item=await rpc.call('receive',{botId,source:'drop',files},RECEIVE_TIMEOUT);
   if(item.mode==='compose')await openComposer(botId,item);
   return {id:item.id};
 }
@@ -597,13 +645,15 @@ async function sendDraft(botId,text,files,receiptId,remoteKeep){
     const selected=Array.isArray(remoteKeep)?new Set(remoteKeep.filter(index=>Number.isSafeInteger(index)&&index>=0)):null;
     const kept=selected?item.files.filter((_file,index)=>selected.has(index)):item.files;
     const merged=selected?[...kept.map(file=>file.path),...extra]:(extra.length?[...item.files.map(file=>file.path),...extra]:undefined);
-    const result=await rpc.call('submit',{id:receiptId,text,...merged?{files:merged}:selected?{files:[]}:{}},0);
-    return {id:result.id,status:result.status,error:result.error??null};
+    const result=await rpc.call('submitAsync',{id:receiptId,text,...merged?{files:merged}:selected?{files:[]}:{}},0);
+    pendingFloat=null;
+    return {id:result.id,status:'sending',error:null};
   }
   if(!text.trim()&&!extra.length)throw new Error('RECEIPT_EMPTY');
-  const created=await rpc.call('receive',{botId,source:'drop',manual:true,text,files:extra});
-  const result=await rpc.call('submit',{id:created.id,text,...extra.length?{files:extra}:{}},0);
-  return {id:result.id,status:result.status,error:result.error??null};
+  const created=await rpc.call('receive',{botId,source:'drop',manual:true,text,files:extra},RECEIVE_TIMEOUT);
+  const result=await rpc.call('submitAsync',{id:created.id,text},0);
+  pendingFloat=null;
+  return {id:result.id,status:'sending',error:null};
 }
 async function flushSharedComposers(){
  if(openingSharedComposer||!companion?.ready||latestState.accountBusy)return;
@@ -713,7 +763,7 @@ async function nativeRequest(method,p){
       if(preview)throw new Error('PREVIEW_ONLY');
       let id=p.receiptId;
       if(id){const receipt=await rpc.call('composer',{id});if(receipt.botId!==p.botId)throw new Error('RECEIPT_SCOPE_MISMATCH');}
-      else{id=(await rpc.call('receive',{botId:p.botId,source:'drop',manual:true,text:p.text,files:p.files})).id;}
+      else{id=(await rpc.call('receive',{botId:p.botId,source:'drop',manual:true,text:p.text,files:p.files},RECEIVE_TIMEOUT)).id;}
       const result=await rpc.call('submit',{id,text:p.text,files:p.files},0);
       if(result.status!=='sent')throw new Error(result.status==='unconfirmed'?'SEND_UNCONFIRMED':result.error??'SEND_FAILED');
       return result;
@@ -770,6 +820,7 @@ async function dispatch(method,p){
     case 'copyDiagnostics':return copyDiagnostics();
     case 'updateMenu':{
       if(!shareMenu||preview)throw new Error('MENU_UNAVAILABLE');
+      if(!latestState.account?.id||latestState.accountBusy)throw new Error('ACCOUNT_BUSY');
       menuReconciler.request(latestState);await menuReconciler.flush({force:true});return shareMenu.status;
     }
     case 'menuOrder':return readShareOrder();
@@ -793,7 +844,8 @@ async function dispatch(method,p){
     }
     case 'noteBot':if(typeof p.botId==='string'){activeBotId=p.botId;update();}return {ok:true};
     case 'pendingComposer':return pendingFloat;
-    case 'hideComposer':hideFloat({clearAttachments:p.clear===true,releaseFocus:true});return {ok:true};
+    case 'hideComposer':hideFloat({clearAttachments:p.clear===true});return {ok:true};
+    case 'keepComposerOpen':keepFloatOpen=p.on===true;return {ok:true};
     case 'focusComposer':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.focus();return {ok:true};
     case 'setHit':if(floatWindow&&!floatWindow.isDestroyed())floatWindow.setIgnoreMouseEvents(!p.hit,{forward:true});return {ok:true};
     case 'composerReady':{
@@ -804,7 +856,15 @@ async function dispatch(method,p){
       }
       return {ok:true};
     }
-    case 'placeComposer':if(p.regions?.part==='picker')placePicker(p.width,p.height);else placeFloat(p.width,p.height);return {ok:true};
+    case 'placeComposer':
+      if(p.regions?.part==='picker')placePicker(p.width,p.height);
+      else if(p.regions?.part==='bar'){
+       // A late bar resize after the bar was closed must not revive bar mode.
+       if(!floatWindow||floatWindow.isDestroyed()||!floatWindow.isVisible())return {ok:true};
+       composerBar=true;for(const extra of [avatarWindow,pickerWindow])if(extra&&!extra.isDestroyed()&&extra.isVisible())extra.hide();placeFloat(p.width,p.height);
+      }
+      else{composerBar=false;placeFloat(p.width,p.height);}
+      return {ok:true};
     case 'syncPicker':{
       pickerOpen=!!p.open;
       if(pickerWindow&&!pickerWindow.isDestroyed())pickerWindow.webContents.send('anywhere:event',{event:'picker',data:{open:pickerOpen,index:p.index|0}});
@@ -832,6 +892,10 @@ async function dispatch(method,p){
     case 'sendDraft':return sendDraft(p.botId,p.text??'',p.files,p.receiptId);
     case 'retry':if(preview)throw new Error('PREVIEW_ONLY');return rpc.call('retry',{id:p.id});
     case 'resolve':return rpc.call('resolve',{id:p.id});
+    case 'fileSizes':{
+      const paths=Array.isArray(p.paths)?p.paths.filter(path=>typeof path==='string'&&isAbsolute(path)).slice(0,100):[];
+      return Promise.all(paths.map(async path=>{const info=await stat(path).catch(()=>null);return {path,bytes:info?.isFile()?info.size:0};}));
+    }
     case 'pickFiles':{
       suspendFloatDismiss=true;
       try{const picked=await dialog.showOpenDialog(ownerWindow(),{properties:['openFile','multiSelections']});return picked.canceled?[]:picked.filePaths;}
@@ -858,13 +922,28 @@ function serviceEvent(message){
   }
   if(message.event==='auth.expired'){hostIssue='LOGIN_REQUIRED';void vault.remove().catch(()=>{});void forgetCliCredential().then(()=>update()).catch(()=>update());}
   if(message.event==='reply'&&!preview&&Notification.isSupported())systemNotification({title:message.data.name||'Grok Bot',body:zh?'收到新回复':'New reply'}).show();
+  if(message.event==='share.preparing'){
+    const data=message.data;
+    if(data?.mode==='compose'&&!preview&&!composerBar&&!composerVisible()){
+      void openComposer(data.botId,undefined,{preparing:data,captureSelection:false,keepOpen:true}).catch(error=>{const code=errorCode(error);if(!['BOT_NOT_FOUND','ACCOUNT_BUSY'].includes(code))issue(code);});
+    }
+  }
   if(message.event==='share.received'){
     if(!window||window.isDestroyed()||!window.isVisible())hideDock();
     const action=shareHandoff({mode:message.data.mode});
-    if(action==='service')notify('navigate',{page:'inbox'});
-    else void presentShare(message.data.id);
+    if(action==='service'){
+      if(pendingFloat?.preparing?.id&&message.data.batchId&&pendingFloat.preparing.id===message.data.batchId)hideFloat({clearAttachments:true});
+      notify('navigate',{page:'inbox'});
+      const botName=(latestState.bots??[]).find(bot=>bot.id===message.data.botId)?.name??'';
+      const notice=shareResultNotice({status:message.data.status,botName,locale:app.getLocale()});
+      if(notice&&!preview&&Notification.isSupported())systemNotification(notice).show();
+    }else void presentShare(message.data.id);
   }
-  if(message.event==='share.error')issue('SHARE_IMPORT_FAILED');
+  if(message.event==='send.error'&&floatWindow&&!floatWindow.isDestroyed())floatWindow.webContents.send('anywhere:event',{event:'send-error',data:message.data});
+  if(message.event==='share.error'){
+    issue('SHARE_IMPORT_FAILED');
+    if(!preview&&Notification.isSupported())systemNotification({title:'Grok Bot Anywhere',body:zh?'这次转发没有导入，内容还在本地。请到发送记录查看。':'This forward could not be imported. The content stays local; check Send history.'}).show();
+  }
 }
 function ownerWindow(){const owner=ipcSender?BrowserWindow.fromWebContents(ipcSender):null;return owner&&!owner.isDestroyed()?owner:window;}
 function trusted(event){const contents=event.sender;if(event.senderFrame!==contents.mainFrame)return false;return [window,floatWindow,avatarWindow,pickerWindow,sharePickerWindow].some(target=>target&&contents===target.webContents);}

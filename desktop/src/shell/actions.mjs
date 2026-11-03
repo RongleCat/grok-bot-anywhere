@@ -61,8 +61,35 @@ export function touchBarChoice({moved=false,startId='',selectedId=''}={}){
 export function touchBarPinPayload(pinned){
   return {pinned:pinned===true};
 }
+// Direct shares finish in the background. A silent success is fine, but a
+// failure must not look like nothing happened.
+export function shareResultNotice({status='',botName='',locale='en'}={}){
+  if(status==='sent'||!status)return null;
+  const zh=String(locale).startsWith('zh');
+  const name=botName||(zh?'这个 Bot':'this Bot');
+  const title='Grok Bot Anywhere';
+  if(status==='unconfirmed')return {title,body:zh?`发给 ${name} 的转发可能已经发出，但结果未确认。请到发送记录核对。`:`The forward to ${name} may have been sent, but delivery was not confirmed. Check Send history.`};
+  if(status==='expired')return {title,body:zh?`发给 ${name} 的转发等太久，没有发出去。内容还在发送记录里。`:`The forward to ${name} waited too long and was not sent. It is still in Send history.`};
+  if(status==='failed')return {title,body:zh?`发给 ${name} 的转发没有发出去，附件还在发送记录里。`:`The forward to ${name} was not sent. Its files are still in Send history.`};
+  return {title,body:zh?`发给 ${name} 的转发还在待发送。请到发送记录处理。`:`The forward to ${name} is waiting. Open Send history to finish it.`};
+}
 export function floatingComposerTraits(platform){
   return {skipTaskbar:true,alwaysOnTop:true,transparent:true,...platform==='win32'?{thickFrame:false}:{}};
+}
+// A dragged composer keeps its top-left corner; a fresh one sits at the bottom
+// centre of the display the user opened it on.
+export function composerBounds({workArea,current=null,width=368,height=110,moved=false,margin=8}={}){
+  const area=workArea??{x:0,y:0,width:1280,height:800};
+  const aw=Math.max(1,Number(area.width)||0),ah=Math.max(1,Number(area.height)||0);
+  const w=Math.min(Math.max(300,Math.round(width)||368),Math.max(300,aw-margin*2));
+  const h=Math.min(Math.max(56,Math.round(height)||96),Math.max(56,ah-margin*3));
+  const minX=area.x+margin,maxX=Math.max(minX,area.x+aw-w-margin);
+  const minY=area.y+margin,maxY=Math.max(minY,area.y+ah-h-margin);
+  const clamp=(value,min,max)=>Math.min(Math.max(min,Math.round(Number(value)||0)),max);
+  if(moved&&current&&Number.isFinite(Number(current.x))&&Number.isFinite(Number(current.y))){
+    return {x:clamp(current.x,minX,maxX),y:clamp(current.y,minY,maxY),width:w,height:h};
+  }
+  return {x:Math.round(area.x+(aw-w)/2),y:Math.round(area.y+ah-h-margin),width:w,height:h};
 }
 
 function safeName(name){

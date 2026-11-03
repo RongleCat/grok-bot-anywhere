@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'App version, for example 0.1.1'
+        description: 'App version, for example 0.1.2'
         required: true
-        default: '0.1.1'
+        default: '0.1.2'
       msix_version:
-        description: 'MSIX version, four parts, for example 0.1.1.0'
+        description: 'MSIX version, four parts, for example 0.1.2.0'
         required: true
-        default: '0.1.1.0'
+        default: '0.1.2.0'
   push:
     tags: ['v*']
 
@@ -22,8 +22,8 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      APP_VERSION: ${{ github.event.inputs.version || '0.1.1' }}
-      MSIX_VERSION: ${{ github.event.inputs.msix_version || '0.1.1.0' }}
+      APP_VERSION: ${{ github.event.inputs.version || '0.1.2' }}
+      MSIX_VERSION: ${{ github.event.inputs.msix_version || '0.1.2.0' }}
       # Must exactly match the certificate subject used to sign the MSIX.
       WINDOWS_PUBLISHER: ${{ vars.WINDOWS_PUBLISHER || 'CN=GrokBotAnywhere' }}
 

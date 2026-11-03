@@ -19,14 +19,14 @@ export class ShareMenu {
  constructor({root,template,applicationsRoot,applicationPath,locale='en',onChange=()=>{}}){
   Object.assign(this,{root,template,applicationsRoot,applicationPath,locale,onChange});
   this.host=join(applicationsRoot,menuHostName);
-  this.busy=false;this.status={available:process.platform==='darwin',registered:0,needsUpdate:true};this.configQueue=Promise.resolve();
+  this.busy=false;this.status={available:process.platform==='darwin',registered:0,enabled:0,needsUpdate:true};this.configQueue=Promise.resolve();
  }
  async initialize(){
   await mkdir(this.root,{recursive:true,mode:0o700});
   const digest=createHash('sha256').update('transparent-share-icons-v7');
   for(const file of ['Contents/MacOS/GrokBotMenuHost','Contents/PlugIns/GrokBotShare1.appex/Contents/MacOS/GrokBotShare','Contents/Resources/share.entitlements'])digest.update(await readFile(join(this.template,file)));
   this.templateHash=digest.digest('hex');
-  try{this.installed=JSON.parse(await readFile(join(this.root,'menu-state.json'),'utf8'));await access(this.installed.hostPath??join(this.applicationsRoot,'Grok Bot Anywhere Menu.app'));this.electedSlots=await this.readElections(this.installed);this.status.registered=this.electedSlots.length;}
+  try{this.installed=JSON.parse(await readFile(join(this.root,'menu-state.json'),'utf8'));await access(this.installed.hostPath??join(this.applicationsRoot,'Grok Bot Anywhere Menu.app'));this.electedSlots=await this.readElections(this.installed);this.status.registered=this.electedSlots.length;this.status.enabled=this.installed.entries?.length??0;this.status.needsUpdate=this.status.registered!==this.status.enabled;}
   catch{this.installed=null;this.electedSlots=[];}
  }
  async elect(){
@@ -40,7 +40,8 @@ export class ShareMenu {
   }
   this.electedSlots=await this.readElections(this.installed);
   this.status.registered=this.electedSlots.length;
-  this.status.needsUpdate=this.status.registered!==(this.installed.entries?.length??0);
+  this.status.enabled=this.installed.entries?.length??this.status.enabled??0;
+  this.status.needsUpdate=this.status.registered!==this.status.enabled;
   this.onChange();
   return this.status;
  }
@@ -60,6 +61,10 @@ export class ShareMenu {
  allowedSlots(state,installed){const desired=menuEntries(state);return (installed?.entries??[]).filter(e=>desired.some(d=>d.accountId===e.accountId&&d.botId===e.botId)).map(e=>e.slot);}
  async sync(state){
   this.state=state;
+  // During startup/login the account is transitioning and menuEntries is
+  // intentionally empty. Do not publish that transient as a real menu state:
+  // it rewrites configuration.json and lets a manual sync clear the menu.
+  if(state.accountBusy){this.status={...this.status,busy:this.busy};this.onChange();return;}
   const configuration=shareConfiguration(state);
   this.configQueue=this.configQueue.catch(()=>{}).then(async()=>{
    await atomicJSON(join(this.root,'configuration.json'),configuration);

@@ -73,6 +73,32 @@
 - 规则：宿主路径变更时，同时验证图标、注册、微信列表。
 - Seen 1×。
 
+**进度条关闭后必须把 `#card` 重新显示。**
+- 2026-11-04：`renderBar()` 把 `#card.hidden` 设为 `true`，但下一次 `render()` 回到卡片时只隐藏了 bar/avatar/picker，没有把 card 重新设为 `hidden=false`。发送过一次后再唤醒输入框，窗口显示但卡片仍是隐藏的。
+- 规则：任何从 `part=bar` 回到 `part=card` 的路径，都先执行 `card.hidden=false`；不要只依赖 `[data-part]` CSS。
+- Seen 1×（2026-11-04，`composer.mjs`）。
+
+**macOS 唤醒输入框前先用 `lsappinfo` 判断前台 App，不要每次都跑 Finder AppleScript。**
+- 2026-11-04：`frontmostFiles()` 每次都跑 System Events + Finder 脚本，最坏等 2.5 秒；绝大多数唤醒并不在 Finder 上。
+- 规则：先 `/usr/bin/lsappinfo front` 和 `info -only bundleid` 快速判断，只有前台是 `com.apple.finder` 才跑 Finder 脚本；非 Finder 路径约 7ms。
+- 证据：`desktop/src/main/selection.mjs`、`desktop/test/selection.test.mjs`。
+
+**macOS 上不要在收输入框时 `window.blur()` 主窗口。**
+- 2026-11-03：主窗口打开时按 Esc 关输入框，`hideFloat` 里的 `window.blur()` 会让 AppKit 把唯一可见的 regular window order out，主窗口看起来和输入框一起被关掉。
+- 证据：`desktop/src/main/main.mjs` 删除 blur 后，主窗口 `visibilityState` 保持 `visible`，焦点自然回到主窗口；没有 JS `hide()` 调用，`hide` 事件由 AppKit 触发。
+- 规则：关闭浮窗后若主窗口已可见，就让它自然获得焦点；只有主窗口未打开时才保持后台。
+- Seen 1×。
+
+**账号切换/启动过渡态不能把空菜单写进 configuration，也不能允许手动同步。**
+- 2026-11-03：应用启动时 `accountBusy=true`，`menuEntries` 为空；`ShareMenu.sync` 把 0 个入口写进 `configuration.json`/状态，设置页短暂显示已启用 0 个，手动「重新同步」会按空列表重建，微信菜单消失。
+- 规则：`accountBusy` 时保留已安装菜单和状态，不写 configuration；手动同步在账号过渡时返回 `ACCOUNT_BUSY` 并禁用按钮；连接完成后再同步。
+- Seen 1×（2026-11-03，`ShareMenu.sync` / `updateMenu`）。
+
+**改分享扩展源码后必须重跑 `build:share` 并重新同步菜单，否则微信仍调用旧 appex。**
+- 2026-11-03：`ShareViewController.swift` 已加入 `Preparing` marker，但已安装的 `GrokBotShare2` 二进制仍是旧构建（`strings` 里没有 `Preparing`），转发仍要等附件复制完才开输入框。
+- 规则：改 `native/macos/Sources/GrokBotShare/` 后跑 `npm run build:share`，重启应用触发菜单重建，再完全退出微信重开；只跑 `swift build` 只更新 SwiftPM 产物，不更新宿主模板和已安装 appex。
+- Seen 1×（2026-11-03）。
+
 ## 投递
 
 **发送结果不明确时只能暂停，不能自动重发。**

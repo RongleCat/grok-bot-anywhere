@@ -1,6 +1,6 @@
 {
   "name": "grok-bot-anywhere",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Grok Bot context delivery for desktop",
   "author": "RongleCat",
@@ -25,6 +25,7 @@
     "package:mac-all": "npm run package:mac-arm && npm run package:mac-intel",
     "package:mac-signed": "npm run package:mac-all",
     "package:win": "npm run build && node scripts/package-win.mjs",
+    "package:win-store": "npm run build && node scripts/package-win-store.mjs",
     "package:all": "npm run package:mac-all && npm run package:win"
   },
   "dependencies": {
@@ -42,7 +43,9 @@
     "protocols": [
       {
         "name": "Grok Bot Anywhere",
-        "schemes": ["grokbotanywhere"]
+        "schemes": [
+          "grokbotanywhere"
+        ]
       }
     ],
     "directories": {

@@ -122,6 +122,18 @@ if(loaded) {
   assert.equal(sent,0);assert.equal(item.status,'needs-input');
   await session.submit(item.id,'context + question');assert.equal(sent,1);
  });
+ test('submitAsync returns immediately and reports a held Bot as send.error',async t=>{
+  const {session,store}=await setup(t);
+  session.configure(bot.id,{enabled:true,sources:{drop:true}});
+  const item=await session.receive({botId:bot.id,source:'drop',text:'draft',manual:true});
+  const held=await session.receive({botId:bot.id,source:'drop',text:'held',manual:true});
+  store.update(held.id,'account-a',{status:'unconfirmed',phase:'held',holdResolved:false});
+  const events=[];session.onEvent=event=>events.push(event);
+  const result=session.submitAsync(item.id,'send');
+  assert.equal(result.status,'sending');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(events.some(event=>event.event==='send.error'&&event.data.id===item.id&&event.data.error==='BOT_SEND_HELD'));
+ });
  test('dismissing a composer clears its files and prevents automatic presentation',async t=>{
   const {session,store,root}=await setup(t);
   const fixture=join(root,'attachment.txt');await writeFile(fixture,'payload');

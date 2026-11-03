@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-01",
+  "updated": "2026-11-04",
   "entry": "docs/README.md",
   "pages": [
     {
@@ -190,6 +190,20 @@
       "status": "current"
     },
     {
+      "id": "runbook-store-submission",
+      "title": "Microsoft Store 提交",
+      "path": "docs/runbooks/store-submission.md",
+      "summary": "免费开发者账号、Partner Center 身份三件套、未签名 MSIX 上传、认证说明与商店版限制。",
+      "tags": [
+        "windows",
+        "store",
+        "msix",
+        "signing",
+        "release"
+      ],
+      "status": "unverified"
+    },
+    {
       "id": "runbook-troubleshooting",
       "title": "排障",
       "path": "docs/runbooks/troubleshooting.md",
@@ -369,6 +383,18 @@
       "tags": [
         "decision",
         "tooling"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "release-0-1-2",
+      "title": "0.1.2 更新说明",
+      "path": "docs/updates/0.1.2.md",
+      "summary": "0.1.2 的下载、微信转发/大文件、悬浮输入框、头像与设置页修复。",
+      "tags": [
+        "release",
+        "changelog",
+        "macos"
       ],
       "status": "current"
     }

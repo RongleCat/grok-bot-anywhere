@@ -8,7 +8,8 @@
 - [ ] `npm run test:all` 通过（记录数字）。
 - [ ] `cd native/macos && swift build` 通过。
 - [ ] `npm run build` 成功；`out/` 与源码一致。
-- [ ] 版本号在 `desktop/package.json` 里已更新（当前 0.1.1）。
+- [ ] 版本号在 `desktop/package.json` 里已更新（当前 0.1.2）。
+- [ ] 0.1.2 的修复清单见 [更新说明](../updates/0.1.2.md)。
 - [ ] 签名环境 `~/.gba-signing/env` 存在且未过期。
 - [ ] 产物时间晚于最后一次源码/配置修改；否则重打。
 - [ ] 在干净用户目录安装并启动一次（至少 macOS）。
@@ -35,7 +36,7 @@
 手动运行：
 
 ```sh
-gh workflow run macos-release.yml -f version=0.1.1
+gh workflow run macos-release.yml -f version=0.1.2
 ```
 
 CI 会验证 App 的签名、架构、App ticket 和 DMG ticket，并上传 `macos-arm64` / `macos-x64` artifact。
@@ -52,8 +53,8 @@ npm run package:mac-all
 产物：
 
 ```text
-release/Grok Bot Anywhere-0.1.1-arm64.dmg
-release/Grok Bot Anywhere-0.1.1.dmg        # x64
+release/Grok Bot Anywhere-0.1.2-arm64.dmg
+release/Grok Bot Anywhere-0.1.2.dmg        # x64
 ```
 
 校验：
@@ -62,14 +63,18 @@ release/Grok Bot Anywhere-0.1.1.dmg        # x64
 codesign --verify --deep --strict "release/mac-arm64/Grok Bot Anywhere.app"
 codesign -dv --verbose=2 "release/mac-arm64/Grok Bot Anywhere.app"
 spctl -a -vvv -t install "release/mac-arm64/Grok Bot Anywhere.app"
-xcrun stapler validate "release/Grok Bot Anywhere-0.1.1-arm64.dmg"
+xcrun stapler validate "release/Grok Bot Anywhere-0.1.2-arm64.dmg"
 ```
 
 `codesign -dv` 应显示 Developer ID、`flags=0x10000(runtime)`、`Notarization Ticket=stapled`。
 
 ## Windows
 
-`.github/workflows/windows-release.yml` 会构建 app zip、完整 MSIX、share helper zip 和稀疏 share MSIX，并上传 `unsigned-for-signing`。配置 SignPath 变量后会提交签名；未配置时只产出未签名 artifact。
+两条路，商店优先。
+
+**Store**：`.github/workflows/windows-store.yml` 读仓库变量 `STORE_PACKAGE_NAME`、`STORE_PUBLISHER`、`STORE_PUBLISHER_DISPLAY_NAME`，产出未签名完整 MSIX，上传 Partner Center；商店认证后重签。账号免费、不需要证书。完整步骤与认证说明见 [Store 提交](store-submission.md)。
+
+**侧载**：`.github/workflows/windows-release.yml` 会构建 app zip、完整 MSIX、share helper zip 和稀疏 share MSIX，并上传 `unsigned-for-signing`。配置 SignPath 变量后会提交签名；未配置时只产出未签名 artifact。
 
 签名前必须确认：
 
@@ -77,7 +82,7 @@ xcrun stapler validate "release/Grok Bot Anywhere-0.1.1-arm64.dmg"
 - SignPath artifact configuration 覆盖 app zip、完整 MSIX、share zip 和稀疏 MSIX。
 - 完整 MSIX 的 share target 和安装器仍需 Windows 实机验证。
 
-## Windows
+本地侧载打包：
 
 ```powershell
 cd desktop
@@ -87,6 +92,8 @@ npm run package:win
 产物 `release/Grok Bot Anywhere-0.1.1-win.zip`，未签名。**发布前必须在 Windows 机器上解压启动一次**；当前没有这条证据。
 
 ## 发布记录
+
+0.1.2 的用户操作文档：[Grok Bot Anywhere 下载与使用教程](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)；更新说明见 [0.1.2 更新说明](../updates/0.1.2.md)。
 
 在 release note / 交接里写：
 

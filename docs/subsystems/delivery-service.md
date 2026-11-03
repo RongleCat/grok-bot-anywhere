@@ -38,7 +38,7 @@
 | `configure` | 改 recipient（enabled/mode/prefix/sources/order） |
 | `disableAllReceive` | 单事务关闭该账号所有 enabled recipient |
 | `receive` | 新建 receipt（入口统一走这里） |
-| `submit` / `retry` / `resolve` / `composer` / `dismissComposer` | 补字发送、重试失败项、核对解锁、取草稿、关闭草稿并清理附件 |
+| `submit` / `submitAsync` / `retry` / `resolve` / `composer` / `dismissComposer` | 补字发送、后台发送并立即返回 receipt id、重试失败项、核对解锁、取草稿、关闭草稿并清理附件 |
 | `resume` | 启动时恢复未完成状态 |
 | `theme` / `setShortcut` | 偏好 |
 | `watch` | 订阅某 Bot/session 回复 |
@@ -70,8 +70,8 @@ receive
         │
         ├─ compose 模式 + 无 edit → 等用户（INPUT_REQUIRED）
         └─ process
-              ├─ 上传失败        → failed / ready（可 retry）
-              ├─ direct 超 90s   → expired / done
+              ├─ 上传失败/超预算 → failed / ready（可 retry）
+              ├─ direct 未开始就超 90s → expired / done
               ├─ 发送抛错(已尝试) → unconfirmed / held（该 Bot 暂停）
               ├─ 结果明确        → sent / done
               └─ 401/403         → 继续抛给上层（触发重新登录）
@@ -81,7 +81,7 @@ receive
 
 - **同 Bot 串行**：`sendQueues` 按 botId 排队；不同 Bot 可并行。
 - **同 Bot 持锁**：存在未 `holdResolved` 的 `unconfirmed` 时，新发送返回 `BOT_SEND_HELD`。
-- **direct 截止时间 90s**：从 receipt 创建时刻算，不是从点击发送算。
+- **direct 截止时间 90s 只决定是否开始**：从 receipt 创建时刻算。开始上传后改用单独的 30 分钟传输预算；100 个附件不会在上传中途因为创建时间过期，传输超预算则回到 `failed/ready`，文件保留、可重试。
 - **账号切换**：`assertIdle` 阻止切换期间有 pending/active/inflight；切换 generation 使旧回调失效。
 - **`sent` 只表示服务端接受**，不表示 Bot 已读；回复通过 watcher 事件另行挂载。
 
@@ -94,7 +94,7 @@ receive
 
 ## 分享收件箱
 
-`share-inbox.mjs` 每 1.5 秒扫描 `ShareInbox/Ready`：
+`share-inbox.mjs` 每 0.25 秒扫描 `ShareInbox/Preparing` 和 `ShareInbox/Ready`：
 
 1. 目录名只允许 `[A-Za-z0-9_-]{1,100}`，拒绝符号链接。
 2. `manifest.json` 必须版本 1、`source=wechat`、账号/投递模式/文件列表合法，大小 ≤8MB。
@@ -104,8 +104,8 @@ receive
 
 ## 上传
 
-- 单 PUT 从磁盘流式上传；分片模式未实现，遇到会失败且不丢文件。
-- base64 gateway 传输有 64MiB 内存守卫。
+- 单 PUT 从磁盘流式上传；分片模式未实现，遇到会失败且不丢文件。流式上传按字节回报进度，`Delivery` 节流写入 receipt 的 `progress`，输入框收起后的小条据此显示百分比。
+- base64 gateway 传输有 64MiB 内存守卫；单请求超时 30 分钟，整条 receipt 的传输预算也是 30 分钟。
 - 上传引用只在发送成功后才有意义；失败保留本地文件供 retry。
 
 ## 验证

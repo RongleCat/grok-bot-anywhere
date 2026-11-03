@@ -36,7 +36,9 @@ const errorMessages={
  BOT_NOT_COPYABLE:['群聊不能复制。','A group chat cannot be copied.'],
  GROK_BOT_OPEN_FAILED:['没有打开 Grok Bot。请确认已经安装。','Grok Bot did not open. Check that it is installed.'],
  SEND_UNCONFIRMED:['发送结果未确认，请到发送记录里核对。这条不会自动重发。','Delivery was not confirmed. Check Send history. It will not be resent.'],
+ SEND_EXPIRED:['直接发送超时，没有发出去。内容还在发送记录里。','Direct send expired before it was sent. It is still in Send history.'],
  SEND_FAILED:['没有发出去，请到发送记录里重试。','Delivery failed. Retry it from Send history.'],
+ SHARE_IMPORT_FAILED:['这次转发没有导入，内容还在本地。','This forward could not be imported. The content stays local.'],
  CLI_BUNDLE_MISSING:['这个版本没有带上命令行。','This build does not include the command line.'],
  CLI_RUNTIME_MISSING:['命令行运行环境不可用。','The command-line runtime is unavailable.'],
  CLI_COMMAND_EXISTS:['这里已经有别人安装的 grok-bot 命令或 skill，没有替换。','A grok-bot command or skill from somewhere else is already here, so it was left in place.'],
@@ -48,6 +50,9 @@ const errorMessages={
 };
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,5000);}
 async function run(action){try{await action();}catch(error){const pair=errorMessages[error.message];toast(pair?t(...pair):t('操作没有完成，请重试。','The operation did not complete. Please try again.'));}}
+function applyConfig(botId,patch,rollback){
+ return api.configure(botId,patch).catch(error=>{rollback?.();const pair=errorMessages[error.message];toast(pair?t(...pair):t('操作没有完成，请重试。','The operation did not complete. Please try again.'));});
+}
 function recipientOf(id){return state.recipients.find(item=>item.botId===id);}
 function orderedBots(){
  const visible=new Set(listedBots(state.bots).map(bot=>bot.id));
@@ -58,12 +63,24 @@ function avatar(bot,size=48){
  if(members.length>=2)return avatarStack(members,size);
  return singleAvatar(members[0]??bot,size);
 }
+function pictureUrl(bot){
+ const value=bot.avatar?.kind==='picture'?bot.avatar.picture?.url:'';
+ if(typeof value!=='string'||!value)return '';
+ try{const url=new URL(value);return ['https:','data:','blob:'].includes(url.protocol)?url.href:'';}catch{return '';}
+}
+function paintCharacter(target,bot,size,still=false){
+ target.classList.remove('picture');
+ requestAnimationFrame(()=>{if(!target.isConnected)return;const handle=createAvatar(target,{agentId:bot.id,shape:bot.avatarShape,color:bot.avatarColor,size,main:!still&&state.runtime?.mainAgentId===bot.id,state:still?'idle':state.runtime?.statuses?.some(row=>row.agentId===bot.id&&row.isRunning)?'working':'idle',theme:state.theme==='system'?'auto':state.theme,reducedMotion:still||matchMedia('(prefers-reduced-motion:reduce)').matches});target.__avatar=handle;avatars.push(handle);});
+}
 function singleAvatar(bot,size,still=false){
  const target=el('div','avatar');target.style.width=target.style.height=`${size}px`;
- if(bot.avatar?.kind==='picture'&&bot.avatar.picture?.url){
-  const image=el('img');try{const url=new URL(bot.avatar.picture.url);if(!['https:','data:'].includes(url.protocol))throw new Error();image.src=url.href;image.alt='';target.append(image);return target;}catch{}
+ const url=pictureUrl(bot);
+ if(url){
+  const image=el('img');image.alt='';image.decoding='async';
+  image.addEventListener('error',()=>{if(!target.isConnected)return;image.remove();paintCharacter(target,bot,size,still);},{once:true});
+  image.src=url;target.classList.add('picture');target.append(image);return target;
  }
- requestAnimationFrame(()=>{if(!target.isConnected)return;const handle=createAvatar(target,{agentId:bot.id,shape:bot.avatarShape,color:bot.avatarColor,size,main:!still&&state.runtime?.mainAgentId===bot.id,state:still?'idle':state.runtime?.statuses?.some(row=>row.agentId===bot.id&&row.isRunning)?'working':'idle',theme:state.theme==='system'?'auto':state.theme,reducedMotion:still||matchMedia('(prefers-reduced-motion:reduce)').matches});target.__avatar=handle;avatars.push(handle);});
+ paintCharacter(target,bot,size,still);
  return target;
 }
 function avatarStack(members,size){
@@ -112,7 +129,7 @@ function icon(name){
  return svg;
 }
 function viewSignature(){
- const bots=orderedBots().map(bot=>{const recipient=recipientOf(bot.id);return [bot.id,bot.name,bot.description??'',bot.kind??'',bot.memberAgentIds??[],bot.avatarShape??'',bot.avatarColor??'',bot.avatar?.kind==='picture'?bot.avatar.picture?.url??'':'',recipient?.enabled?1:0,recipient?.mode??'',recipient?.order??0,recipient?.prefix??'',recipient?.sources??null];});
+ const bots=orderedBots().map(bot=>{const recipient=recipientOf(bot.id);return [bot.id,bot.name,bot.description??'',bot.kind??'',bot.memberAgentIds??[],bot.avatarShape??'',bot.avatarColor??'',bot.avatar?.kind==='picture'?bot.avatar.picture?.url??'':'',recipient?.order??0];});
  const running=(state.runtime?.statuses??[]).filter(row=>row.isRunning).map(row=>row.agentId).sort();
  const pins=state.runtime?.pinnedAgentIds??[];
  const sections=(state.runtime?.sections??[]).map(section=>[section.id,section.name,section.agentIds,section.collapsed]);
@@ -172,6 +189,15 @@ function paintGridSelection(){
   cell.setAttribute('aria-pressed',String(active));
  }
 }
+function paintGridDots(){
+ for(const cell of $('grid').querySelectorAll('.bot-cell')){
+  const face=cell.querySelector('.bot-face');if(!face)continue;
+  const on=!!recipientOf(cell.dataset.id)?.enabled;
+  const dot=face.querySelector('.bot-dot');
+  if(on&&!dot)face.append(el('span','bot-dot'));
+  else if(!on&&dot)dot.remove();
+ }
+}
 let windowChrome={maximized:false,focused:true,inset:0};
 function paintWindowControls(){
  const win=state?.host?.platform==='win32';
@@ -216,7 +242,7 @@ function render(){
  }
  if(inboxBot&&!state.bots.some(bot=>bot.id===inboxBot))inboxBot='';
  const key=viewSignature();
- if(key===viewKey)return;
+ if(key===viewKey){paintGridDots();return;}
  inboxFilterController?.abort();
  inboxAvatarObserver?.disconnect();
  viewKey=key;
@@ -251,6 +277,7 @@ function render(){
  groupToggle.replaceChildren(icon('group'));
  $('search').placeholder=t('搜索','Search');$('search').setAttribute('aria-label',$('search').placeholder);
  if(keepGrid)paintGridSelection();else renderGrid();
+ paintGridDots();
  renderNav();renderMain();
  document.documentElement.dataset.ready='true';
  refreshOverlayScroll();
@@ -334,47 +361,63 @@ function renderChat(content){
  const memberCard=isGroup(bot)?memberList(members):null;
  const card=el('section','group');
  const enabled=el('input','switch');enabled.type='checkbox';enabled.checked=!!recipient?.enabled;enabled.setAttribute('aria-label',t(`让 ${bot.name} 接收转发`,`Let ${bot.name} receive forwards`));
- enabled.addEventListener('change',()=>run(()=>api.configure(bot.id,{enabled:enabled.checked})));
+ const settingsBody=el('div','recipient-settings');settingsBody.hidden=!enabled.checked;
+ enabled.addEventListener('change',()=>{
+  const next=enabled.checked;settingsBody.hidden=!next;
+  void applyConfig(bot.id,{enabled:next},()=>{enabled.checked=!next;settingsBody.hidden=next;});
+ });
  card.append(settingRow(t('接收转发','Receive forwards'),enabled,t('微信和通用来源才会把内容交给这个 Bot。','WeChat and the general sources deliver content to this Bot.')));
- if(recipient?.enabled){
-  const mode=el('div','segment');mode.setAttribute('aria-label',t('收到之后','After receiving'));
-  for(const [value,label] of [['compose',t('先放进输入框','Open in composer')],['direct',t('直接发送','Send directly')]]){
-   const choice=el('button',value===recipient.mode?'selected':'',label);choice.type='button';choice.addEventListener('click',()=>run(()=>api.configure(bot.id,{mode:value})));mode.append(choice);
-  }
-  card.append(settingRow(t('收到之后','After receiving'),mode));
-  const generalKeys=['drop','share'];
-  const generalOn=generalKeys.some(key=>recipient.sources[key]);
-  const sources=el('div','sources');
-  const general=el('button',`source-chip${generalOn?' selected':''}`,t('通用','General'));
-  general.type='button';general.setAttribute('aria-pressed',String(generalOn));
-  general.title=t('拖放和系统分享。','Drop and system share.');
-  general.addEventListener('click',()=>{const next=!generalOn;return run(()=>api.configure(bot.id,{sources:Object.fromEntries(generalKeys.map(key=>[key,next]))}));});
-  const showShortcuts=state.host?.platform!=='darwin';
-  const shortcutOn=!!recipient.sources?.shortcuts;
-  const shortcut=showShortcuts?el('button',`source-chip${shortcutOn?' selected':''}`,t('快捷指令','Shortcuts')):null;
-  if(shortcut){
-   shortcut.type='button';shortcut.setAttribute('aria-pressed',String(shortcutOn));
-   shortcut.title=t('允许快捷指令和 grokbotanywhere 链接把文字交给这个 Bot。通过链接收到的内容会先放进输入框，由你确认后再发送。','Allow Shortcuts and grokbotanywhere links to deliver text to this Bot. Content received from a link is placed in the composer first. It is sent only after you confirm.');
-   shortcut.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{shortcuts:!shortcutOn}})));
-  }
-  const wechatOn=!!recipient.sources.wechat;
-  const wechat=el('button',`source-chip${wechatOn?' selected':''}`,t('微信','WeChat'));
-  wechat.type='button';wechat.setAttribute('aria-pressed',String(wechatOn));
-  wechat.addEventListener('click',()=>run(()=>api.configure(bot.id,{sources:{wechat:!wechatOn}})));
-  sources.append(general,...(shortcut?[shortcut]:[]),wechat);
-  // Windows has a single share entry for every receiving Bot, so the per-source
-  // switches would promise a choice that does not exist there.
-  if(state.host?.platform!=='win32')card.append(settingRow(t('来源','Sources'),sources));
-  if(recipient.mode==='direct'){
-   const prefix=el('input','prefix');prefix.placeholder=t('加在正文前','Prefix');prefix.setAttribute('aria-label',t('直接发送时加在正文前','Prefix for direct sends'));prefix.value=recipient.prefix;
-   prefix.addEventListener('change',()=>run(()=>api.configure(bot.id,{prefix:prefix.value})));
-   card.append(settingRow(t('前缀','Prefix'),prefix));
-  }
+ let currentMode=recipient?.mode==='direct'?'direct':'compose';
+ const selectSegment=(node,value)=>{for(const button of node.children)button.classList.toggle('selected',button.dataset.value===value);};
+ const mode=el('div','segment');mode.setAttribute('aria-label',t('收到之后','After receiving'));
+ let prefixRow=null;
+ for(const [value,label] of [['compose',t('先放进输入框','Open in composer')],['direct',t('直接发送','Send directly')]]){
+  const choice=el('button',value===currentMode?'selected':'',label);choice.type='button';choice.dataset.value=value;
+  choice.addEventListener('click',()=>{const previous=currentMode;currentMode=value;selectSegment(mode,value);if(prefixRow)prefixRow.hidden=value!=='direct';void applyConfig(bot.id,{mode:value},()=>{currentMode=previous;selectSegment(mode,previous);if(prefixRow)prefixRow.hidden=previous!=='direct';});});
+  mode.append(choice);
  }
+ settingsBody.append(settingRow(t('收到之后','After receiving'),mode));
+ const generalKeys=['drop','share'];
+ let generalOn=generalKeys.some(key=>recipient?.sources?.[key]);
+ const sources=el('div','sources');
+ const general=el('button',`source-chip${generalOn?' selected':''}`,t('通用','General'));
+ general.type='button';general.setAttribute('aria-pressed',String(generalOn));general.title=t('拖放和系统分享。','Drop and system share.');
+ general.addEventListener('click',()=>{
+  const previous=generalOn;generalOn=!previous;general.classList.toggle('selected',generalOn);general.setAttribute('aria-pressed',String(generalOn));
+  void applyConfig(bot.id,{sources:Object.fromEntries(generalKeys.map(key=>[key,generalOn]))},()=>{generalOn=previous;general.classList.toggle('selected',previous);general.setAttribute('aria-pressed',String(previous));});
+ });
+ const showShortcuts=state.host?.platform!=='darwin';
+ let shortcutOn=!!recipient?.sources?.shortcuts;
+ const shortcut=showShortcuts?el('button',`source-chip${shortcutOn?' selected':''}`,t('快捷指令','Shortcuts')):null;
+ if(shortcut){
+  shortcut.type='button';shortcut.setAttribute('aria-pressed',String(shortcutOn));
+  shortcut.title=t('允许快捷指令和 grokbotanywhere 链接把文字交给这个 Bot。通过链接收到的内容会先放进输入框，由你确认后再发送。','Allow Shortcuts and grokbotanywhere links to deliver text to this Bot. Content received from a link is placed in the composer first. It is sent only after you confirm.');
+  shortcut.addEventListener('click',()=>{
+   const previous=shortcutOn;shortcutOn=!previous;shortcut.classList.toggle('selected',shortcutOn);shortcut.setAttribute('aria-pressed',String(shortcutOn));
+   void applyConfig(bot.id,{sources:{shortcuts:shortcutOn}},()=>{shortcutOn=previous;shortcut.classList.toggle('selected',previous);shortcut.setAttribute('aria-pressed',String(previous));});
+  });
+ }
+ let wechatOn=!!recipient?.sources?.wechat;
+ const wechat=el('button',`source-chip${wechatOn?' selected':''}`,t('微信','WeChat'));
+ wechat.type='button';wechat.setAttribute('aria-pressed',String(wechatOn));
+ wechat.addEventListener('click',()=>{
+  const previous=wechatOn;wechatOn=!previous;wechat.classList.toggle('selected',wechatOn);wechat.setAttribute('aria-pressed',String(wechatOn));
+  void applyConfig(bot.id,{sources:{wechat:wechatOn}},()=>{wechatOn=previous;wechat.classList.toggle('selected',previous);wechat.setAttribute('aria-pressed',String(previous));});
+ });
+ sources.append(general,...(shortcut?[shortcut]:[]),wechat);
+ // Windows has a single share entry for every receiving Bot, so the per-source
+ // switches would promise a choice that does not exist there.
+ if(state.host?.platform!=='win32')settingsBody.append(settingRow(t('来源','Sources'),sources));
+ const prefix=el('input','prefix');prefix.placeholder=t('加在正文前','Prefix');prefix.setAttribute('aria-label',t('直接发送时加在正文前','Prefix for direct sends'));prefix.value=recipient?.prefix??'';
+ prefix.addEventListener('change',()=>void applyConfig(bot.id,{prefix:prefix.value}));
+ prefixRow=settingRow(t('前缀','Prefix'),prefix);prefixRow.hidden=currentMode!=='direct';settingsBody.append(prefixRow);
+ card.append(settingsBody);
+ let afterValue=recipient?.composerAfterSend??'inherit';
  const afterMode=el('div','segment');afterMode.setAttribute('aria-label',t('输入框发送后','Composer after sending'));
  for(const [value,label] of [['inherit',t('跟随全局','Use global')],['hide',t('隐藏','Hide')],['open',t('打开 Bot','Open Bot')]]){
-  const choice=el('button',(recipient?.composerAfterSend??'inherit')===value?'selected':'',label);choice.type='button';
-  choice.addEventListener('click',()=>run(()=>api.configure(bot.id,{composerAfterSend:value})));afterMode.append(choice);
+  const choice=el('button',afterValue===value?'selected':'',label);choice.type='button';choice.dataset.value=value;
+  choice.addEventListener('click',()=>{const previous=afterValue;afterValue=value;selectSegment(afterMode,value);void applyConfig(bot.id,{composerAfterSend:value},()=>{afterValue=previous;selectSegment(afterMode,previous);});});
+  afterMode.append(choice);
  }
  card.append(settingRow(t('输入框发送后','Composer after sending'),afterMode,t('覆盖全局设置；默认跟随全局。','Overrides the global setting; follows it by default.')));
  card.append(shortcutRow(bot.id,t('打开悬浮输入框','Open composer'),t('只打开这个 Bot 的悬浮输入框。','Opens the floating composer for this Bot.')));
@@ -583,8 +626,8 @@ function renderSettings(content){
  if(settingsTab==='share'&&state.host?.platform==='darwin'){
   const menu=state.host.menu??{},wechatPanel=el('section','group'),row=el('div','group-row'),info=el('div');
   info.append(el('div','group-label',t('微信转发','WeChat')),el('div','group-help',!menu.available?t('这个版本没有分享扩展','Sharing extensions are not in this build'):menu.busy?t('正在同步菜单','Syncing the menu'):menu.needsUpdate?t('设置已保存，需要重新同步','Saved. Sync to update.'):t(`已启用 ${menu.registered??0} 个入口`,`${menu.registered??0} destinations on`)));
-  const update=smallButton(t('重新同步','Sync again'),async()=>{update.disabled=true;try{const result=await api.updateMenu();toast(t(`已同步 ${result.registered} 个入口。若微信里没变化，重新打开微信的转发菜单。`,`Synced ${result.registered} destinations. If WeChat still shows the old menu, reopen its forwarding menu.`));}catch{}finally{update.disabled=false;}});
-  update.disabled=!menu.available||menu.busy;row.append(info,update);wechatPanel.append(row);
+  const update=smallButton(t('重新同步','Sync again'),async()=>{update.disabled=true;try{const result=await api.updateMenu();toast(t(`已同步 ${result.registered} 个入口。若微信里没变化，请完全退出微信再打开；微信会缓存旧的分享菜单。`,`Synced ${result.registered} destinations. If WeChat still shows the old menu, quit WeChat completely and reopen it; WeChat caches the sharing menu.`));}catch{}finally{update.disabled=false;}});
+  update.disabled=!menu.available||menu.busy||!!state.accountBusy;row.append(info,update);wechatPanel.append(row);
   const read=smallButton(menuReading?t('正在读取','Reading'):t('读取微信顺序','Read WeChat order'),readMenuOrder);
   read.disabled=menuReading;
   wechatPanel.append(settingRow(t('菜单顺序','Menu order'),read,t('读取微信里现在的顺序。排好以后，按这个顺序重新注册菜单。最多 12 个。','Read the current WeChat order. After you sort, the menu is registered in that order. Up to 12.')));
@@ -644,7 +687,10 @@ function botAccent(bot){
  return typeof hex==='string'&&hex.startsWith('#')?hex:'#059669';
 }
 function accentInk(hex){
- const value=Number.parseInt(hex.slice(1),16);
+ let text=String(hex||'').trim();
+ if(/^#[0-9a-f]{3}$/i.test(text))text=`#${text[1]}${text[1]}${text[2]}${text[2]}${text[3]}${text[3]}`;
+ const value=Number.parseInt(text.slice(1,7),16);
+ if(!Number.isFinite(value))return '#fff';
  const channel=part=>part<=0.03928?part/12.92:((part+0.055)/1.055)**2.4;
  const r=channel(((value>>16)&255)/255),g=channel(((value>>8)&255)/255),b=channel((value&255)/255);
  const luminance=0.2126*r+0.7152*g+0.0722*b;

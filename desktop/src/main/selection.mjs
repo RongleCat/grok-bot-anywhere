@@ -63,9 +63,23 @@ export function listedPaths(text) {
   return String(text ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 }
 
-export async function captureFrontmostSelection({platform = process.platform, run = execFile} = {}) {
+async function macFrontmostBundle(run) {
+  const front = String(await execText(run, '/usr/bin/lsappinfo', ['front'])).trim();
+  if (!front) return '';
+  const info = await execText(run, '/usr/bin/lsappinfo', ['info', '-only', 'bundleid', front]);
+  return /"CFBundleIdentifier"="([^"]+)"/.exec(info)?.[1] ?? '';
+}
+
+export async function captureFrontmostSelection({platform = process.platform, run = execFile, frontBundle = macFrontmostBundle} = {}) {
   try {
-    if (platform === 'darwin') return listedPaths(await execText(run, 'osascript', ['-e', finderScript]));
+    if (platform === 'darwin') {
+      // Avoid the Finder AppleScript (and its 2.5s timeout) on every wake.
+      // Most wakes are not over Finder; the lsappinfo preflight costs ~20ms.
+      let bundle = null;
+      try { bundle = await frontBundle(run); } catch {}
+      if (bundle !== null && bundle !== 'com.apple.finder') return [];
+      return listedPaths(await execText(run, 'osascript', ['-e', finderScript]));
+    }
     if (platform === 'win32') return listedPaths(await execText(run, 'powershell.exe', ['-NoProfile', '-STA', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', explorerScript]));
     return [];
   } catch {

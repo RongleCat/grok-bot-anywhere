@@ -81,6 +81,31 @@ if (Store && Delivery) {
     await delivery.process(item.id,'a');
     assert.equal(store.get(item.id,'a').status,'expired'); assert.equal(sent.length,0);
   });
+  test('a direct share with 100 attachments can finish after the 90s creation window', async t => {
+    const {root,store,delivery,sent} = await setup(t);
+    let now=1000;delivery.now=()=>now;
+    delivery.upload=async file=>{now+=1000;return {path:`server/${file.name}`,name:file.name};};
+    store.saveRecipient('a',bot.id,{enabled:true,mode:'direct',sources:{wechat:true}});
+    const files=[];
+    for(let index=0;index<100;index++){const path=join(root,`image-${index}.png`);await writeFile(path,'x');files.push(path);}
+    const item=await delivery.receive({accountId:'a',bot,source:'wechat',files,manual:false,policy:{mode:'direct',prefix:'',createdAt:1000}});
+    await delivery.process(item.id,'a');
+    assert.equal(store.get(item.id,'a').status,'sent');
+    assert.equal(sent.length,1);
+    assert.equal(sent[0].attachmentPaths.length,100);
+  });
+  test('delivery publishes upload, send, and done progress for the bar', async t => {
+    const {root,store,delivery} = await setup(t);
+    store.saveRecipient('a',bot.id,{enabled:true,mode:'direct',sources:{drop:true}});
+    const path=join(root,'large.bin');await writeFile(path,Buffer.alloc(8,1));
+    const item=await delivery.receive({accountId:'a',bot,source:'drop',files:[path],manual:false,policy:{mode:'direct',prefix:'',createdAt:1000}});
+    const stages=[];
+    delivery.onChange=()=>{const row=store.get(item.id,'a');if(row?.progress)stages.push(row.progress.stage);};
+    delivery.upload=async(file,context)=>{context.onProgress?.({bytes:2,totalBytes:file.bytes});context.onProgress?.({bytes:file.bytes,totalBytes:file.bytes});return {path:'server/large',name:file.name};};
+    await delivery.process(item.id,'a');
+    assert.equal(store.get(item.id,'a').status,'sent');
+    assert.deepEqual([...new Set(stages)],['upload','send','done']);
+  });
   test('restart marks a persisted send attempt unconfirmed without resending', async t => {
     const {root,store,delivery} = await setup(t);
     store.saveRecipient('a',bot.id,{enabled:true,mode:'direct',sources:{drop:true}});

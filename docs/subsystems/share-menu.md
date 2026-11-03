@@ -54,13 +54,18 @@ macOS 的分享扩展是**签名过的 appex**，不能运行时凭空创建。�
 
 ```text
 ShareInbox/
+  Preparing/<batchId>.json
   Ready/<batchId>/manifest.json + files…
   Staging/
   Imported/<batchId>/
   Rejected/<batchId>/failure.txt
 ```
 
+扩展在复制附件前先写 `Preparing/<id>.json`（账号、Bot、模式、创建时间），主进程可以据此先打开输入框；manifest 落地 `Ready` 后再把附件补进同一个草稿。复制失败时扩展删除这个 marker。
+
 manifest v1 字段：`version,id,source=wechat,accountId,botId,mode,prefix,text,title,createdAt,files[{relativePath,name}]`。服务进程校验后才导入；账号不匹配的批次留在 Ready，不跨账号投递。
+
+扩展先处理 `file-url`；其余内容优先试 provider 声明的具体 UTType，再试 ZIP/影片/图片，最后用 `public.data` 兜底；只有当 provider 没有文件表示时才把纯文本当正文。这样 Word 等文档和不同微信版本提供的聊天记录不会只因为不在旧白名单里被丢掉；临时文件没有扩展名时从 UTType 补回（例如 `.docx`）。
 
 ## 失败与回滚
 
@@ -69,6 +74,8 @@ manifest v1 字段：`version,id,source=wechat,accountId,botId,mode,prefix,text,
 | 槽位文件写一半 | 原子写（temp + rename）；旧状态保留 |
 | 签名失败 | 不注册，保留上次可用宿主，UI 显示错误 |
 | 系统注册成功但读回不一致 | 重试有限次；仍失败提示用户“更新转发菜单” |
+| 启动/切账号的过渡态 | `accountBusy` 时不写空的 `configuration.json`，保留已安装菜单；同步按钮禁用，避免手动同步把菜单清空 |
+| direct 转发失败/过期/未确认 | 内容留在发送记录，并发系统通知；不会静默吞掉 |
 | 微信缓存旧菜单 | 重新打开微信转发菜单或重启微信 |
 | 卸载 | 删除 `~/Applications/Grok Bot Anywhere Menu` 与注册；不删用户收件数据 |
 

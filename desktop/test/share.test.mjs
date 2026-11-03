@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {existsSync} from 'node:fs';
 import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -86,13 +87,32 @@ if(model&&ShareInbox){
  async function setup(t){
   const root=await mkdtemp(join(tmpdir(),'gba-share-'));t.after(()=>rm(root,{recursive:true,force:true}));
   const received=[],seen=new Map();const session={account:{id:'a'},transition:false,bots:state.bots,store:{list:()=>[...seen.values()]},receive:async p=>{received.push(p);const row={id:'receipt',accountId:'a',botId:p.botId,mode:p.policy.mode,status:'needs-input',sourceId:p.sourceId};seen.set(p.sourceId,row);return row;}};
-  const inbox=new ShareInbox({root,session});await inbox.initialize();return {root,inbox,received,session};
+  const preparing=[];const inbox=new ShareInbox({root,session,onPreparing:data=>preparing.push(data)});await inbox.initialize();return {root,inbox,received,preparing,session};
  }
  async function batch(root,id='batch-one',patch={}){
   const directory=join(root,'Ready',id);await mkdir(directory,{recursive:true});await writeFile(join(directory,'forward.zip'),Buffer.alloc(5*1024*1024,1));
   const value={version:1,id,accountId:'a',botId:'bot-0',source:'wechat',createdAt:Date.now(),mode:'compose',prefix:'',text:'context',title:'Shared chat',files:[{relativePath:'forward.zip',name:'forward.zip'}],...patch};
   await writeFile(join(directory,'manifest.json'),JSON.stringify(value));return directory;
  }
+ test('an account transition preserves the installed menu instead of publishing an empty one',async t=>{
+  const {ShareMenu}=await import('../src/main/share-menu.mjs');
+  const root=await mkdtemp(join(tmpdir(),'gba-menu-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  const menu=Object.create(ShareMenu.prototype);
+  Object.assign(menu,{root,status:{available:true,registered:3,enabled:3,needsUpdate:false},installed:{entries:[{slot:1},{slot:2},{slot:3}]},templateHash:'t',applicationPath:'a',configQueue:Promise.resolve(),onChange:()=>{}});
+  await menu.sync({accountBusy:true,account:{id:'a'},bots:[],recipients:[]});
+  assert.equal(menu.status.registered,3);
+  assert.equal(menu.status.enabled,3);
+  assert.equal(menu.status.needsUpdate,false);
+  assert.equal(existsSync(join(root,'configuration.json')),false);
+});
+test('a preparing marker opens the composer target before the files are copied',async t=>{
+  const {root,inbox,preparing}=await setup(t);
+  await writeFile(join(root,'Preparing','batch-two.json'),JSON.stringify({version:1,id:'batch-two',accountId:'a',botId:'bot-0',source:'wechat',createdAt:Date.now(),mode:'compose'}));
+  await inbox.drain();await inbox.drain();
+  assert.equal(preparing.length,1);
+  assert.equal(preparing[0].botId,'bot-0');
+  assert.equal(preparing[0].mode,'compose');
+ });
  test('imports a >4MiB native batch locally once, retaining the delivery snapshot',async t=>{
   const {root,inbox,received}=await setup(t);await batch(root);await inbox.drain();await inbox.drain();
   assert.equal(received.length,1);assert.equal(received[0].expectedAccountId,'a');assert.equal(received[0].policy.mode,'compose');assert.equal((await readFile(join(root,'Imported/batch-one/forward.zip'))).length,5*1024*1024);

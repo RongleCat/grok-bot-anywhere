@@ -16,7 +16,7 @@
 | skills | 复制 skill；Claude Code 用 junction |
 | Explorer 右键 | `HKCU\Software\Classes\*\shell\GrokBotAnywhere` 级联，每个启用 Bot 一行 |
 | 收件/发送 | 与 macOS 同一套服务进程与 SQLite |
-| 打包 | `npm run package:win` → 未签名 zip |
+| 打包 | `npm run package:win` → 未签名 zip；`npm run package:win-store` → 商店 MSIX |
 
 ## 微信分享
 
@@ -35,9 +35,26 @@
 
 macOS 仍是每个 Bot 一个签名 appex，见[分享菜单](../subsystems/share-menu.md)。
 
-## 发布签名（SignPath）
+## 分发与签名
 
-仓库是公开的，优先走 [SignPath Foundation](https://signpath.org/) 的免费开源签名。需要在 SignPath 完成：
+两条路，先商店，后侧载：
+
+1. **Microsoft Store（首选，零成本）**：个人开发者账号没有注册费；MSIX 不需要 CA 证书，认证通过后商店用微软证书重签，用户安装零 SmartScreen 警告。步骤、认证说明模板与已知限制见 [Store 提交](../runbooks/store-submission.md)。
+2. **侧载分发（zip / MSIX）**：自己解决签名，见下。
+
+侧载签名的优先级：
+
+| 路径 | 成本 | 说明 |
+| --- | --- | --- |
+| [SignPath Foundation](https://signpath.org/) | 免费 | 公开仓库的开源项目；证书 Subject 属于 SignPath Foundation |
+| 商业 OV 证书 | 约 ¥600/年起 | Certum 个人版，国内代理可支付宝；确定性最高 |
+| 自签 | 免费 | 仅开发与内网；公共分发会被 SAC 拦 |
+
+**Azure Artifact Signing（原 Trusted Signing）不在选项里。** 它对个人仅开放美国和加拿大，组织仅限美国、加拿大、欧盟、英国；其他地区即使支付成功也过不了身份验证。见[微软的代码签名选项对比](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)。
+
+### SignPath
+
+仓库公开，可以申请 [SignPath Foundation](https://signpath.org/) 的免费开源签名。需要在 SignPath 完成：
 
 1. 申请 Foundation 项目并获批。
 2. 建立 project、signing policy、artifact configuration。
@@ -72,6 +89,7 @@ macOS 仍是每个 Bot 一个签名 appex，见[分享菜单](../subsystems/shar
 - 悬浮输入框的焦点/置顶/点击穿透在多显示器与 DPI 缩放下的表现。
 - 安装 zip 后的首次启动、登录、分享导入、通知。
 - 打包产物无签名，SmartScreen/SAC 可能拦截。
+- Store 包未构建、未上传、未认证；商店版 share target 与 userData 迁移未验证。
 
 ## 开发
 
@@ -117,10 +135,13 @@ Windows 11、Node v22.22.0、开发模式（`npm run dev`，非 `--preview`）�
 ## 已知风险
 
 - 微信分享目标需要 MSIX/包标识；自签名在 Smart App Control 开启时大概率被拦。见 [ADR 0005](../decisions/0005-platform-boundaries.md)；本地验证包在 `projects/windows-share/`（默认不入库）。
+- **完整 MSIX 下经典 Explorer 右键菜单预计失效**：菜单写入 `HKCU\Software\Classes`，打包应用对该键的写入被 MSIX 虚拟化到包内，资源管理器枚举不到。商店版需要改用 `windows.fileExplorerContextMenus`（仅 Windows 11）或接受裁剪。未实机确认。
+- 商店版 `%APPDATA%` 被重定向到包私有目录，zip 版用户升级后不会带过登录态与收件库。
 - 无边框窗口的最大化内缩依赖 `anywhere:window-state` 的工作区 inset；多显示器/DPI 缩放未验证。
 
 ## 相关
 
 - [桌面外壳](../subsystems/desktop-shell.md)
+- [Store 提交](../runbooks/store-submission.md)
 - [Windows 覆盖历史文档](../history/legacy/windows-coverage.md)
 - [构建](../runbooks/build.md)

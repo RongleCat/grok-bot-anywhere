@@ -1,11 +1,23 @@
 ﻿import {build} from 'esbuild';
 import {mkdir,copyFile,readFile,writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
+import {eyeInk} from '../src/renderer/avatar-ink.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const engine=root+'node_modules/grok-bot-avatar-engine/dist/index.js';
-const engineSource=await readFile(engine,'utf8');
-const filledEyes=engineSource.replaceAll('gl("var(--grok-bot-ink)")','gl("var(--grok-bot-ink)","#fff")').replaceAll('gl(typeof n=="string"?n:oH)','gl(typeof n=="string"?n:oH,"#fff")');
-if(filledEyes!==engineSource)await writeFile(engine,filledEyes);
+let engineSource=await readFile(engine,'utf8');
+// The upstream engine paints the eyes with a fixed #fff after our earlier
+// patch. Dark-mode black Bots have a white body, so that made the eyes vanish.
+// Use a contrast ink variable instead: white eyes on dark bodies, dark eyes on
+// light bodies. The same bundled engine feeds Electron, the share picker and
+// the native WKWebView.
+const eyeHelper=`const gbaEyeInk=${eyeInk.toString()};`;
+if(!engineSource.includes('function gbaEyeInk('))engineSource=eyeHelper+engineSource;
+engineSource=engineSource.replaceAll('gl("var(--grok-bot-ink)","#fff")','gl("var(--grok-bot-ink)","var(--grok-bot-eye)")');
+engineSource=engineSource.replaceAll('gl("var(--grok-bot-ink)")','gl("var(--grok-bot-ink)","var(--grok-bot-eye)")');
+engineSource=engineSource.replaceAll('gl(typeof n=="string"?n:oH)','gl(typeof n=="string"?n:oH,"#fff")');
+engineSource=engineSource.replace('function h(){e.style.setProperty("--grok-bot-ink",Lh(o.color,o.theme))}','function h(){const c=Lh(o.color,o.theme);e.style.setProperty("--grok-bot-ink",c);e.style.setProperty("--grok-bot-eye",gbaEyeInk(c))}');
+engineSource=engineSource.replace('"--grok-bot-ink":Lh(e.color,o)','"--grok-bot-ink":Lh(e.color,o),"--grok-bot-eye":gbaEyeInk(Lh(e.color,o))');
+await writeFile(engine,engineSource);
 await mkdir(root+'out',{recursive:true});
 await build({entryPoints:[root+'src/renderer/app.mjs',root+'src/renderer/composer.mjs',root+'src/renderer/share-picker.mjs'],outdir:root+'out',bundle:true,format:'esm',platform:'browser',target:'chrome140',minify:false,logOverride:{'impossible-typeof':'silent'}});
 await Promise.all(['index.html','styles.css','composer.html','composer.css','share-picker.html','share-picker.css'].map(file=>copyFile(root+'src/renderer/'+file,root+'out/'+file)));

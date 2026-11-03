@@ -46,7 +46,7 @@ Electron main (desktop/src/main/main.mjs)
 1. 上传文件（`uploadFile`，返回服务端引用）。
 2. 需要用户补字时停住（`needs-input`，compose 模式）。
 3. 用稳定 `messageId` 调 `sendMessage`。
-4. 结果明确 → `sent`；不明确/超时 → `unconfirmed` 并持锁；上传失败 → `failed`；direct 超过 90 秒 → `expired`。
+4. 结果明确 → `sent`；不明确/超时 → `unconfirmed` 并持锁；上传失败/超传输预算 → `failed`；direct 创建后 90 秒内仍未开始 → `expired`。
 
 同一 Bot 的发送串行化；切换账号或 Bot 不会改变已经冻结的 receipt 目标。详见 [投递服务](subsystems/delivery-service.md) 和 [收件状态](reference/receipts.md)。
 
