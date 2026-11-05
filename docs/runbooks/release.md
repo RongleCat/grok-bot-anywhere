@@ -99,7 +99,7 @@ npm run package:win
 ## 0.1.3 发布记录
 
 ```text
-Build source: 0.1.3 working tree on d208e08 (uncommitted at packaging time)
+Commit: 38dd40d
 macOS: arm64 DMG 118.6 MiB, x64 DMG 124.6 MiB; Developer ID signed, notarized, stapled
 Checks: codesign --verify --deep --strict, spctl, stapler validate, hdiutil verify passed for both; packaged arm64 and x64 smoke passed
 Windows: x64 zip 146.7 MiB; unsigned; extracted and app.asar version 0.1.3 verified on macOS; Windows install/self-sign not run
