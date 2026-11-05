@@ -63,7 +63,7 @@
 
 - CSS 变量：亮色画布 `#f4f3f0`、暗色 `#0b0b0c`，表面约 86%/84% 不透明，强调色 `#f59312`。
 - 圆角、发丝线、阴影只用于层次；不用彩色左边条表示状态。
-- 头像：Electron 用 `grok-bot-avatar-engine` 的 `createAvatar`；列表用 IntersectionObserver 懒启动/停止动画。
+- 头像：Electron 用 `avatar-adapter.mjs` 包装的 `grok-bot-avatar-engine` 0.1.0（26 个形状，含 `pumpkin`）；列表用 IntersectionObserver 懒启动/停止动画。
 - 自定义头像图片按容器尺寸 `object-fit: cover` 填充并裁成圆角；输入框、Tab 宫格和分享选择面板都走同一规则。图片加载失败时回退角色头像，不留下空白图。
 - 减少动态效果时显示静帧。
 - Bot 详情的选中态用 Bot 自身强调色；文字颜色由 `accentInk` 计算为 `--on-accent`，白色/浅色 Bot 上不再使用白字。

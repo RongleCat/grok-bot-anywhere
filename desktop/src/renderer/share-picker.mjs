@@ -1,4 +1,4 @@
-import {createAvatar} from 'grok-bot-avatar-engine';
+import {createAvatar} from './avatar-adapter.mjs';
 
 const api=window.anywhere;
 const list=document.getElementById('list');

@@ -12,7 +12,7 @@
 <a href="docs/platforms/linux.md"><img src="https://img.shields.io/badge/Linux-not%20supported-lightgrey?logo=linux&logoColor=black" alt="Linux not supported"></a>
 <a href="desktop/package.json"><img src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white" alt="Electron 45"></a>
 <a href="package.json"><img src="https://img.shields.io/badge/Node-%E2%89%A522.13-339933?logo=nodedotjs&logoColor=white" alt="Node 22.13+"></a>
-<img src="https://img.shields.io/badge/status-0.1.2-orange" alt="0.1.2">
+<img src="https://img.shields.io/badge/status-0.1.3-orange" alt="0.1.3">
 <a href="docs/README.md"><img src="https://img.shields.io/badge/docs-LLM%20wiki-2f6feb" alt="Docs"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
@@ -78,7 +78,7 @@ Windows 没有 Swift 伴侣和微信分享宿主；可用 Explorer 右键、拖�
 
 ### 安装包
 
-0.1.2 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，变更见 [更新说明](docs/updates/0.1.2.md)。也可以从源码构建：
+0.1.3 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，变更见 [更新说明](docs/updates/0.1.3.md)。也可以从源码构建：
 
 ```sh
 npm run package:mac    # arm64 + x64 DMG，签名 + 公证
@@ -199,7 +199,7 @@ desktop/                  Electron 主产品
   src/renderer/           主窗口、悬浮输入框、Tab 宫格
   src/share/              macOS 分享槽位与注册
   src/shell/              跨平台纯函数
-native/macos/             Swift 原生伴侣与 Bloub 头像
+native/macos/             Swift 原生伴侣与头像（0.1.0 桥 + Bloub 回退）
 packages/client-protocol  非官方协议 SDK / CLI
 docs/                     Wiki、平台说明、runbook、规范、ADR
 projects/                 本地项目工作区（默认不入库）
@@ -248,11 +248,12 @@ Windows 分发首选 Microsoft Store：个人开发者账号免费，商店认�
 
 本项目代码以 [MIT](LICENSE) 许可发布。
 
-第三方组件遵循各自许可：Bloub 头像引擎为 MIT，许可随 `assets/bloub/LICENSE`；Electron、Node 与 `grok-bot-sdk` 遵循其各自仓库的许可。项目内的产品名、Bot 头像和截图仅用于说明。
+第三方组件遵循各自许可：Bloub 头像引擎为 MIT，许可随 `assets/bloub/LICENSE`；`grok-bot-avatar-engine` 为 MIT，许可随 `vendor/grok-bot-avatar-engine-0.1.0.tgz`；Electron、Node 与 `grok-bot-sdk` 遵循其各自仓库的许可。项目内的产品名、Bot 头像和截图仅用于说明。
 
 ## 致谢
 
 - [Bloub](https://github.com/jeremy-prt/bloub) — macOS 原生头像渲染引擎（MIT）。
+- [grok-bot-avatar-engine](https://github.com/RongleCat/grok-bot-avatar-engine) — Electron 与 Touch Bar 共用的 0.78.1 客户端头像渲染器移植（MIT）。
 - [Electron](https://www.electronjs.org/) — 跨平台桌面外壳。
 - [grok-bot-sdk](https://github.com/RongleCat/grok-bot-sdk) — Electron 侧的账号、名单、发送与回复订阅。
 - [WeChatBridge](https://github.com/freestylefly/WeChatBridge) — macOS 微信分享菜单的公开实现，作为调研参考。

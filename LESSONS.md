@@ -26,6 +26,12 @@
 - 规则：appex → 宿主 → 主 App；每次签名后验证；公证前再验证一次。
 - Seen 1×（2026-10-29）。
 
+**0.1.x 头像引擎是重写，不是 1.0.0 的补丁升级。**
+- 2026-11-05：换到 `grok-bot-avatar-engine` 0.1.0（Grok Bot 0.78.1 客户端渲染器）后，`createStrip`、`renderAvatarPng`、`colorHex`、`main`、`theme`、`reducedMotion` 和 `handle.capture()` 全部消失；`createAvatar` 默认挂 light DOM，同形状头像的 `<use>`/mask id 会互相串。
+- 规则：Electron 侧统一走 `desktop/src/renderer/avatar-adapter.mjs`；适配层用 Shadow DOM 隔离实例、把主题色转成显式 hex、补回星标/PNG/strip。升级引擎后先跑 `npm run test:desktop`、`npm run smoke` 和一次隐藏窗口截 PNG。
+- 证据：`desktop/src/renderer/avatar-adapter.mjs`、`desktop/test/avatar-engine.test.mjs`、`docs/subsystems/avatar.md`。
+- Seen 1×（2026-11-05）。
+
 **开发/冒烟命令不要继承 `ELECTRON_RUN_AS_NODE=1`。**
 - 2026-11-01：`npm run smoke` 报 `The requested module 'electron' does not provide an export named 'BrowserWindow'`，进程跑在 Node v24 而不是 Electron；当前 shell 带着 `ELECTRON_RUN_AS_NODE=1`。
 - 规则：桌面应用用 `env -u ELECTRON_RUN_AS_NODE npm start/smoke`；只有 `grok-bot` shim 需要 Node 模式时才显式设置。

@@ -34,6 +34,16 @@ test('explicit valid fields override each default independently, including black
   assert.deepEqual(black.sources,{shape:'id-default',color:'explicit'});
 });
 
+test('an explicit pumpkin survives the valid-shape gate',()=>{
+  feature('resolveAgentAvatar');
+  const pumpkin=avatar.resolveAgentAvatar({agentId:'33cf1aae-3a51-452d-b761-34a6ccb62201',avatarShape:'pumpkin',avatarColor:'blue'});
+  assert.equal(pumpkin.character.shape,'pumpkin');
+  assert.equal(pumpkin.character.color,'blue');
+  assert.deepEqual(pumpkin.sources,{shape:'explicit',color:'explicit'});
+  assert.ok(avatar.VALID_SHAPES.includes('pumpkin'));
+  assert.ok(!avatar.DEFAULT_SHAPES.includes('pumpkin'),'the default pool stays the client eight');
+});
+
 test('a custom picture takes precedence while retaining derived character metadata',()=>{
   feature('resolveAgentAvatar');
   const result=avatar.resolveAgentAvatar({agentId:'fixture',avatarUrl:'https://example.invalid/avatar.png',avatarVersion:'v1'});

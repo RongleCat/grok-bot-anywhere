@@ -53,12 +53,12 @@ macOS 签名脚本 `desktop/scripts/package-mac-signed.sh`：
 
 | 文件 | 架构 | 状态 |
 | --- | --- | --- |
-| `release/Grok Bot Anywhere-0.1.2-arm64.dmg` | arm64 | Developer ID 签名 + 公证 + staple |
-| `release/Grok Bot Anywhere-0.1.2.dmg` | x64 | Developer ID 签名 + 公证 + staple |
-| `release/Grok Bot Anywhere-0.1.1-win.zip` | x64 | 未签名；早于最后一次 `package.json` 修改，发布前重打 |
+| `release/Grok Bot Anywhere-0.1.3-arm64.dmg` | arm64 | Developer ID 签名 + 公证 + staple |
+| `release/Grok Bot Anywhere-0.1.3.dmg` | x64 | Developer ID 签名 + 公证 + staple |
+| `release/Grok Bot Anywhere-0.1.3-win.zip` | x64 | 未签名；用户拉取后自行签名或放行 |
 | `release/mac/`、`release/mac-arm64/`、`release/win-unpacked/` | — | 构建中间产物，不提交 |
 
-> 0.1.2 的 macOS 包在本机重新构建并公证；Windows 包仍是 0.1.1 的未签名 zip，0.1.2 没有重打 Windows。
+> 0.1.3 的 macOS 双架构包在本机重新构建并公证；Windows x64 zip 同版本重打，仍未签名。打双架构时，每个架构都要用 `GBA_TARGET_ARCH=arm64` / `x86_64` 重新生成 native companion 与 share host，再调用对应的 `package:mac-*`；`package:mac-all` 不会自动切换这两个 helper 的架构。
 
 校验：
 
@@ -66,7 +66,7 @@ macOS 签名脚本 `desktop/scripts/package-mac-signed.sh`：
 codesign -dv --verbose=2 "desktop/release/mac-arm64/Grok Bot Anywhere.app"
 codesign --verify --deep --strict "desktop/release/mac-arm64/Grok Bot Anywhere.app"
 spctl -a -vvv -t install "desktop/release/mac-arm64/Grok Bot Anywhere.app"
-xcrun stapler validate "desktop/release/Grok Bot Anywhere-0.1.2-arm64.dmg"
+xcrun stapler validate "desktop/release/Grok Bot Anywhere-0.1.3-arm64.dmg"
 ```
 
 ## 产物与提交的关系

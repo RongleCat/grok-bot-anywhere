@@ -1,4 +1,4 @@
-import {colorHex,createAvatar} from 'grok-bot-avatar-engine';
+import {colorHex,createAvatar} from './avatar-adapter.mjs';
 import {cutoutStack,groupMembers,isGroup,listedBots,placeStack,stackPlan} from './group-avatar.mjs';
 import {acceleratorFromEvent,formatAccelerator} from '../shortcuts.mjs';
 import {spliceWechatOrder} from '../share/order.mjs';

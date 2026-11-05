@@ -16,7 +16,7 @@
 | 打包、签名、公证 | [打包与发布](subsystems/packaging.md) → [发布 runbook](runbooks/release.md) |
 | 上架 Microsoft Store | [Store 提交](runbooks/store-submission.md) → [Windows](platforms/windows.md) |
 | 在 Windows 上开发/验证 | [Windows](platforms/windows.md) → [换平台前必读](decisions/0005-platform-boundaries.md) |
-| 看最新版本改了什么 | [0.1.2 更新说明](updates/0.1.2.md) |
+| 看最新版本改了什么 | [0.1.3 更新说明](updates/0.1.3.md) |
 | 查历史设计 | [docs/history](history/)（只作背景，不作现状） |
 
 ## 仓库地图
@@ -29,7 +29,7 @@ desktop/                 Electron 应用（macOS / Windows 主产品）
   src/renderer/          主窗口、悬浮输入框、Tab 宫格、头像页
   src/share/             macOS 分享菜单模型、槽位、注册、顺序
   src/shell/             跨平台纯函数：窗口选项、托盘模型、深链、Explorer 转发
-  test/                  161 个 Node 测试
+  test/                  167 个 Node 测试
 native/macos/            Swift 原生伴侣（Touch Bar、原生输入框、语音、分享扩展宿主）
   Sources/               Swift Package 源码
   avatar/                Bloub 离线头像渲染源码
@@ -57,7 +57,7 @@ npm run docs:check
 
 为什么这样分层见 [ADR 0006](decisions/0006-root-command-facade.md)。
 
-## 当前状态（2026-11-04）
+## 当前状态（2026-11-05）
 
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ npm run docs:check
 最短路径：
 
 ```sh
-npm run test:desktop           # 161 tests
+npm run test:desktop           # 167 tests
 cd native/macos && swift build  # macOS only
 cd packages/client-protocol && npm test
 node --test native/macos/avatar/renderer.test.mjs

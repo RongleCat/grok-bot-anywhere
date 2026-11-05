@@ -1,6 +1,6 @@
 {
   "name": "grok-bot-anywhere",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Grok Bot context delivery for desktop",
   "author": "RongleCat",
@@ -29,7 +29,7 @@
     "package:all": "npm run package:mac-all && npm run package:win"
   },
   "dependencies": {
-    "grok-bot-avatar-engine": "file:vendor/grok-bot-avatar-engine-1.0.0.tgz",
+    "grok-bot-avatar-engine": "file:vendor/grok-bot-avatar-engine-0.1.0.tgz",
     "grok-bot-sdk": "github:RongleCat/grok-bot-sdk"
   },
   "devDependencies": {

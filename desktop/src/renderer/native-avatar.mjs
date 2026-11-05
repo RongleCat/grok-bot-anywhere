@@ -1,4 +1,4 @@
-import {createAvatar,createStrip,renderAvatarPng} from 'grok-bot-avatar-engine';
+import {createAvatar,createStrip,renderAvatarPng} from './avatar-adapter.mjs';
 import {placeStack,renderStackPng,stackPlan} from './group-avatar.mjs';
 let avatar,live,strip;
 window.setAvatar=config=>{const target=document.querySelector('#avatar');if(!avatar)avatar=createAvatar(target,{...config,size:Math.min(innerWidth,innerHeight)});else avatar.update(config);};

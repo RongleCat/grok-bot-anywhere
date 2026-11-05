@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-04",
+  "updated": "2026-11-05",
   "entry": "docs/README.md",
   "pages": [
     {
@@ -104,7 +104,7 @@
       "id": "subsystems-avatar",
       "title": "头像引擎",
       "path": "docs/subsystems/avatar.md",
-      "summary": "Electron 与 Swift 两条头像渲染路径、ID 派生规则与静态菜单图标。",
+      "summary": "Electron 0.78.1 移植渲染器与 Swift 两条路径、南瓜、ID 派生与静态菜单图标。",
       "tags": [
         "avatar",
         "rendering"
@@ -395,6 +395,18 @@
         "release",
         "changelog",
         "macos"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "release-0-1-3",
+      "title": "0.1.3 更新说明",
+      "path": "docs/updates/0.1.3.md",
+      "summary": "0.1.3 的头像引擎 0.78.1 移植、南瓜、主 Bot 星标、macOS 双架构与 Windows 未签名 zip。",
+      "tags": [
+        "release",
+        "changelog",
+        "avatar"
       ],
       "status": "current"
     }

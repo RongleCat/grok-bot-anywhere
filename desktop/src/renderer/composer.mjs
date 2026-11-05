@@ -1,4 +1,4 @@
-import {createAvatar} from 'grok-bot-avatar-engine';
+import {createAvatar} from './avatar-adapter.mjs';
 import {cutoutStack,groupMembers,listedBots,placeStack,stackPlan} from './group-avatar.mjs';
 import {acceptLateFiles,composerAfterSend} from '../shell/actions.mjs';
 const api=window.anywhere;

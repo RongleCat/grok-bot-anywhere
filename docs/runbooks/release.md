@@ -8,8 +8,8 @@
 - [ ] `npm run test:all` 通过（记录数字）。
 - [ ] `cd native/macos && swift build` 通过。
 - [ ] `npm run build` 成功；`out/` 与源码一致。
-- [ ] 版本号在 `desktop/package.json` 里已更新（当前 0.1.2）。
-- [ ] 0.1.2 的修复清单见 [更新说明](../updates/0.1.2.md)。
+- [ ] 版本号在 `desktop/package.json` 里已更新（当前 0.1.3）。
+- [ ] 0.1.3 的修复清单见 [更新说明](../updates/0.1.3.md)。
 - [ ] 签名环境 `~/.gba-signing/env` 存在且未过期。
 - [ ] 产物时间晚于最后一次源码/配置修改；否则重打。
 - [ ] 在干净用户目录安装并启动一次（至少 macOS）。
@@ -36,7 +36,7 @@
 手动运行：
 
 ```sh
-gh workflow run macos-release.yml -f version=0.1.2
+gh workflow run macos-release.yml -f version=0.1.3
 ```
 
 CI 会验证 App 的签名、架构、App ticket 和 DMG ticket，并上传 `macos-arm64` / `macos-x64` artifact。
@@ -45,16 +45,21 @@ CI 会验证 App 的签名、架构、App ticket 和 DMG ticket，并上传 `mac
 
 ```sh
 cd desktop
-npm run build:native
-npm run build:share
-npm run package:mac-all
+GBA_TARGET_ARCH=arm64 npm run build:native
+GBA_TARGET_ARCH=arm64 npm run build:share
+npm run package:mac-arm
+GBA_TARGET_ARCH=x86_64 npm run build:native
+GBA_TARGET_ARCH=x86_64 npm run build:share
+npm run package:mac-intel
 ```
+
+`package:mac-all` 只连续调用两个打包脚本，不会重建 native helper；双架构必须像上面这样分别用 `GBA_TARGET_ARCH` 重建，否则两种 DMG 会带同一个架构的伴侣。
 
 产物：
 
 ```text
-release/Grok Bot Anywhere-0.1.2-arm64.dmg
-release/Grok Bot Anywhere-0.1.2.dmg        # x64
+release/Grok Bot Anywhere-0.1.3-arm64.dmg
+release/Grok Bot Anywhere-0.1.3.dmg        # x64
 ```
 
 校验：
@@ -63,7 +68,7 @@ release/Grok Bot Anywhere-0.1.2.dmg        # x64
 codesign --verify --deep --strict "release/mac-arm64/Grok Bot Anywhere.app"
 codesign -dv --verbose=2 "release/mac-arm64/Grok Bot Anywhere.app"
 spctl -a -vvv -t install "release/mac-arm64/Grok Bot Anywhere.app"
-xcrun stapler validate "release/Grok Bot Anywhere-0.1.2-arm64.dmg"
+xcrun stapler validate "release/Grok Bot Anywhere-0.1.3-arm64.dmg"
 ```
 
 `codesign -dv` 应显示 Developer ID、`flags=0x10000(runtime)`、`Notarization Ticket=stapled`。
@@ -89,7 +94,23 @@ cd desktop
 npm run package:win
 ```
 
-产物 `release/Grok Bot Anywhere-0.1.1-win.zip`，未签名。**发布前必须在 Windows 机器上解压启动一次**；当前没有这条证据。
+产物 `release/Grok Bot Anywhere-0.1.3-win.zip`，未签名；由用户拉取后自行签名或放行。自签只影响本机信任，公共分发仍会被 SmartScreen/SAC 拦。**发布前必须在 Windows 机器上解压启动一次**；当前没有这条证据。
+
+## 0.1.3 发布记录
+
+```text
+Build source: 0.1.3 working tree on d208e08 (uncommitted at packaging time)
+macOS: arm64 DMG 118.6 MiB, x64 DMG 124.6 MiB; Developer ID signed, notarized, stapled
+Checks: codesign --verify --deep --strict, spctl, stapler validate, hdiutil verify passed for both; packaged arm64 and x64 smoke passed
+Windows: x64 zip 146.7 MiB; unsigned; extracted and app.asar version 0.1.3 verified on macOS; Windows install/self-sign not run
+SHA256: arm64 2f3fe166d7225e79e735f5b91b04dac127ae0944fe45a1b016b7ae23eac5090b
+SHA256: x64 e8110edebed0af3a4b8b1d267a31056d61ab4829e81df0d8612422f23cae2196
+SHA256: win b5b8fc73f005cb01d8db250bf6f4a674d8066e944e935c572f0d4a1461f5bf02
+Tests: desktop 167 passed; client-protocol 61 passed; avatar 1 passed; Swift 8 passed; docs check passed
+Not run: Windows real-device install, Touch Bar hardware, live WeChat send on this exact build
+```
+
+0.1.3 的用户操作文档：[Grok Bot Anywhere 下载与使用教程](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)；更新说明见 [0.1.3 更新说明](../updates/0.1.3.md)。
 
 ## 0.1.2 发布记录
 
