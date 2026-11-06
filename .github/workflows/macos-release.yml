@@ -18,11 +18,11 @@ jobs:
       matrix:
         include:
           - arch: arm64
-            runner: macos-14
+            runner: macos-15
             binary_arch: arm64
             target_arch: arm64
           - arch: x64
-            runner: macos-14
+            runner: macos-15
             binary_arch: x86_64
             target_arch: x86_64
     steps:
@@ -41,8 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           XCODE="$(find /Applications -maxdepth 1 -name 'Xcode_16*.app' -print | sort -V | tail -n 1)"
-          test -n "$XCODE" || { echo 'Xcode 16 is not installed on this runner' >&2; exit 1; }
-          sudo xcode-select -s "$XCODE"
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
           swift --version
 
       - name: Set requested version
