@@ -803,6 +803,12 @@ async function dispatch(method,p){
     }
     case 'refresh':await rpc.call('refresh');return publicState();
     case 'duplicateBot':{const result=await rpc.call('duplicateBot',{botId:p.botId});return {...publicState(),duplicatedBotId:result?.bot?.id??''};}
+    case 'updateBotAvatar':{
+      if(preview)throw new Error('PREVIEW_ONLY');
+      const result=await rpc.call('updateBotAvatar',{botId:p.botId,shape:p.shape,color:p.color});
+      latestState={...latestState,...(result?.state??{})};update();
+      return {...publicState(),updatedBotId:result?.bot?.id??p.botId};
+    }
     case 'configure':return rpc.call('configure',{botId:p.botId,patch:p.patch});
     case 'disableAllReceive':return rpc.call('disableAllReceive');
     case 'explorerMenu':{

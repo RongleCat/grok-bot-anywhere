@@ -28,6 +28,33 @@
 
 原因：Node 低于 22.13。根命令会由 `scripts/check-node.mjs` 拦截并提示；切到 Node 22 再跑。
 
+## node: line 3: exec: : not found
+
+错误指向 `/Applications/DeepSeek Harness.app/Contents/Resources/runtime/bin/node`。这是 DSH 的 Node 包装脚本，第 3 行需要 `DSH_DESKTOP_NODE_EXECUTABLE`；当前 shell 没有这个变量，于是 `exec ""` 报 `exec: : not found`。这不是项目代码错误，`npm`/`node` 还没开始执行项目脚本。
+
+先确认：
+
+```sh
+command -v node
+echo "${DSH_DESKTOP_NODE_EXECUTABLE:-unset}"
+```
+
+用本机 version-fox 的 Node 22 覆盖 PATH：
+
+```sh
+export PATH="/Users/ronglecat/.version-fox/shims:$PATH"
+node -v
+npm run dev
+```
+
+如果必须保留 DSH 包装脚本，则把真实 Node 指给它：
+
+```sh
+export DSH_DESKTOP_NODE_EXECUTABLE="/Users/ronglecat/.version-fox/cache/nodejs/current/bin/node"
+```
+
+把其中一种写进 shell 配置，后续终端才会持久生效。
+
 ## 微信菜单没有出现/不更新
 
 1. 设置里是否启用了至少一个接收 Bot？

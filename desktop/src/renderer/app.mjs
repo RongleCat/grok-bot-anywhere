@@ -1,4 +1,4 @@
-import {colorHex,createAvatar} from './avatar-adapter.mjs';
+import {COLORS,SHAPES,colorHex,createAvatar,renderAvatarSvg} from './avatar-adapter.mjs';
 import {cutoutStack,groupMembers,isGroup,listedBots,placeStack,stackPlan} from './group-avatar.mjs';
 import {acceleratorFromEvent,formatAccelerator} from '../shortcuts.mjs';
 import {spliceWechatOrder} from '../share/order.mjs';
@@ -7,10 +7,18 @@ import {renderMarkdown} from './markdown.mjs';
 import {captionGlyph,windowCaptionButtons,windowCaptionLabel} from '../shell/window-chrome.mjs';
 const api=window.anywhere;
 let state,page='bots',selected='',search='',searchOpen=true,grouped=false,avatars=[],busy=false,recordingSlot=null,inboxBot='',inboxFilterController,inboxAvatarObserver,menuReading=false,toastTimer,viewKey='',gridKey='';
-let settingsTab='general',copying=false,confirmState=null,copyOpener=null,moreMenu=null,botDetail=null;
+let settingsTab='general',copying=false,confirmState=null,copyOpener=null,moreMenu=null,botDetail=null,avatarEditor=null;
 try{grouped=localStorage.getItem('gba.grouped')==='1';}catch{}
 const chinese=()=>state?.host?.locale?.startsWith('zh')??navigator.language.startsWith('zh');
 const t=(cn,en)=>chinese()?cn:en;
+const SHAPE_NAMES={
+ blob:['团子','Blob'],pebble:['卵石','Pebble'],bean:['豆子','Bean'],egg:['蛋','Egg'],squircle:['方圆','Squircle'],tablet:['药片','Tablet'],capsule:['胶囊','Capsule'],cylinder:['圆柱','Cylinder'],hex:['六边形','Hex'],gem:['宝石','Gem'],crystal:['水晶','Crystal'],wedge:['楔形','Wedge'],shield:['盾牌','Shield'],dome:['穹顶','Dome'],arch:['拱门','Arch'],cloud:['云','Cloud'],teardrop:['水滴','Teardrop'],leaf:['叶子','Leaf'],square:['方形','Square'],sparkle:['闪光','Sparkle'],clover:['四叶草','Clover'],flower:['花','Flower'],heart:['心','Heart'],house:['房子','House'],star:['星','Star'],pumpkin:['南瓜','Pumpkin']
+};
+const COLOR_NAMES={black:['黑色','Black'],brown:['棕色','Brown'],red:['红色','Red'],orange:['橙色','Orange'],yellow:['黄色','Yellow'],green:['绿色','Green'],cyan:['青色','Cyan'],blue:['蓝色','Blue'],violet:['紫色','Violet'],magenta:['品红','Magenta'],gray:['灰色','Gray']};
+const shapeLabel=shape=>{const pair=SHAPE_NAMES[shape];return pair?t(...pair):shape;};
+const colorLabel=id=>{const pair=COLOR_NAMES[id];return pair?t(...pair):id;};
+const themeName=()=>state?.theme==='system'?'auto':state?.theme??'auto';
+const themeMode=()=>state?.theme==='dark'||(state?.theme!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light';
 const $=id=>document.getElementById(id);
 const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;};
 const errorMessages={
@@ -32,6 +40,9 @@ const errorMessages={
  SHORTCUT_INVALID:['这个按键组合不能用。请带上 Ctrl、Option 或 Command。','Use a shortcut with Ctrl, Option, or Command.'],
  SHORTCUT_UNAVAILABLE:['这个快捷键被占用了，请另外录一个。','That shortcut is taken. Record another one.'],
  BOT_NOT_FOUND:['没有找到这个 Bot。','That Bot was not found.'],
+ AVATAR_INVALID:['这个头像形状或颜色不可用。','That avatar shape or color is unavailable.'],
+ BOT_NOT_EDITABLE:['这个 Bot 不能在这里改头像。','This Bot cannot be edited here.'],
+ AVATAR_UPDATE_UNAVAILABLE:['这个账号暂时不能改头像。','Avatar editing is unavailable for this account.'],
  DUPLICATE_UNAVAILABLE:['这个版本还不能复制 Bot。','This version cannot copy a Bot.'],
  BOT_NOT_COPYABLE:['群聊不能复制。','A group chat cannot be copied.'],
  GROK_BOT_OPEN_FAILED:['没有打开 Grok Bot。请确认已经安装。','Grok Bot did not open. Check that it is installed.'],
@@ -121,7 +132,8 @@ function icon(name){
   more:['M12 12h.01','M19 12h.01','M5 12h.01'],
   copy:['M9 9h10v10H9z','M5 15V5h10'],
   info:['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z','M12 16v-4','M12 8h.01'],
-  close:['M18 6 6 18','m6 6 12 12']
+  close:['M18 6 6 18','m6 6 12 12'],
+  pencil:['M12 20h9','M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z']
  };
  for(const d of paths[name]){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);svg.append(path);}
  if(name==='settings'){const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');circle.setAttribute('cx','12');circle.setAttribute('cy','12');circle.setAttribute('r','3');svg.append(circle);}
@@ -723,6 +735,7 @@ function openMoreMenu(bot,anchor){
  };
  item(t('查看发送记录','View send history'),'history',()=>{inboxBot=bot.id;page='inbox';render();$('content').scrollTop=0;});
  if(!isGroup(bot))item(t('复制此 Bot','Copy this Bot'),'copy',()=>{void copyBot(bot.id);});
+ if(canEditAvatar(bot))item(t('编辑头像','Edit avatar'),'pencil',()=>openAvatarEditor(bot,anchor));
  item(t('查看详情','View details'),'info',()=>openBotDetail(bot.id,anchor));
  const outside=event=>{if(menu.contains(event.target)||anchor.contains(event.target))return;closeMoreMenu();};
  const nearby=()=>positionMoreMenu();
@@ -762,8 +775,85 @@ function openBotDetail(botId,opener){
  botDetail={bot,opener:opener instanceof HTMLElement?opener:null};
  paintOverlay();
 }
+function canEditAvatar(bot){
+ return !!bot&&!isGroup(bot)&&bot.avatar?.kind!=='picture'&&bot.viewerCanManage!==false&&!state.host?.preview;
+}
+function openAvatarEditor(bot,opener){
+ if(!canEditAvatar(bot))return;
+ closeMoreMenu();
+ const initialShape=bot.avatarShape||bot.avatar?.character?.shape||'blob';
+ const initialColor=bot.avatarColor||bot.avatar?.character?.color||'brown';
+ avatarEditor={botId:bot.id,shape:SHAPES.includes(initialShape)?initialShape:'blob',color:COLORS.some(item=>item.id===initialColor)?initialColor:'brown',saving:false,error:'',opener:opener instanceof HTMLElement?opener:null};
+ paintOverlay();
+}
+function closeAvatarEditor(){
+ if(!avatarEditor)return;
+ const opener=avatarEditor.opener;avatarEditor=null;paintOverlay();focusOpener(opener);
+}
+async function saveAvatarEditor(){
+ const current=avatarEditor;if(!current||current.saving)return;
+ current.saving=true;current.error='';paintOverlay();
+ try{
+  const next=await api.updateBotAvatar(current.botId,current.shape,current.color);
+  state=next;
+  if(botDetail&&botDetail.bot?.id===current.botId){const updated=state.bots?.find(item=>item.id===current.botId);if(updated)botDetail={...botDetail,bot:updated};}
+  avatarEditor=null;render();paintOverlay();toast(t('头像已更新','Avatar updated'));
+ }catch(error){
+  current.saving=false;const pair=errorMessages[error.message];current.error=pair?t(...pair):t('没有保存，请重试。','Could not save. Try again.');paintOverlay();
+ }
+}
+function paintAvatarEditor(layer){
+ const editor=avatarEditor;if(!editor)return;
+ const card=el('section','avatar-editor-card');
+ card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.setAttribute('aria-label',t('编辑头像','Edit avatar'));
+ const head=el('header','avatar-editor-head');
+ const title=el('div','avatar-editor-titles');
+ title.append(el('h2','avatar-editor-title',t('编辑头像','Edit avatar')),el('p','avatar-editor-subtitle',t('选择形状和颜色','Choose a shape and color')));
+ const close=el('button','icon-button');close.type='button';close.setAttribute('aria-label',t('关闭头像编辑','Close avatar editor'));close.append(icon('close'));close.addEventListener('click',closeAvatarEditor);
+ head.append(title,close);
+ const preview=el('div','avatar-editor-preview');
+ const previewFace=el('div','avatar-preview');
+ previewFace.innerHTML=renderAvatarSvg({shape:editor.shape,color:editor.color,size:96,id:'avatar-editor-preview',theme:themeName()});
+ preview.append(previewFace,el('p','avatar-editor-current',`${shapeLabel(editor.shape)} · ${colorLabel(editor.color)}`));
+ const body=el('div','avatar-editor-body');
+ const shapeSection=el('section','avatar-editor-section');
+ shapeSection.setAttribute('role','group');shapeSection.setAttribute('aria-label',t('形状','Shape'));
+ const grid=el('div','avatar-shape-grid');
+ for(const shape of SHAPES){
+  const selected=shape===editor.shape;
+  const button=el('button',`avatar-shape-cell${selected?' selected':''}`);button.type='button';button.dataset.shape=shape;button.disabled=editor.saving;
+  button.setAttribute('aria-label',shapeLabel(shape));button.setAttribute('aria-pressed',String(selected));button.title=shapeLabel(shape);
+  button.innerHTML=renderAvatarSvg({shape,color:editor.color,size:36,id:`avatar-editor-shape-${shape}`,theme:themeName()});
+  button.addEventListener('click',()=>{if(editor.saving)return;avatarEditor.shape=shape;paintOverlay();queueMicrotask(()=>layer.querySelector(`.avatar-shape-cell[data-shape="${shape}"]`)?.focus());});
+  grid.append(button);
+ }
+ shapeSection.append(grid);
+ const colorSection=el('section','avatar-editor-section');
+ colorSection.setAttribute('role','group');colorSection.setAttribute('aria-label',t('颜色','Color'));
+ const colorRow=el('div','avatar-color-row');
+ for(const color of COLORS){
+  const selected=color.id===editor.color;
+  const button=el('button',`avatar-color-cell${selected?' selected':''}`);button.type='button';button.dataset.color=color.id;button.disabled=editor.saving;
+  button.setAttribute('aria-label',colorLabel(color.id));button.setAttribute('aria-pressed',String(selected));button.title=colorLabel(color.id);
+  const swatch=el('span','avatar-color-swatch');swatch.style.background=colorHex(color.id,themeMode())||color.value;button.append(swatch);
+  button.addEventListener('click',()=>{if(editor.saving)return;avatarEditor.color=color.id;paintOverlay();queueMicrotask(()=>layer.querySelector(`.avatar-color-cell[data-color="${color.id}"]`)?.focus());});
+  colorRow.append(button);
+ }
+ colorSection.append(colorRow);
+ body.append(shapeSection,colorSection);
+ if(editor.error)body.append(el('p','avatar-editor-error',editor.error));
+ const footer=el('footer','avatar-editor-footer');
+ const cancel=el('button','secondary',t('取消','Cancel'));cancel.type='button';cancel.disabled=editor.saving;cancel.addEventListener('click',closeAvatarEditor);
+ const save=el('button','primary',editor.saving?t('正在保存…','Saving…'):t('保存','Save'));save.type='button';save.disabled=editor.saving;save.addEventListener('click',saveAvatarEditor);
+ footer.append(cancel,save);
+ card.append(head,preview,body,footer);layer.append(card);
+ layer.setAttribute('aria-label',t('编辑头像','Edit avatar'));
+ layer.onclick=event=>{if(event.target===layer)closeAvatarEditor();};
+ queueMicrotask(()=>{const selected=card.querySelector('.avatar-shape-cell[aria-pressed="true"]');(selected??close).focus();});
+}
 function closeBotDetail(){
  if(!botDetail)return;
+ if(avatarEditor)avatarEditor=null;
  const opener=botDetail.opener;botDetail=null;paintOverlay();focusOpener(opener);
 }
 function shortcutRow(slot,label,help){
@@ -927,7 +1017,7 @@ function setBackgroundInert(on){
 }
 function paintOverlay(){
  let layer=document.getElementById('app-overlay');
- if(!copying&&!confirmState&&!botDetail){
+ if(!copying&&!confirmState&&!botDetail&&!avatarEditor){
   if(!layer)return;
   const opener=layer.__opener??null;
   layer.remove();
@@ -942,10 +1032,14 @@ function paintOverlay(){
  if(!layer){layer=el('div','app-overlay');layer.id='app-overlay';document.body.append(layer);}
  layer.setAttribute('role','dialog');
  layer.setAttribute('aria-modal','true');
- layer.__opener=copying?(copyOpener??layer.__opener??null):(botDetail?.opener??confirmState?.opener??layer.__opener??null);
+ layer.__opener=copying?(copyOpener??layer.__opener??null):(avatarEditor?.opener??botDetail?.opener??confirmState?.opener??layer.__opener??null);
  setBackgroundInert(true);
  layer.replaceChildren();
  layer.onclick=null;
+ if(avatarEditor){
+  paintAvatarEditor(layer);
+  return;
+ }
  if(botDetail){
   const bot=botDetail.bot,card=el('section','bot-detail-card');
   card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.setAttribute('aria-label',t(`${bot.name} 的详情`,`Details for ${bot.name}`));
@@ -1029,6 +1123,7 @@ $('sync').addEventListener('click',()=>{
  run(async()=>{state=await api.refresh();render();}).finally(()=>{syncing=false;const button=$('sync');if(button)button.disabled=false;});
 });
 window.addEventListener('keydown',event=>{
+ if(avatarEditor&&event.key==='Escape'){event.preventDefault();closeAvatarEditor();return;}
  if(botDetail&&event.key==='Escape'){event.preventDefault();closeBotDetail();return;}
  if(confirmState&&event.key==='Escape'){event.preventDefault();settleConfirm(false);return;}
  if(!recordingSlot)return;

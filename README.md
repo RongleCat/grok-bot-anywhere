@@ -12,7 +12,7 @@
 <a href="docs/platforms/linux.md"><img src="https://img.shields.io/badge/Linux-not%20supported-lightgrey?logo=linux&logoColor=black" alt="Linux not supported"></a>
 <a href="desktop/package.json"><img src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white" alt="Electron 45"></a>
 <a href="package.json"><img src="https://img.shields.io/badge/Node-%E2%89%A522.13-339933?logo=nodedotjs&logoColor=white" alt="Node 22.13+"></a>
-<img src="https://img.shields.io/badge/status-0.1.3-orange" alt="0.1.3">
+<img src="https://img.shields.io/badge/status-0.1.4-orange" alt="0.1.4">
 <a href="docs/README.md"><img src="https://img.shields.io/badge/docs-LLM%20wiki-2f6feb" alt="Docs"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
@@ -78,7 +78,7 @@ Windows 没有 Swift 伴侣和微信分享宿主；可用 Explorer 右键、拖�
 
 ### 安装包
 
-0.1.3 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，变更见 [更新说明](docs/updates/0.1.3.md)。也可以从源码构建：
+0.1.4 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，变更见 [更新说明](docs/updates/0.1.4.md)。也可以从源码构建：
 
 ```sh
 npm run package:mac    # arm64 + x64 DMG，签名 + 公证
@@ -120,6 +120,10 @@ macOS 的分享扩展不能在运行时创建，所以预留 12 个签名槽位�
 - 直接发送可加一段固定前缀。
 - 微信、系统分享、拖放可以分别开关。
 - 关掉某个 Bot 只停止新内容进入，不删除已有记录。
+
+### 头像
+
+Bot 的「更多」菜单里打开头像编辑器：26 个形状 × 11 个颜色全部可选，包含官方编辑器隐藏的南瓜；保存后直接写回账号。
 
 ### 命令行、skills 与深链
 

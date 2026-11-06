@@ -8,8 +8,8 @@
 - [ ] `npm run test:all` 通过（记录数字）。
 - [ ] `cd native/macos && swift build` 通过。
 - [ ] `npm run build` 成功；`out/` 与源码一致。
-- [ ] 版本号在 `desktop/package.json` 里已更新（当前 0.1.3）。
-- [ ] 0.1.3 的修复清单见 [更新说明](../updates/0.1.3.md)。
+- [ ] 版本号在 `desktop/package.json` 里已更新（当前 0.1.4）。
+- [ ] 0.1.4 的修复清单见 [更新说明](../updates/0.1.4.md)。
 - [ ] 签名环境 `~/.gba-signing/env` 存在且未过期。
 - [ ] 产物时间晚于最后一次源码/配置修改；否则重打。
 - [ ] 在干净用户目录安装并启动一次（至少 macOS）。
@@ -36,7 +36,7 @@
 手动运行：
 
 ```sh
-gh workflow run macos-release.yml -f version=0.1.3
+gh workflow run macos-release.yml -f version=0.1.4
 ```
 
 CI 会验证 App 的签名、架构、App ticket 和 DMG ticket，并上传 `macos-arm64` / `macos-x64` artifact。
@@ -58,8 +58,8 @@ npm run package:mac-intel
 产物：
 
 ```text
-release/Grok Bot Anywhere-0.1.3-arm64.dmg
-release/Grok Bot Anywhere-0.1.3.dmg        # x64
+release/Grok Bot Anywhere-0.1.4-arm64.dmg
+release/Grok Bot Anywhere-0.1.4.dmg        # x64
 ```
 
 校验：
@@ -68,7 +68,7 @@ release/Grok Bot Anywhere-0.1.3.dmg        # x64
 codesign --verify --deep --strict "release/mac-arm64/Grok Bot Anywhere.app"
 codesign -dv --verbose=2 "release/mac-arm64/Grok Bot Anywhere.app"
 spctl -a -vvv -t install "release/mac-arm64/Grok Bot Anywhere.app"
-xcrun stapler validate "release/Grok Bot Anywhere-0.1.3-arm64.dmg"
+xcrun stapler validate "release/Grok Bot Anywhere-0.1.4-arm64.dmg"
 ```
 
 `codesign -dv` 应显示 Developer ID、`flags=0x10000(runtime)`、`Notarization Ticket=stapled`。
@@ -94,7 +94,7 @@ cd desktop
 npm run package:win
 ```
 
-产物 `release/Grok Bot Anywhere-0.1.3-win.zip`，未签名；由用户拉取后自行签名或放行。自签只影响本机信任，公共分发仍会被 SmartScreen/SAC 拦。**发布前必须在 Windows 机器上解压启动一次**；当前没有这条证据。
+产物 `release/Grok Bot Anywhere-0.1.4-win.zip`，未签名；由用户拉取后自行签名或放行。自签只影响本机信任，公共分发仍会被 SmartScreen/SAC 拦。**发布前必须在 Windows 机器上解压启动一次**；当前没有这条证据。
 
 ## 0.1.3 发布记录
 

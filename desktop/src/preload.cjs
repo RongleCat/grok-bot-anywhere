@@ -5,6 +5,7 @@ const call=(method,params={})=>ipcRenderer.invoke('anywhere:call',method,params)
 contextBridge.exposeInMainWorld('anywhere',{
   state:()=>call('state'),login:()=>call('login'),desktopLogin:()=>call('desktopLogin'),logout:()=>call('logout'),refresh:()=>call('refresh'),
   duplicateBot:botId=>call('duplicateBot',{botId}),
+  updateBotAvatar:(botId,shape,color)=>call('updateBotAvatar',{botId,shape,color}),
   disableAllReceive:()=>call('disableAllReceive'),
   explorerMenu:action=>call('explorerMenu',action??{}),
   configure:(botId,patch)=>call('configure',{botId,patch}),theme:theme=>call('theme',{theme}),

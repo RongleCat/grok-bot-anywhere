@@ -11,8 +11,6 @@ import {
   bodyFor,
   createAvatar as mountAvatar,
   paintOf,
-  pinnedColor,
-  colorValue,
   renderAvatarSvg as renderEngineSvg,
   resolveAvatar as resolveEngineAvatar,
 } from 'grok-bot-avatar-engine';
@@ -73,8 +71,10 @@ function engineOptions(options,size){
 // Exported for the Node regression test; not part of the app's public surface.
 export function engineProps(options,size){
   const source=engineOptions(options,size);
-  const pinned=pinnedColor(source.shape);
-  const color=(pinned?colorValue(pinned):source.color)||'#1084FE';
+  // The editor deliberately opens every shape to every palette colour, so the
+  // adapter no longer applies the client's pumpkin->orange picker pin. A stored
+  // pumpkin without a colour still defaults to orange.
+  const color=source.color||(source.shape==='pumpkin'?'#FF6700':'#1084FE');
   return {...source,body:bodyFor(source.shape),appearance:paintOf(color),id:options.id===undefined||options.id===null||options.id===''?`avatar-${source.shape}`:String(options.id)};
 }
 
@@ -86,7 +86,7 @@ function normalizeInitial(options){
     if(!next.color&&!next.avatarColor)next.color=resolved.color;
   }
   if(!next.shape&&!next.avatarShape)next.shape='blob';
-  if(!next.color&&!next.avatarColor&&!next.agentId)next.color='#1084FE';
+  if(!next.color&&!next.avatarColor&&!next.agentId)next.color=next.shape==='pumpkin'?'#FF6700':'#1084FE';
   return next;
 }
 
@@ -274,7 +274,12 @@ export function renderAvatarSvg(options={}){
   const next={...options};
   const theme=themeName(next.theme);
   const requested=next.color||next.avatarColor;
-  if(requested)next.color=paletteColor(requested,theme)||requested;
+  if(requested){
+    next.color=paletteColor(requested,theme)||requested;
+    // Pass the paint record explicitly. The client still pins pumpkin to orange
+    // when it resolves a colour id, and the editor needs the chosen colour.
+    next.appearance=next.appearance??paintOf(next.color);
+  }
   delete next.avatarColor;
   return renderEngineSvg(next);
 }

@@ -31,6 +31,7 @@ port.on('message',async({data:request})=>{
         case 'logout':result=await session.logout();break;
         case 'refresh':result=await session.refresh();break;
         case 'duplicateBot':result=await session.duplicateBot(p.botId);break;
+        case 'updateBotAvatar':result=await session.updateBotAvatar(p.botId,{shape:p.shape,color:p.color});break;
         case 'configure':result=session.configure(p.botId,p.patch);break;
         case 'disableAllReceive':result=session.disableAllReceive();break;
         case 'receive':result=await session.receive(p);break;

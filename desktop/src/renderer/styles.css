@@ -205,7 +205,44 @@ main{display:flex;flex-direction:column;gap:16px;min-width:0;min-height:0;paddin
 .bot-detail-card{width:min(640px,calc(100vw - 40px));max-height:min(78vh,720px);display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:light-dark(rgba(255,255,255,.97),rgba(38,38,41,.97));border:1px solid var(--line);box-shadow:0 24px 70px rgba(0,0,0,.28)}
 .bot-detail-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px;border-bottom:1px solid var(--line);flex:none}
 .bot-detail-identity{display:flex;align-items:center;gap:12px;min-width:0}
-.bot-detail-avatar{width:48px;height:48px;flex:none;display:flex;align-items:center;justify-content:center}
+.bot-detail-avatar{position:relative;width:48px;height:48px;flex:none;display:flex;align-items:center;justify-content:center}
+.avatar-editor-card{width:min(520px,calc(100vw - 40px));max-height:min(90vh,820px);display:flex;flex-direction:column;overflow:hidden;border-radius:18px;background:light-dark(rgba(255,255,255,.98),rgba(38,38,41,.98));border:1px solid var(--line);box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.avatar-editor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 18px 10px;flex:none}
+.avatar-editor-titles{min-width:0}
+.avatar-editor-title{margin:0;font-size:18px;font-weight:650;letter-spacing:-.02em;line-height:1.2}
+.avatar-editor-subtitle{margin:4px 0 0;color:var(--secondary);font-size:12px}
+.avatar-editor-preview{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 18px 10px;flex:none}
+.avatar-preview{width:96px;height:96px;display:flex;align-items:center;justify-content:center}
+.avatar-preview svg{width:100%;height:100%}
+.avatar-editor-current{margin:0;color:var(--secondary);font-size:12px}
+.avatar-editor-body{min-height:0;overflow:auto;padding:8px 18px 12px}
+.avatar-editor-section{margin:0 0 16px}
+.avatar-editor-section:last-child{margin-bottom:0}
+.avatar-shape-grid{display:grid;grid-template-columns:repeat(5,44px);gap:5px;justify-content:center}
+.avatar-shape-cell{position:relative;width:44px;height:44px;display:grid;place-items:center;padding:0;border-radius:12px;background:transparent;color:var(--text)}
+.avatar-shape-cell:hover{background:var(--fill-2)}
+.avatar-shape-cell.selected{background:var(--primary-soft);box-shadow:inset 0 0 0 1.5px var(--primary)}
+.avatar-shape-cell svg{width:34px;height:34px;display:block;pointer-events:none}
+.avatar-color-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:2px 0 4px}
+.avatar-color-cell{width:28px;height:28px;display:grid;place-items:center;padding:0;border-radius:50%;background:transparent}
+.avatar-color-cell:hover{background:var(--fill-2)}
+.avatar-color-cell.selected .avatar-color-swatch{box-shadow:inset 0 0 0 1px rgba(0,0,0,.12),0 0 0 2px var(--bg),0 0 0 3px var(--primary)}
+.avatar-color-swatch{display:block;width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.avatar-editor-error{margin:8px 0 0;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--danger) 10%,transparent);color:var(--danger);font-size:12px}
+.avatar-editor-footer{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px 16px;border-top:1px solid var(--line);flex:none}
+.avatar-editor-footer .primary,.avatar-editor-footer .secondary{height:32px}
+@media(max-height:700px){
+ .avatar-editor-card{max-height:min(96vh,820px)}
+ .avatar-editor-head{padding:12px 18px 8px}
+ .avatar-editor-preview{padding:2px 18px 6px}
+ .avatar-preview{width:72px;height:72px}
+ .avatar-editor-body{padding:4px 18px 8px}
+ .avatar-editor-section{margin-bottom:10px}
+ .avatar-shape-grid{grid-template-columns:repeat(5,38px);gap:4px}
+ .avatar-shape-cell{width:38px;height:38px;padding:0;border-radius:10px}
+ .avatar-shape-cell svg{width:30px;height:30px}
+ .avatar-editor-footer{padding:8px 18px 12px}
+}
 .bot-detail-titles{min-width:0}
 .bot-detail-name{margin:0;font-size:18px;font-weight:650;letter-spacing:-.02em;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bot-detail-type{margin:3px 0 0;color:var(--secondary);font-size:11px}

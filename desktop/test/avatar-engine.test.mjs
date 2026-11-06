@@ -24,12 +24,13 @@ test('an explicit pumpkin survives the gated resolver',()=>{
  assert.equal(resolveAvatar({agentId:'fixture',avatarShape:'pumpkin'}).shape,'pumpkin');
 });
 
-test('the adapter keeps theme colours and the pumpkin pin',async()=>{
+test('the adapter keeps theme colours and opens pumpkin to every palette colour',async()=>{
  const adapter=await import('../src/renderer/avatar-adapter.mjs');
  assert.equal(adapter.colorHex('black','dark'),'#FFFFFF');
  assert.match(adapter.renderAvatarSvg({shape:'cloud',color:'black',size:64,theme:'dark'}),/fill="#FFFFFF"/);
  assert.match(adapter.renderAvatarSvg({shape:'cloud',color:'black',size:64,theme:'light'}),/fill="#000000"/);
- assert.match(adapter.renderAvatarSvg({shape:'pumpkin',color:'blue',size:64}),/fill="#FF6700"/);
+ assert.match(adapter.renderAvatarSvg({shape:'pumpkin',color:'blue',size:64}),/fill="#2A92FE"/);
+ for(const color of adapter.COLORS){const hex=adapter.colorHex(color.id,'light');assert.match(adapter.renderAvatarSvg({shape:'pumpkin',color:color.id,size:64,theme:'light'}),new RegExp(`fill="${hex}"`),color.id);}
  assert.match(adapter.renderAvatarSvg({shape:'cloud',avatarColor:'brown',size:64}),/fill="#A27952"/);
 });
 
@@ -39,7 +40,7 @@ test('the adapter maps updates onto the client body and paint record',async()=>{
  assert.equal(pumpkin.shape,'pumpkin');
  assert.equal(pumpkin.body,'pumpkin');
  assert.equal(pumpkin.state,'listening');
- assert.equal(pumpkin.appearance.inkPaint,'#FF6700');
+ assert.equal(pumpkin.appearance.inkPaint,'#2A92FE');
  const cloud=adapter.engineProps({shape:'cloud',color:'brown'},64);
  assert.equal(cloud.body,'cloud');
  assert.equal(cloud.appearance.inkPaint,'#A27952');

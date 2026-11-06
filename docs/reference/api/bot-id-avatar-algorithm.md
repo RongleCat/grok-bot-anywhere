@@ -109,7 +109,7 @@ const colorIndex = Math.floor(r * 10);
 
 ## 6. 参数如何变成实际图像
 
-0.78.1 的渲染器换成了网格投影、挖空眼睛和 53 个状态的客户端实现，但 ID → 形状/颜色的参数规则没有变。`pumpkin` 在渲染时锁 `orange`，`pinnedColor('pumpkin') === 'orange'`；默认派生永远不会落到南瓜。
+0.78.1 的渲染器换成了网格投影、挖空眼睛和 53 个状态的客户端实现，但 ID → 形状/颜色的参数规则没有变。官方 `pinnedColor('pumpkin') === 'orange'`，选择器也把南瓜锁橙色；默认派生永远不会落到南瓜。Grok Bot Anywhere 的自带头像编辑器通过显式 `appearance` 绕过这个 render-time pin，允许南瓜使用其他调色板颜色，这只是应用层覆盖，不改变官方客户端的选择器。
 
 renderer 的静态头像调用链：
 

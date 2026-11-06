@@ -1,8 +1,12 @@
 import {rm} from 'node:fs/promises';
 import * as sdk from 'grok-bot-sdk';
+import {COLORS,SHAPES} from 'grok-bot-avatar-engine';
 import {Delivery} from './delivery.mjs';
 import {readSidebarSettings} from './runtime-settings.mjs';
 import {normalizeAccelerator,normalizeShortcutMap} from '../shortcuts.mjs';
+
+const AVATAR_SHAPES=new Set(SHAPES);
+const AVATAR_COLORS=new Set(COLORS.map(({id})=>id));
 
 function emptyRuntime(){return {mainAgentId:null,statuses:[],pinnedAgentIds:[],sections:[]};}
 async function readRuntime(client,bots,previous=emptyRuntime(),credentials){
@@ -109,6 +113,27 @@ export class AccountSession {
     this.emit();
     return {closed};
   }
+  async updateBotAvatar(botId,{shape,color}={}){
+    const client=this.requireClient();
+    const bot=this.bots.find(item=>item.id===botId);
+    if(!bot)throw new Error('BOT_NOT_FOUND');
+    if(bot.kind==='GROK_BOT_AGENT_KIND_ROOM'||(Array.isArray(bot.memberAgentIds)&&bot.memberAgentIds.length>0))throw new Error('BOT_NOT_EDITABLE');
+    if(bot.avatar?.kind==='picture'||bot.viewerCanManage===false)throw new Error('BOT_NOT_EDITABLE');
+    if(typeof bot.serverId!=='string'||!bot.serverId)throw new Error('BOT_NOT_EDITABLE');
+    if(!AVATAR_SHAPES.has(shape)||!AVATAR_COLORS.has(color))throw new Error('AVATAR_INVALID');
+    if(typeof client.updateBot!=='function')throw new Error('AVATAR_UPDATE_UNAVAILABLE');
+    const result=await client.updateBot({id:bot.serverId,avatarShape:shape,avatarColor:color});
+    if(result?.bot?.id===botId){
+      const index=this.bots.findIndex(item=>item.id===botId);
+      this.bots[index]={...this.bots[index],...result.bot,id:botId,serverId:this.bots[index].serverId};
+      this.store.preference('lastAccount',{account:this.account,bots:this.bots});
+      this.emit();
+      return {bot:this.bots[index],state:this.snapshot()};
+    }
+    await this.refresh();
+    return {bot:this.bots.find(item=>item.id===botId)??null,state:this.snapshot()};
+  }
+
   async duplicateBot(botId){
     const client=this.requireClient();
     const bot=this.bots.find(item=>item.id===botId);

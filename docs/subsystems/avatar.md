@@ -61,6 +61,17 @@ Electron 路径和原生头像桥共享同一份引擎。Swift 的 Touch Bar 位
 - 菜单图标保留透明背景，Finder/微信自己提供背后的材质；不要把白底烤进 PNG。
 - 原生头像桥 `src/renderer/native-avatar.mjs` 走同一个适配层；`renderStrip`、`acknowledge`、`nodNeighbors` 的桥接签名保持不变。
 
+## 应用内头像编辑器
+
+Bot 列表/详情页的「更多」菜单里选「编辑头像」打开面板。面板按官方选择器的结构做：上方 96px 预览，中间 5 列共 26 个形状，下列 11 个颜色，底部取消/保存。
+
+- 形状和颜色都由 `desktop/src/renderer/avatar-adapter.mjs` 的 `SHAPES` / `COLORS` 提供，包含官方编辑器隐藏的 `pumpkin`。
+- 预览用 `renderAvatarSvg` 静态渲染，不启动 26 个动画实例；保存后主窗口、输入框和原生桥会按新状态重绘。
+- 保存调用 `api.updateBotAvatar` → service `updateBotAvatar` → `grok-bot-sdk` 的 `updateBot`。`updateBot` 的 `id` 用 `bot.serverId`（GrokBotAgent.id），不是 Bot UUID。
+- 群聊、图片头像、无管理权限、预览模式和没有 `serverId` 的记录不显示编辑入口；service 也会拒绝这些写入。
+- 官方 0.78.1/0.79.2 的选择器把南瓜锁成橙色；本应用通过给引擎传显式 `appearance`/`paintOf` 绕开 render-time pin，所以南瓜可以选黑、蓝、紫、品红等全部调色板颜色。柄仍是固定的深灰褐。
+- 服务端如果对隐藏形状或颜色有额外校验，保存会返回错误并在面板里显示；本轮没有做服务端策略的实机写入测试。
+
 ## 菜单静态图标
 
 微信菜单那一行是系统静态图标，放不进实时画面。更新菜单时：
