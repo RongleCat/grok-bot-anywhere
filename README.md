@@ -78,7 +78,7 @@ Windows 没有 Swift 伴侣和微信分享宿主；可用 Explorer 右键、拖�
 
 ### 安装包
 
-0.1.4 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，变更见 [更新说明](docs/updates/0.1.4.md)。也可以从源码构建：
+0.1.4 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，也可以从 [GitHub Release](https://github.com/RongleCat/grok-bot-anywhere/releases/tag/v0.1.4) 下载；变更见 [更新说明](docs/updates/0.1.4.md)。也可以从源码构建：
 
 ```sh
 npm run package:mac    # arm64 + x64 DMG，签名 + 公证

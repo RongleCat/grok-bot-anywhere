@@ -106,6 +106,7 @@ Windows: x64 zip 146.7 MiB; unsigned; CI build succeeded; Windows install/self-s
 SHA256: arm64 3774a87d24d6f4c1d12b44403e85ebb855237d6701b5314ca197cd2f35ab635b
 SHA256: x64 f7417f39743133f705de2f7f39a2208be50e6b6389bbae644018d935e7e1ef8b
 SHA256: win 765066c0eb6c8eacaca32da5683b29670236c9c253c47ac84949301ae26bd687
+GitHub Release: https://github.com/RongleCat/grok-bot-anywhere/releases/tag/v0.1.4; assets arm64 DMG, x64 DMG, Windows zip
 Feishu: tutorial updated with 0.1.4 download links for arm64, x64 and Windows; update note https://jcng5q8n0f3z.feishu.cn/wiki/LkMKwmJKKi2narkJNFycVjuunEf; all links anyone_readable
 Tests: desktop 170 passed; client-protocol 61 passed; avatar 1 passed; docs check passed
 Not run: Windows real-device install, Touch Bar hardware, live WeChat send on this exact build
