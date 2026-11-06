@@ -40,7 +40,7 @@ GitHub Actions → **Windows Store package** → Run workflow，填 app 版本�
 $env:STORE_PACKAGE_NAME='12345RongleCat.GrokBotAnywhere'
 $env:STORE_PUBLISHER='CN=<GUID>'
 $env:STORE_PUBLISHER_DISPLAY_NAME='<显示名>'
-$env:MSIX_VERSION='0.1.3.0'
+$env:MSIX_VERSION='0.1.4.0'
 npm run package:win-store
 ```
 

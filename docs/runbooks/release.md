@@ -96,6 +96,23 @@ npm run package:win
 
 产物 `release/Grok Bot Anywhere-0.1.4-win.zip`，未签名；由用户拉取后自行签名或放行。自签只影响本机信任，公共分发仍会被 SmartScreen/SAC 拦。**发布前必须在 Windows 机器上解压启动一次**；当前没有这条证据。
 
+## 0.1.4 发布记录
+
+```text
+Commit: 0997cd6 (tag v0.1.4)
+macOS: arm64 DMG 118.6 MiB; x64 DMG 124.6 MiB; Developer ID signed, notarized, stapled
+GitHub Actions: macOS release 42161064225 passed both arm64 and x64; Windows release 42161064284 passed
+Windows: x64 zip 146.7 MiB; unsigned; CI build succeeded; Windows install/self-sign not run
+SHA256: arm64 3774a87d24d6f4c1d12b44403e85ebb855237d6701b5314ca197cd2f35ab635b
+SHA256: x64 f7417f39743133f705de2f7f39a2208be50e6b6389bbae644018d935e7e1ef8b
+SHA256: win 765066c0eb6c8eacaca32da5683b29670236c9c253c47ac84949301ae26bd687
+Feishu: tutorial updated with 0.1.4 download links for arm64, x64 and Windows; new 0.1.4 update note created under the tutorial; all links anyone_readable
+Tests: desktop 170 passed; client-protocol 61 passed; avatar 1 passed; docs check passed
+Not run: Windows real-device install, Touch Bar hardware, live WeChat send on this exact build
+```
+
+0.1.4 的用户操作文档：[Grok Bot Anywhere 下载与使用教程](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)；更新说明见 [0.1.4 更新说明](../updates/0.1.4.md)。
+
 ## 0.1.3 发布记录
 
 ```text
