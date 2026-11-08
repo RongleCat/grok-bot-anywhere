@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/brand/logo.png" width="132" height="132" alt="Grok Bot Anywhere logo">
+<img src="desktop/build/icon.png" width="132" height="132" alt="Grok Bot Anywhere 黑煤球图标">
 
 <h1>Grok Bot Anywhere</h1>
 
