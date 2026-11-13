@@ -14,7 +14,7 @@
 <a href="docs/platforms/linux.md"><img src="https://img.shields.io/badge/Linux-not%20supported-lightgrey?logo=linux&logoColor=black" alt="Linux not supported"></a>
 <a href="desktop/package.json"><img src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white" alt="Electron 45"></a>
 <a href="package.json"><img src="https://img.shields.io/badge/Node-%E2%89%A522.13-339933?logo=nodedotjs&logoColor=white" alt="Node 22.13+"></a>
-<a href="https://github.com/RongleCat/grok-bot-anywhere/releases/tag/v0.1.4"><img src="https://img.shields.io/badge/release-0.1.4-orange" alt="0.1.4"></a>
+<a href="https://github.com/RongleCat/grok-bot-anywhere/releases/tag/v0.1.5"><img src="https://img.shields.io/badge/release-0.1.5-orange" alt="0.1.5"></a>
 <a href="docs/README.md"><img src="https://img.shields.io/badge/docs-LLM%20wiki-2f6feb" alt="Docs"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
@@ -91,11 +91,11 @@ npm run setup
 npm run dev
 ```
 
-Windows 没有 Swift 伴侣和微信分享宿主；可用 Explorer 右键、拖放、悬浮输入框、URL 协议和 `grok-bot` 命令。完整差异见 [Windows](docs/platforms/windows.md)。
+Windows 没有 Swift 伴侣和微信分享宿主；可用 Explorer 右键、拖放、悬浮输入框、URL 协议和 `grok-bot` / `gba` 命令。完整差异见 [Windows](docs/platforms/windows.md)。
 
 ### 安装包
 
-0.1.4 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，也可以从 [GitHub Release](https://github.com/RongleCat/grok-bot-anywhere/releases/tag/v0.1.4) 下载；变更见 [更新说明](docs/updates/0.1.4.md)。也可以从源码构建：
+0.1.5 的下载与安装见 [用户操作文档](https://jcng5q8n0f3z.feishu.cn/wiki/HwHmwM4dcidx8Wko50QcJlgGnyd)，也可以从 [GitHub Release](https://github.com/RongleCat/grok-bot-anywhere/releases/tag/v0.1.5) 下载；变更见 [更新说明](docs/updates/0.1.5.md)。也可以从源码构建：
 
 ```sh
 npm run package:mac    # arm64 + x64 DMG，签名 + 公证
@@ -244,7 +244,7 @@ Windows 分发首选 Microsoft Store：个人开发者账号免费，商店认�
 
 ## 🗺️ 状态与路线图
 
-当前是 `0.1.4`，macOS 主路径可用，已发布签名公证安装包；Windows 部分实机验证。还没完成的部分：
+当前是 `0.1.5`，macOS 主路径可用，已发布签名公证安装包；Windows 部分实机验证。还没完成的部分：
 
 - [ ] Windows 实机验证（剩余）：安装包首次启动、Explorer 右键点击、悬浮输入框焦点、托盘点击。已跑过的项见 [Windows](docs/platforms/windows.md)。
 - [ ] Windows 微信分享入口：MSIX 稀疏包方案仍在验证，未在 Windows 运行。

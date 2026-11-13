@@ -19,6 +19,15 @@ const shapeLabel=shape=>{const pair=SHAPE_NAMES[shape];return pair?t(...pair):sh
 const colorLabel=id=>{const pair=COLOR_NAMES[id];return pair?t(...pair):id;};
 const themeName=()=>state?.theme==='system'?'auto':state?.theme??'auto';
 const themeMode=()=>state?.theme==='dark'||(state?.theme!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light';
+function checkedAccounts(){
+ const rows=(state?.accounts??[]).filter(entry=>entry?.checked);
+ if(rows.length)return rows;
+ return state?.account?[{account:state.account,checked:true,connected:state.connected,runtime:state.runtime}]:[];
+}
+function accountEntry(id){return (state?.accounts??[]).find(entry=>entry.account?.id===id)??(state?.account?.id===id?{account:state.account,runtime:state.runtime}:null);}
+function runtimeOf(bot){return accountEntry(bot?.accountId)?.runtime??state?.runtime??{};}
+function isMainBot(bot){const runtime=runtimeOf(bot);return bot?.main===true||runtime?.mainAgentId===bot?.id||(runtime?.mainAgentIds??[]).includes(bot?.id);}
+function isRunningBot(bot){return (runtimeOf(bot)?.statuses??[]).some(row=>row.agentId===bot?.id&&row.isRunning);}
 const $=id=>document.getElementById(id);
 const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;};
 const errorMessages={
@@ -40,6 +49,11 @@ const errorMessages={
  SHORTCUT_INVALID:['这个按键组合不能用。请带上 Ctrl、Option 或 Command。','Use a shortcut with Ctrl, Option, or Command.'],
  SHORTCUT_UNAVAILABLE:['这个快捷键被占用了，请另外录一个。','That shortcut is taken. Record another one.'],
  BOT_NOT_FOUND:['没有找到这个 Bot。','That Bot was not found.'],
+ ACCOUNT_NOT_FOUND:['没有找到这个账号。','That account was not found.'],
+ ACCOUNT_MISMATCH:['登录返回了另一个账号，请重试。','The login returned a different account. Try again.'],
+ BOT_AMBIGUOUS:['这个 Bot 同时属于多个账号，请从账号里重新选择。','This Bot belongs to more than one account. Choose it again from the account.'],
+ SAVE_FAILED:['没有保存成功，内容还留在本地。','Could not save. The content stays on this computer.'],
+ SAVE_DIR_INVALID:['保存位置不可用，请换一个目录。','That save location is not available. Choose another folder.'],
  AVATAR_INVALID:['这个头像形状或颜色不可用。','That avatar shape or color is unavailable.'],
  BOT_NOT_EDITABLE:['这个 Bot 不能在这里改头像。','This Bot cannot be edited here.'],
  AVATAR_UPDATE_UNAVAILABLE:['这个账号暂时不能改头像。','Avatar editing is unavailable for this account.'],
@@ -61,13 +75,24 @@ const errorMessages={
 };
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,5000);}
 async function run(action){try{await action();}catch(error){const pair=errorMessages[error.message];toast(pair?t(...pair):t('操作没有完成，请重试。','The operation did not complete. Please try again.'));}}
-function applyConfig(botId,patch,rollback){
- return api.configure(botId,patch).catch(error=>{rollback?.();const pair=errorMessages[error.message];toast(pair?t(...pair):t('操作没有完成，请重试。','The operation did not complete. Please try again.'));});
+function applyConfig(botId,patch,rollback,accountId){
+ return api.configure(botId,patch,accountId).catch(error=>{rollback?.();const pair=errorMessages[error.message];toast(pair?t(...pair):t('操作没有完成，请重试。','The operation did not complete. Please try again.'));});
 }
-function recipientOf(id){return state.recipients.find(item=>item.botId===id);}
+function recipientOf(botOrId){
+ const id=typeof botOrId==='string'?botOrId:botOrId?.id;
+ const accountId=typeof botOrId==='object'?botOrId?.accountId:null;
+ return state.recipients.find(item=>item.botId===id&&(!accountId||!item.accountId||item.accountId===accountId));
+}
 function orderedBots(){
  const visible=new Set(listedBots(state.bots).map(bot=>bot.id));
- return state.bots.map((bot,index)=>({bot,index,order:recipientOf(bot.id)?.order??0})).filter(item=>visible.has(item.bot.id)).sort((a,b)=>a.order-b.order||a.index-b.index).map(item=>item.bot);
+ const accountOrder=new Map(checkedAccounts().map((entry,index)=>[entry.account?.id,index]));
+ return state.bots.map((bot,index)=>({bot,index,order:recipientOf(bot)?.order??0,account:accountOrder.get(bot.accountId)??0})).filter(item=>visible.has(item.bot.id)).sort((a,b)=>a.account-b.account||a.order-b.order||a.index-b.index).map(item=>item.bot);
+}
+function botsForAccount(accountId){
+ const legacy=!(state.accounts??[]).length&&state.account?.id===accountId;
+ const bots=state.bots.filter(bot=>legacy||bot.accountId===accountId);
+ const visible=new Set(listedBots(bots).map(bot=>bot.id));
+ return bots.map((bot,index)=>({bot,index,order:recipientOf(bot)?.order??0})).filter(item=>visible.has(item.bot.id)).sort((a,b)=>a.order-b.order||a.index-b.index).map(item=>item.bot);
 }
 function avatar(bot,size=48){
  const members=groupMembers(bot,state?.bots??[]);
@@ -81,7 +106,7 @@ function pictureUrl(bot){
 }
 function paintCharacter(target,bot,size,still=false){
  target.classList.remove('picture');
- requestAnimationFrame(()=>{if(!target.isConnected)return;const handle=createAvatar(target,{agentId:bot.id,shape:bot.avatarShape,color:bot.avatarColor,size,main:!still&&state.runtime?.mainAgentId===bot.id,state:still?'idle':state.runtime?.statuses?.some(row=>row.agentId===bot.id&&row.isRunning)?'working':'idle',theme:state.theme==='system'?'auto':state.theme,reducedMotion:still||matchMedia('(prefers-reduced-motion:reduce)').matches});target.__avatar=handle;avatars.push(handle);});
+ requestAnimationFrame(()=>{if(!target.isConnected)return;const handle=createAvatar(target,{agentId:bot.id,shape:bot.avatarShape,color:bot.avatarColor,size,main:!still&&isMainBot(bot),state:still?'idle':isRunningBot(bot)?'working':'idle',theme:state.theme==='system'?'auto':state.theme,reducedMotion:still||matchMedia('(prefers-reduced-motion:reduce)').matches});target.__avatar=handle;avatars.push(handle);});
 }
 function singleAvatar(bot,size,still=false){
  const target=el('div','avatar');target.style.width=target.style.height=`${size}px`;
@@ -141,15 +166,16 @@ function icon(name){
  return svg;
 }
 function viewSignature(){
- const bots=orderedBots().map(bot=>{const recipient=recipientOf(bot.id);return [bot.id,bot.name,bot.description??'',bot.kind??'',bot.memberAgentIds??[],bot.avatarShape??'',bot.avatarColor??'',bot.avatar?.kind==='picture'?bot.avatar.picture?.url??'':'',recipient?.order??0];});
- const running=(state.runtime?.statuses??[]).filter(row=>row.isRunning).map(row=>row.agentId).sort();
- const pins=state.runtime?.pinnedAgentIds??[];
- const sections=(state.runtime?.sections??[]).map(section=>[section.id,section.name,section.agentIds,section.collapsed]);
- return JSON.stringify({theme:state.theme,material:state.host?.material??'',platform:state.host?.platform??'',locale:state.host?.locale??'',preview:!!state.host?.preview,issue:state.host?.issue??'',connected:!!state.connected,account:state.account?.name??'',page,selected,search,searchOpen,grouped,busy,recording:recordingSlot??'',inboxBot,menuReading,settingsTab,openAtLogin:!!state.host?.openAtLogin,touchBarPinned:!!state.host?.touchBarPinned,shortcuts:state.shortcuts??null,prefs:state.composerPrefs??null,cli:state.host?.cli??null,main:state.runtime?.mainAgentId??'',running,pins,sections,bots,menu:page==='settings'?state.host?.menu??null:null,inbox:page==='inbox'?state.inbox??null:null});
+ const bots=orderedBots().map(bot=>{const recipient=recipientOf(bot);return [bot.id,bot.accountId??'',bot.name,bot.description??'',bot.kind??'',bot.memberAgentIds??[],bot.avatarShape??'',bot.avatarColor??'',bot.avatar?.kind==='picture'?bot.avatar.picture?.url??'':'',recipient?.order??0];});
+ const accounts=(state.accounts??[]).map(entry=>[entry.account?.id,entry.account?.name,entry.checked,entry.connected,entry.busy,entry.botCount??0]);
+ const running=orderedBots().filter(isRunningBot).map(bot=>`${bot.accountId??''}:${bot.id}`).sort();
+ const pins=checkedAccounts().flatMap(entry=>(entry.runtime?.pinnedAgentIds??[]).map(id=>`${entry.account?.id??''}:${id}`));
+ const sections=checkedAccounts().flatMap(entry=>(entry.runtime?.sections??[]).map(section=>[entry.account?.id??'',section.id,section.name,section.agentIds,section.collapsed]));
+ return JSON.stringify({theme:state.theme,material:state.host?.material??'',platform:state.host?.platform??'',locale:state.host?.locale??'',preview:!!state.host?.preview,issue:state.host?.issue??'',connected:!!state.connected,adding:!!state.addingAccount,accounts,page,selected,search,searchOpen,grouped,busy,recording:recordingSlot??'',inboxBot,menuReading,settingsTab,openAtLogin:!!state.host?.openAtLogin,touchBarPinned:!!state.host?.touchBarPinned,shortcuts:state.shortcuts??null,prefs:state.composerPrefs??null,cli:state.host?.cli??null,save:state.host?.save??null,running,pins,sections,bots,menu:page==='settings'?state.host?.menu??null:null,inbox:page==='inbox'?state.inbox??null:null});
 }
 function botRowKey(bot,running){
- const recipient=recipientOf(bot.id);
- return [bot.id,bot.name,bot.description??'',recipient?.enabled?1:0,running.has(bot.id)?1:0,(bot.memberAgentIds??[]).join(','),bot.avatarShape??'',bot.avatarColor??'',bot.avatar?.kind==='picture'?bot.avatar.picture?.url??'':''].join('\u0001');
+ const recipient=recipientOf(bot);
+ return [bot.id,bot.accountId??'',bot.name,bot.description??'',recipient?.enabled?1:0,running.has(`${bot.accountId??''}:${bot.id}`)?1:0,(bot.memberAgentIds??[]).join(','),bot.avatarShape??'',bot.avatarColor??'',bot.avatar?.kind==='picture'?bot.avatar.picture?.url??'':''].join('\u0001');
 }
 function visibleBots(){
  const query=search.toLocaleLowerCase();
@@ -158,8 +184,10 @@ function visibleBots(){
 function findVisible(bots,id){
  return bots.find(bot=>bot.id===id)??bots.find(bot=>bot.serverId===id);
 }
-function sidebarEntries(){
- const bots=visibleBots();
+function sidebarSectionsFor(accountId){
+ const query=search.toLocaleLowerCase();
+ const bots=botsForAccount(accountId).filter(bot=>bot.name.toLocaleLowerCase().includes(query));
+ const runtime=accountEntry(accountId)?.runtime??state.runtime??{};
  if(!grouped){
   return [{title:'',bots:[...bots.filter(bot=>!isGroup(bot)),...bots.filter(bot=>isGroup(bot))]}];
  }
@@ -173,10 +201,10 @@ function sidebarEntries(){
   }
   return rows;
  };
- const pins=take(state.runtime?.pinnedAgentIds);
+ const pins=take(runtime.pinnedAgentIds);
  if(pins.length)sections.push({title:t('置顶','Pinned'),bots:pins});
  const searching=search.trim().length>0;
- for(const section of state.runtime?.sections??[]){
+ for(const section of runtime.sections??[]){
   const members=take(section.agentIds);
   if(!members.length){
    if(!searching)sections.push({title:(section.name??'').trim()||t('未命名分组','Untitled group'),bots:[]});
@@ -189,10 +217,16 @@ function sidebarEntries(){
  else if(!sections.length&&!searching)sections.push({title:t('未分组','Ungrouped'),bots:[]});
  return sections;
 }
+function sidebarGroups(){
+ const accounts=checkedAccounts();
+ if(accounts.length<=1)return [{account:null,sections:sidebarSectionsFor(accounts[0]?.account?.id??null)}];
+ return accounts.map(entry=>({account:entry,sections:sidebarSectionsFor(entry.account?.id)}));
+}
+function sidebarEntries(){return sidebarGroups().flatMap(group=>group.sections);}
 function gridIdentity(){
- const running=new Set((state.runtime?.statuses??[]).filter(row=>row.isRunning).map(row=>row.agentId));
- const rows=sidebarEntries().map(section=>[section.title,section.bots.map(bot=>botRowKey(bot,running)).join('\u0002')].join('\u0001')).join('\u0003');
- return [state.theme??'',state.runtime?.mainAgentId??'',grouped?1:0,rows].join('\u0004');
+ const running=new Set(orderedBots().filter(isRunningBot).map(bot=>`${bot.accountId??''}:${bot.id}`));
+ const rows=sidebarGroups().map(group=>[group.account?.account?.id??'',group.sections.map(section=>[section.title,section.bots.map(bot=>botRowKey(bot,running)).join('\u0002')].join('\u0001')).join('\u0004')].join('\u0003')).join('\u0005');
+ return [state.theme??'',grouped?1:0,rows].join('\u0006');
 }
 function paintGridSelection(){
  for(const cell of $('grid').querySelectorAll('.bot-cell')){
@@ -204,7 +238,8 @@ function paintGridSelection(){
 function paintGridDots(){
  for(const cell of $('grid').querySelectorAll('.bot-cell')){
   const face=cell.querySelector('.bot-face');if(!face)continue;
-  const on=!!recipientOf(cell.dataset.id)?.enabled;
+  const bot=state.bots.find(item=>item.id===cell.dataset.id&&(!cell.dataset.accountId||item.accountId===cell.dataset.accountId));
+  const on=!!recipientOf(bot)?.enabled;
   const dot=face.querySelector('.bot-dot');
   if(on&&!dot)face.append(el('span','bot-dot'));
   else if(!on&&dot)dot.remove();
@@ -298,23 +333,31 @@ function render(){
 function renderGrid(){
  const grid=$('grid'),top=grid.scrollTop,left=grid.scrollLeft;
  grid.replaceChildren();
- const sections=sidebarEntries();
- const bots=sections.flatMap(section=>section.bots);
- if(!bots.length){grid.append(el('p','list-empty',state.bots.length?t('没有匹配的 Bot','No matching Bots'):t('登录后，Bot 会出现在这里','Bots show up here after you sign in')));return;}
- for(const section of sections){
-  if(section.title)grid.append(el('div','bot-section',section.title));
-  for(const bot of section.bots){
-   const recipient=recipientOf(bot.id),active=page==='bots'&&bot.id===selected,cell=el('button',`bot-cell${active?' selected':''}`);cell.type='button';cell.dataset.id=bot.id;
-   cell.setAttribute('aria-pressed',String(active));cell.title=t(`拖放文件给 ${bot.name}`,`Drop files for ${bot.name}`);
-   const face=el('div','bot-face');face.append(avatar(bot,34));if(recipient?.enabled)face.append(el('span','bot-dot'));
-   const meta=el('span','bot-meta');meta.append(el('span','bot-cell-name',bot.name));
-   if(bot.description)meta.append(el('span','bot-cell-sub',bot.description));
-   cell.append(face,meta);
-   cell.addEventListener('click',()=>{selected=bot.id;page='bots';void api.noteBot(bot.id).catch(()=>{});render();});
-   cell.addEventListener('dragover',event=>{event.preventDefault();cell.classList.add('selected');});
-   cell.addEventListener('dragleave',()=>{if(!(page==='bots'&&bot.id===selected))cell.classList.remove('selected');});
-   cell.addEventListener('drop',event=>{event.preventDefault();selected=bot.id;page='bots';render();void run(()=>api.dropFiles(bot.id,[...event.dataTransfer.files]));});
-   grid.append(cell);
+ const groups=sidebarGroups();
+ const bots=groups.flatMap(group=>group.sections.flatMap(section=>section.bots));
+ if(!bots.length){grid.append(el('p','list-empty',state.bots.length?t('没有匹配的 Bot','No matching Bots'):state.accounts?.length?t('勾选一个账号，Bot 会出现在这里','Check an account to show its Bots'):t('登录后，Bot 会出现在这里','Bots show up here after you sign in')));return;}
+ for(const group of groups){
+  if(search.trim()&&!group.sections.some(section=>section.bots.length))continue;
+  if(group.account){
+   const header=el('div','bot-account');
+   header.append(el('span','bot-account-dot'),el('span','bot-account-name',group.account.account?.name??t('账号','Account')));
+   grid.append(header);
+  }
+  for(const section of group.sections){
+   if(section.title)grid.append(el('div','bot-section',section.title));
+   for(const bot of section.bots){
+    const recipient=recipientOf(bot),active=page==='bots'&&bot.id===selected,cell=el('button',`bot-cell${active?' selected':''}`);cell.type='button';cell.dataset.id=bot.id;if(bot.accountId)cell.dataset.accountId=bot.accountId;
+    cell.setAttribute('aria-pressed',String(active));cell.title=t(`拖放文件给 ${bot.name}`,`Drop files for ${bot.name}`);
+    const face=el('div','bot-face');face.append(avatar(bot,34));if(recipient?.enabled)face.append(el('span','bot-dot'));
+    const meta=el('span','bot-meta');meta.append(el('span','bot-cell-name',bot.name));
+    if(bot.description)meta.append(el('span','bot-cell-sub',bot.description));
+    cell.append(face,meta);
+    cell.addEventListener('click',()=>{selected=bot.id;page='bots';void api.noteBot(bot.id).catch(()=>{});render();});
+    cell.addEventListener('dragover',event=>{event.preventDefault();cell.classList.add('selected');});
+    cell.addEventListener('dragleave',()=>{if(!(page==='bots'&&bot.id===selected))cell.classList.remove('selected');});
+    cell.addEventListener('drop',event=>{event.preventDefault();selected=bot.id;page='bots';render();void run(()=>api.dropFiles(bot.id,[...event.dataTransfer.files]));});
+    grid.append(cell);
+   }
   }
  }
  grid.scrollTop=top;grid.scrollLeft=left;
@@ -354,10 +397,10 @@ function settingRow(label,control,help){
 }
 function renderChat(content){
  if(!state.bots.length){
-  const panel=el('div','empty');panel.append(el('h1','',t('你的 Bot','Your Bots')),el('p','',t('连接账号后，从左边选择一个 Bot。','Connect an account, then choose a Bot on the left.')));
+  const panel=el('div','empty');panel.append(el('h1','',t('你的 Bot','Your Bots')),el('p','',state.accounts?.length?t('勾选一个账号，从左边选择一个 Bot。','Check an account, then choose a Bot on the left.'):t('连接账号后，从左边选择一个 Bot。','Connect an account, then choose a Bot on the left.')));
   const actions=el('div','row-actions');actions.append(loginButton());if(state.host?.platform==='darwin')actions.append(smallButton(t('使用本机登录','Use local login'),()=>api.desktopLogin()));panel.append(actions);content.append(panel);return;
  }
- const bot=state.bots.find(item=>item.id===selected),recipient=recipientOf(bot.id);
+ const bot=state.bots.find(item=>item.id===selected),recipient=recipientOf(bot);
  const detail=el('div','detail'),hero=el('section','hero'),face=el('div','hero-face');
  const accent=botAccent(bot);
  detail.style.setProperty('--accent',accent);
@@ -376,7 +419,7 @@ function renderChat(content){
  const settingsBody=el('div','recipient-settings');settingsBody.hidden=!enabled.checked;
  enabled.addEventListener('change',()=>{
   const next=enabled.checked;settingsBody.hidden=!next;
-  void applyConfig(bot.id,{enabled:next},()=>{enabled.checked=!next;settingsBody.hidden=next;});
+  void applyConfig(bot.id,{enabled:next},()=>{enabled.checked=!next;settingsBody.hidden=next;},bot.accountId);
  });
  card.append(settingRow(t('接收转发','Receive forwards'),enabled,t('微信和通用来源才会把内容交给这个 Bot。','WeChat and the general sources deliver content to this Bot.')));
  let currentMode=recipient?.mode==='direct'?'direct':'compose';
@@ -385,7 +428,7 @@ function renderChat(content){
  let prefixRow=null;
  for(const [value,label] of [['compose',t('先放进输入框','Open in composer')],['direct',t('直接发送','Send directly')]]){
   const choice=el('button',value===currentMode?'selected':'',label);choice.type='button';choice.dataset.value=value;
-  choice.addEventListener('click',()=>{const previous=currentMode;currentMode=value;selectSegment(mode,value);if(prefixRow)prefixRow.hidden=value!=='direct';void applyConfig(bot.id,{mode:value},()=>{currentMode=previous;selectSegment(mode,previous);if(prefixRow)prefixRow.hidden=previous!=='direct';});});
+  choice.addEventListener('click',()=>{const previous=currentMode;currentMode=value;selectSegment(mode,value);if(prefixRow)prefixRow.hidden=value!=='direct';void applyConfig(bot.id,{mode:value},()=>{currentMode=previous;selectSegment(mode,previous);if(prefixRow)prefixRow.hidden=previous!=='direct';},bot.accountId);});
   mode.append(choice);
  }
  settingsBody.append(settingRow(t('收到之后','After receiving'),mode));
@@ -396,7 +439,7 @@ function renderChat(content){
  general.type='button';general.setAttribute('aria-pressed',String(generalOn));general.title=t('拖放和系统分享。','Drop and system share.');
  general.addEventListener('click',()=>{
   const previous=generalOn;generalOn=!previous;general.classList.toggle('selected',generalOn);general.setAttribute('aria-pressed',String(generalOn));
-  void applyConfig(bot.id,{sources:Object.fromEntries(generalKeys.map(key=>[key,generalOn]))},()=>{generalOn=previous;general.classList.toggle('selected',previous);general.setAttribute('aria-pressed',String(previous));});
+  void applyConfig(bot.id,{sources:Object.fromEntries(generalKeys.map(key=>[key,generalOn]))},()=>{generalOn=previous;general.classList.toggle('selected',previous);general.setAttribute('aria-pressed',String(previous));},bot.accountId);
  });
  const showShortcuts=state.host?.platform!=='darwin';
  let shortcutOn=!!recipient?.sources?.shortcuts;
@@ -406,7 +449,7 @@ function renderChat(content){
   shortcut.title=t('允许快捷指令和 grokbotanywhere 链接把文字交给这个 Bot。通过链接收到的内容会先放进输入框，由你确认后再发送。','Allow Shortcuts and grokbotanywhere links to deliver text to this Bot. Content received from a link is placed in the composer first. It is sent only after you confirm.');
   shortcut.addEventListener('click',()=>{
    const previous=shortcutOn;shortcutOn=!previous;shortcut.classList.toggle('selected',shortcutOn);shortcut.setAttribute('aria-pressed',String(shortcutOn));
-   void applyConfig(bot.id,{sources:{shortcuts:shortcutOn}},()=>{shortcutOn=previous;shortcut.classList.toggle('selected',previous);shortcut.setAttribute('aria-pressed',String(previous));});
+   void applyConfig(bot.id,{sources:{shortcuts:shortcutOn}},()=>{shortcutOn=previous;shortcut.classList.toggle('selected',previous);shortcut.setAttribute('aria-pressed',String(previous));},bot.accountId);
   });
  }
  let wechatOn=!!recipient?.sources?.wechat;
@@ -414,27 +457,27 @@ function renderChat(content){
  wechat.type='button';wechat.setAttribute('aria-pressed',String(wechatOn));
  wechat.addEventListener('click',()=>{
   const previous=wechatOn;wechatOn=!previous;wechat.classList.toggle('selected',wechatOn);wechat.setAttribute('aria-pressed',String(wechatOn));
-  void applyConfig(bot.id,{sources:{wechat:wechatOn}},()=>{wechatOn=previous;wechat.classList.toggle('selected',previous);wechat.setAttribute('aria-pressed',String(previous));});
+  void applyConfig(bot.id,{sources:{wechat:wechatOn}},()=>{wechatOn=previous;wechat.classList.toggle('selected',previous);wechat.setAttribute('aria-pressed',String(previous));},bot.accountId);
  });
  sources.append(general,...(shortcut?[shortcut]:[]),wechat);
  // Windows has a single share entry for every receiving Bot, so the per-source
  // switches would promise a choice that does not exist there.
  if(state.host?.platform!=='win32')settingsBody.append(settingRow(t('来源','Sources'),sources));
  const prefix=el('input','prefix');prefix.placeholder=t('加在正文前','Prefix');prefix.setAttribute('aria-label',t('直接发送时加在正文前','Prefix for direct sends'));prefix.value=recipient?.prefix??'';
- prefix.addEventListener('change',()=>void applyConfig(bot.id,{prefix:prefix.value}));
+ prefix.addEventListener('change',()=>void applyConfig(bot.id,{prefix:prefix.value},undefined,bot.accountId));
  prefixRow=settingRow(t('前缀','Prefix'),prefix);prefixRow.hidden=currentMode!=='direct';settingsBody.append(prefixRow);
  card.append(settingsBody);
  let afterValue=recipient?.composerAfterSend??'inherit';
  const afterMode=el('div','segment');afterMode.setAttribute('aria-label',t('输入框发送后','Composer after sending'));
  for(const [value,label] of [['inherit',t('跟随全局','Use global')],['hide',t('隐藏','Hide')],['open',t('打开 Bot','Open Bot')]]){
   const choice=el('button',afterValue===value?'selected':'',label);choice.type='button';choice.dataset.value=value;
-  choice.addEventListener('click',()=>{const previous=afterValue;afterValue=value;selectSegment(afterMode,value);void applyConfig(bot.id,{composerAfterSend:value},()=>{afterValue=previous;selectSegment(afterMode,previous);});});
+  choice.addEventListener('click',()=>{const previous=afterValue;afterValue=value;selectSegment(afterMode,value);void applyConfig(bot.id,{composerAfterSend:value},()=>{afterValue=previous;selectSegment(afterMode,previous);},bot.accountId);});
   afterMode.append(choice);
  }
  card.append(settingRow(t('输入框发送后','Composer after sending'),afterMode,t('覆盖全局设置；默认跟随全局。','Overrides the global setting; follows it by default.')));
  card.append(shortcutRow(bot.id,t('打开悬浮输入框','Open composer'),t('只打开这个 Bot 的悬浮输入框。','Opens the floating composer for this Bot.')));
  card.append(shortcutRow(`grok:${bot.id}`,t('在 Grok Bot 中打开','Open in Grok Bot'),t('在 Grok Bot 里打开这个 Bot。','Opens this Bot in Grok Bot.')));
- if(state.host?.platform!=='darwin')card.append(settingRow(t('快捷指令','Shortcuts'),smallButton(t('复制快捷指令链接','Copy shortcut link'),async()=>{await api.copyComposeLink(bot.id);toast(t('已复制快捷指令链接','Shortcut link copied'));},'secondary'),t('在快捷指令里用「打开 URL」。','Use Open URL in Shortcuts.')));
+ if(state.host?.platform!=='darwin')card.append(settingRow(t('快捷指令','Shortcuts'),smallButton(t('复制快捷指令链接','Copy shortcut link'),async()=>{await api.copyComposeLink(bot.id,bot.accountId);toast(t('已复制快捷指令链接','Shortcut link copied'));},'secondary'),t('在快捷指令里用「打开 URL」。','Use Open URL in Shortcuts.')));
  detail.append(hero,...memberCard?[memberCard]:[],card);content.append(detail);
 }
 function memberList(members){
@@ -462,9 +505,9 @@ function renderInbox(content){
  const list=el('section','group');
  for(const item of items){
   const row=el('article','receipt'),top=el('div','receipt-top'),label=el('div','receipt-label');
-  const bot=state.bots.find(entry=>entry.id===item.botId);
+  const bot=state.bots.find(entry=>entry.id===item.botId&&(!item.accountId||entry.accountId===item.accountId));
   if(bot){const face=el('div','face-host');face.dataset.bot=bot.id;face.dataset.size='32';top.append(face);}
-  label.append(el('h2','',item.title||item.botName),el('div','receipt-meta',new Date(item.createdAt).toLocaleString(document.documentElement.lang)));
+  label.append(el('h2','',item.title||item.botName),el('div','receipt-meta',[bot?.accountName,new Date(item.createdAt).toLocaleString(document.documentElement.lang)].filter(Boolean).join(' · ')));
   top.append(label,el('span',`status ${item.status}`,['uploading','sending'].includes(item.phase)?t('正在发送','Sending'):statusLabel(item)));row.append(top);
   if(item.text)row.append(el('p','record-text',item.text));
   const files=el('div','files');for(const file of item.files??[])files.append(el('span','file',`${file.name} · ${(file.bytes/1024/1024).toFixed(1)} MB`));if(item.files?.length)row.append(files);
@@ -593,13 +636,32 @@ function renderSettings(content){
  panel.id='settings-panel';
  panel.setAttribute('role','tabpanel');
  panel.setAttribute('aria-labelledby',`settings-tab-${settingsTab}`);
- const account=el('section','group'),accountRow=el('div','group-row'),name=el('div'),heading=el('div','account-heading');
- heading.append(el('span',`account-dot${state.connected?' connected':''}`),el('span','group-label',state.account?.name??t('尚未连接','Not connected')));
- name.append(heading,el('div','group-help',state.connected?t('账号已连接','Connected'):t('登录后同步 Bot','Sign in to sync Bots')));
- const actions=el('div','row-actions');
- if(state.connected)actions.append(smallButton(t('退出','Sign out'),()=>api.logout()));
- else{actions.append(loginButton());if(state.host?.platform==='darwin')actions.append(smallButton(t('本机登录','Local login'),()=>api.desktopLogin()));}
- accountRow.append(name,actions);account.append(accountRow);
+ const account=el('section','group');
+ const accounts=Array.isArray(state.accounts)?state.accounts:[];
+ if(!accounts.length){
+  const accountRow=el('div','group-row'),name=el('div'),heading=el('div','account-heading');
+  heading.append(el('span','account-dot'),el('span','group-label',t('尚未连接','Not connected')));
+  name.append(heading,el('div','group-help',t('登录后同步 Bot','Sign in to sync Bots')));
+  const actions=el('div','row-actions');actions.append(loginButton());if(state.host?.platform==='darwin')actions.append(smallButton(t('本机登录','Local login'),()=>api.desktopLogin()));accountRow.append(name,actions);account.append(accountRow);
+ }else{
+  const head=el('div','group-row'),copy=el('div','group-copy');
+  copy.append(el('div','group-label',t('账号','Accounts')),el('div','group-help',t('勾选后，这个账号下的 Bot 会显示在侧栏、分享菜单和发送记录里。','Checked accounts show their Bots in the sidebar, share menu, and send history.')));
+  const add=smallButton(t('添加账号','Add account'),()=>api.login(),'secondary');add.disabled=busy||!!state.addingAccount;
+  head.append(copy,add);account.append(head);
+  for(const entry of accounts){
+   const row=el('div','group-row account-entry'),info=el('div','group-copy');
+   const title=el('div','account-heading');
+   title.append(el('span',`account-dot${entry.connected?' connected':''}`),el('span','group-label',entry.account?.name??t('未命名账号','Unnamed account')));
+   info.append(title,el('div','group-help',entry.busy?t('正在连接','Connecting'):entry.connected?t('已连接','Connected'):t('未连接，点勾选或重新登录','Not connected. Check it or sign in again.')));
+   const actions=el('div','row-actions');
+   const check=el('input','switch');check.type='checkbox';check.checked=entry.checked!==false;check.disabled=entry.busy||!!state.addingAccount;check.setAttribute('aria-label',t(`显示 ${entry.account?.name??''} 的 Bot`,`Show Bots from ${entry.account?.name??''}`));
+   check.addEventListener('change',()=>{const next=check.checked;run(async()=>{try{await api.setAccountChecked(entry.account.id,next);}catch(error){check.checked=!next;throw error;}});});
+   actions.append(check);
+   const signOut=smallButton(t('退出','Sign out'),async()=>{const confirmed=await askConfirm({title:t('退出这个账号？','Sign out of this account?'),body:t('会从这台电脑上删除这个账号的登录信息；已有的发送记录保留。','This removes the login for this account from this computer. Existing send history stays.'),confirmLabel:t('退出','Sign out')});if(confirmed)await api.removeAccount(entry.account.id);},'secondary');
+   signOut.disabled=entry.busy||!!state.addingAccount;actions.append(signOut);
+   row.append(info,actions);account.append(row);
+  }
+ }
  account.append(hostSwitch(t('开机自启动','Launch at login'),t('登录这台电脑后在后台打开。','Opens in the background when you sign in to this computer.'),!!state.host?.openAtLogin,t('开机自启动','Launch at login'),next=>api.setOpenAtLogin(next)));
 
  const appearance=el('section','group'),themeRow=el('div','group-row');themeRow.append(el('span','group-label',t('外观','Appearance')));
@@ -628,21 +690,40 @@ function renderSettings(content){
  const dismiss=el('input','switch');dismiss.type='checkbox';dismiss.checked=prefs.dismissOnOutside!==false;dismiss.setAttribute('aria-label',t('点按外部关闭','Click outside closes'));
  dismiss.addEventListener('change',()=>run(()=>api.setComposerPrefs({afterSend:prefs.afterSend??'hide',dismissOnOutside:dismiss.checked})));
  dismissRow.append(dismissCopy,dismiss);behavior.append(dismissRow);if(settingsTab==='composer')panel.append(behavior);
- const cli=state.host?.cli??{enabled:false,credential:false},cliPanel=el('section','group'),cliRow=el('div','group-row'),cliCopy=el('div');
+ const cli=state.host?.cli??{enabled:false},cliPanel=el('section','group'),cliRow=el('div','group-row'),cliCopy=el('div');
  const cliPlain=t('命令行使用的登录信息会以明文保存在本机用户目录。新开的终端才会使用新的命令路径。','The login used by the command line is stored in plain text in this computer\'s user folder. New terminals pick up the new command path.');
- const cliHelp=`${cli.enabled?(cli.credential?t('已注册 grok-bot。命令使用当前登录，不需要再登录。','grok-bot is registered and uses this login.'):t('已注册 grok-bot。登录后，命令会使用这个账号。','grok-bot is registered. Sign in and the command uses that account.')):t('开启后注册 grok-bot，把 skill 装到全局技能目录，并在 Claude Code 里加上软链接。运行环境由本应用提供。','Turn this on to register grok-bot, install the skill, and link it for Claude Code. This app provides the runtime.')} ${cliPlain}`;
+ const cliHelp=`${cli.enabled?t('已注册 gba，并把 grok-bot 作为别名指向 gba。gba 通过本机 socket 复用多账号，不保存明文凭据。','gba is registered, with grok-bot as an alias. gba uses a local socket and keeps the multi-account state in this app; no plaintext credential is stored.'):t('开启后注册 gba，并把 grok-bot 作为别名指向 gba；skill 会装到全局技能目录，并在 Claude Code 里加上软链接。gba 不保存明文凭据；运行环境由本应用提供。','Turn this on to register gba and alias grok-bot to it. The skill is installed globally and linked for Claude Code. gba stores no plaintext credentials; this app provides the runtime.')} ${cliPlain}`;
  cliCopy.append(el('div','group-label',t('命令行','Command line')),el('div','group-help',cliHelp));
  const cliSwitch=el('input','switch');cliSwitch.type='checkbox';cliSwitch.checked=!!cli.enabled;cliSwitch.setAttribute('aria-label',t('命令行','Command line'));
  cliSwitch.addEventListener('change',()=>{const next=cliSwitch.checked;run(async()=>{try{await api.setCli(next);}catch(error){cliSwitch.checked=!next;throw error;}});});
  cliRow.append(cliCopy,cliSwitch);cliPanel.append(cliRow);
  if(settingsTab==='share'&&state.host?.platform==='darwin'){
   const menu=state.host.menu??{},wechatPanel=el('section','group'),row=el('div','group-row'),info=el('div');
-  info.append(el('div','group-label',t('微信转发','WeChat')),el('div','group-help',!menu.available?t('这个版本没有分享扩展','Sharing extensions are not in this build'):menu.busy?t('正在同步菜单','Syncing the menu'):menu.needsUpdate?t('设置已保存，需要重新同步','Saved. Sync to update.'):t(`已启用 ${menu.registered??0} 个入口`,`${menu.registered??0} destinations on`)));
+  const saveRegistered=menu.saveRegistered?1:0;
+  info.append(el('div','group-label',t('微信转发','WeChat')),el('div','group-help',!menu.available?t('这个版本没有分享扩展','Sharing extensions are not in this build'):menu.busy?t('正在同步菜单','Syncing the menu'):menu.needsUpdate?t('设置已保存，需要重新同步','Saved. Sync to update.'):t(`已启用 ${(menu.registered??0)+saveRegistered} 个入口${saveRegistered?'（含保存到本地）':''}`,`${(menu.registered??0)+saveRegistered} destinations on${saveRegistered?' (including Save to this Mac)':''}`)));
   const update=smallButton(t('重新同步','Sync again'),async()=>{update.disabled=true;try{const result=await api.updateMenu();toast(t(`已同步 ${result.registered} 个入口。若微信里没变化，请完全退出微信再打开；微信会缓存旧的分享菜单。`,`Synced ${result.registered} destinations. If WeChat still shows the old menu, quit WeChat completely and reopen it; WeChat caches the sharing menu.`));}catch{}finally{update.disabled=false;}});
   update.disabled=!menu.available||menu.busy||!!state.accountBusy;row.append(info,update);wechatPanel.append(row);
+  const save=state.host?.save??{enabled:false,mode:'default',defaultDir:''};
+  const savePanel=el('section','group');
+  savePanel.append(hostSwitch(t('保存到本地','Save to this Mac'),t('在微信分享菜单里加一项「保存到本地」。只对微信转发生效；Finder 和 Windows 资源管理器不加。开启或关闭后需要重新同步菜单，并重新打开微信。','Adds a “Save to this Mac” item to the WeChat share menu. It applies to WeChat forwards only; Finder and Windows Explorer are not included. After changing this, sync the menu again and reopen WeChat.'),!!save.enabled,t('保存到本地','Save to this Mac'),async next=>{await api.setSaveToLocal({enabled:next});toast(next?t('已保存设置。重新打开微信后生效。','Saved. Reopen WeChat to see it.'):t('已关闭保存到本地。','Save to this Mac is off.'));}));
+  if(save.enabled){
+   const modeRow=el('div','group-row'),modeCopy=el('div','group-copy');
+   modeCopy.append(el('div','group-label',t('保存方式','Save to')),el('div','group-help',t('默认位置会直接保存；每次选择会打开目录选择器，并从上次选择的目录开始。','The default location saves directly. Each time opens a folder picker starting at the last folder you used.')));
+   const modes=el('div','segment');
+   for(const [value,label] of [['default',t('默认位置','Default location')],['choose',t('每次选择','Choose each time')]]){
+    const choice=el('button',(save.mode??'default')===value?'selected':'',label);choice.type='button';
+    choice.addEventListener('click',()=>run(async()=>{await api.setSaveToLocal({mode:value});}));modes.append(choice);
+   }
+   modeRow.append(modeCopy,modes);savePanel.append(modeRow);
+   const dirRow=el('div','group-row'),dirCopy=el('div','group-copy');
+   dirCopy.append(el('div','group-label',t('默认位置','Default location')),el('div','group-help',save.defaultDir||t('还没有设置','Not set')));
+   const change=smallButton(t('更改','Change'),async()=>{const result=await api.chooseSaveDir('default');if(result?.path)toast(t(`默认位置：${result.path}`,`Default location: ${result.path}`));},'secondary');
+   dirRow.append(dirCopy,change);savePanel.append(dirRow);
+  }
+  panel.append(savePanel);
   const read=smallButton(menuReading?t('正在读取','Reading'):t('读取微信顺序','Read WeChat order'),readMenuOrder);
   read.disabled=menuReading;
-  wechatPanel.append(settingRow(t('菜单顺序','Menu order'),read,t('读取微信里现在的顺序。排好以后，按这个顺序重新注册菜单。最多 12 个。','Read the current WeChat order. After you sort, the menu is registered in that order. Up to 12.')));
+  wechatPanel.append(settingRow(t('菜单顺序','Menu order'),read,t(`读取微信里现在的顺序。排好以后，按这个顺序重新注册菜单。最多 ${state.host?.save?.enabled?11:12} 个。`,`Read the current WeChat order. After you sort, the menu is registered in that order. Up to ${state.host?.save?.enabled?11:12}.`)));
   const menuBots=wechatBots();
   menuBots.forEach((bot,index)=>{
    const line=el('div','menu-order-row'),buttons=el('div','order-buttons');
@@ -783,7 +864,7 @@ function openAvatarEditor(bot,opener){
  closeMoreMenu();
  const initialShape=bot.avatarShape||bot.avatar?.character?.shape||'blob';
  const initialColor=bot.avatarColor||bot.avatar?.character?.color||'brown';
- avatarEditor={botId:bot.id,shape:SHAPES.includes(initialShape)?initialShape:'blob',color:COLORS.some(item=>item.id===initialColor)?initialColor:'brown',saving:false,error:'',opener:opener instanceof HTMLElement?opener:null};
+ avatarEditor={botId:bot.id,accountId:bot.accountId,shape:SHAPES.includes(initialShape)?initialShape:'blob',color:COLORS.some(item=>item.id===initialColor)?initialColor:'brown',saving:false,error:'',opener:opener instanceof HTMLElement?opener:null};
  paintOverlay();
 }
 function closeAvatarEditor(){
@@ -794,7 +875,7 @@ async function saveAvatarEditor(){
  const current=avatarEditor;if(!current||current.saving)return;
  current.saving=true;current.error='';paintOverlay();
  try{
-  const next=await api.updateBotAvatar(current.botId,current.shape,current.color);
+  const next=await api.updateBotAvatar(current.botId,current.shape,current.color,current.accountId);
   state=next;
   if(botDetail&&botDetail.bot?.id===current.botId){const updated=state.bots?.find(item=>item.id===current.botId);if(updated)botDetail={...botDetail,bot:updated};}
   avatarEditor=null;render();paintOverlay();toast(t('头像已更新','Avatar updated'));
@@ -865,9 +946,12 @@ function shortcutRow(slot,label,help){
  actions.append(cap,smallButton(t('清除','Clear'),()=>api.setShortcut(slot,'')));
  return settingRow(label,actions,help);
 }
-function wechatBots(){return orderedBots().filter(bot=>{const recipient=recipientOf(bot.id);return recipient?.enabled&&recipient.sources?.wechat;}).slice(0,12);}
+function wechatBots(){const limit=state.host?.save?.enabled?11:12;return orderedBots().filter(bot=>{const recipient=recipientOf(bot);return recipient?.enabled&&recipient.sources?.wechat;}).slice(0,limit);}
 async function applyBotOrder(ids){
- for(let position=0;position<ids.length;position++)if((recipientOf(ids[position])?.order??0)!==position)await api.configure(ids[position],{order:position});
+ for(let position=0;position<ids.length;position++){
+  const bot=state.bots.find(item=>item.id===ids[position]);
+  if(bot&&(recipientOf(bot)?.order??0)!==position)await api.configure(bot.id,{order:position},bot.accountId);
+ }
 }
 async function moveMenu(id,delta){
  const ids=wechatBots().map(bot=>bot.id),index=ids.indexOf(id),next=index+delta;
@@ -1106,7 +1190,7 @@ async function copyBot(id){
  copyOpener=trigger;
  copying=true;paintOverlay();
  try{
-  const result=await api.duplicateBot(id);
+  const result=await api.duplicateBot(id,state.bots.find(item=>item.id===id)?.accountId);
   try{state=await api.refresh();}catch{state=result;}
   if(result.duplicatedBotId&&state.bots?.some(item=>item.id===result.duplicatedBotId))selected=result.duplicatedBotId;
   page='bots';render();

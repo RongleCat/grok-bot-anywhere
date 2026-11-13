@@ -1,17 +1,19 @@
 {
   "version": 1,
-  "updated": "2026-11-06",
+  "updated": "2026-11-13",
   "entry": "docs/README.md",
   "pages": [
     {
       "id": "architecture",
       "title": "系统架构",
       "path": "docs/architecture.md",
-      "summary": "进程拓扑、数据所有权、运行时路径、仓库分层与不变量。",
+      "summary": "进程拓扑、多账号数据所有权、保存到本地、运行时路径、仓库分层与不变量。",
       "tags": [
         "architecture",
         "runtime",
-        "processes"
+        "processes",
+        "multi-account",
+        "save"
       ],
       "status": "current"
     },
@@ -42,11 +44,13 @@
       "id": "subsystems-renderer-ui",
       "title": "渲染层与界面",
       "path": "docs/subsystems/renderer-ui.md",
-      "summary": "主窗口页面、悬浮输入框、Tab 宫格、主题与进程隔离。",
+      "summary": "主窗口页面、多账号侧栏、悬浮输入框、Tab 宫格、保存设置与进程隔离。",
       "tags": [
         "desktop",
         "renderer",
-        "ui"
+        "ui",
+        "multi-account",
+        "save"
       ],
       "status": "current"
     },
@@ -54,12 +58,13 @@
       "id": "subsystems-delivery-service",
       "title": "投递服务",
       "path": "docs/subsystems/delivery-service.md",
-      "summary": "utility process、SQLite 收件库、上传、发送、状态机与单 Bot 串行。",
+      "summary": "utility process、多账号管理器、SQLite 收件库、上传、发送、状态机与单 Bot 串行。",
       "tags": [
         "desktop",
         "service",
         "delivery",
-        "sqlite"
+        "sqlite",
+        "multi-account"
       ],
       "status": "current"
     },
@@ -67,11 +72,13 @@
       "id": "subsystems-share-menu",
       "title": "分享菜单",
       "path": "docs/subsystems/share-menu.md",
-      "summary": "macOS 12 槽微信分享、独立宿主 App、注册与更新；Windows 差异。",
+      "summary": "macOS 12 槽微信分享、保存到本地、多账号菜单、独立宿主 App、注册与更新；Windows 差异。",
       "tags": [
         "macos",
         "share",
-        "wechat"
+        "wechat",
+        "multi-account",
+        "save"
       ],
       "status": "current"
     },
@@ -127,7 +134,7 @@
       "id": "platform-macos",
       "title": "macOS",
       "path": "docs/platforms/macos.md",
-      "summary": "macOS 前置条件、已验证能力、Touch Bar 与分享扩展的实机边界。",
+      "summary": "macOS 前置条件、已验证能力、多账号/保存到本地、Touch Bar 与分享扩展的实机边界。",
       "tags": [
         "platform",
         "macos"
@@ -259,6 +266,20 @@
       "status": "current"
     },
     {
+      "id": "subsystems-local-api",
+      "title": "本地 API 与 gba CLI",
+      "path": "docs/subsystems/local-api.md",
+      "summary": "GBA 本地 socket API、方法白名单、gba 薄客户端与多账号路由；grok-bot 为 gba 别名。",
+      "tags": [
+        "desktop",
+        "cli",
+        "api",
+        "multi-account",
+        "socket"
+      ],
+      "status": "current"
+    },
+    {
       "id": "reference-cli",
       "title": "命令行",
       "path": "docs/reference/cli.md",
@@ -307,10 +328,12 @@
       "id": "reference-configuration",
       "title": "配置与数据位置",
       "path": "docs/reference/configuration.md",
-      "summary": "userData 下的数据库、分享收件箱、凭据、日志与可安全删除的项。",
+      "summary": "userData 下的数据库、分享收件箱、保存批次、多账号凭据、日志与可安全删除的项。",
       "tags": [
         "reference",
-        "storage"
+        "storage",
+        "multi-account",
+        "save"
       ],
       "status": "current"
     },
@@ -419,6 +442,19 @@
         "release",
         "changelog",
         "avatar"
+      ],
+      "status": "current"
+    },
+    {
+      "id": "updates-0-1-5",
+      "title": "0.1.5 更新说明",
+      "path": "docs/updates/0.1.5.md",
+      "summary": "多账号、微信保存到本地、gba 本地 API 与 CLI 替换。",
+      "tags": [
+        "release",
+        "multi-account",
+        "save",
+        "cli"
       ],
       "status": "current"
     }

@@ -9,6 +9,9 @@ const LARGE_FILE_BYTES=50*1024*1024;
 const handles=[],pickerHandles=[],barHandles=[];
 const field=document.createElement('textarea');field.className='composer-input';field.rows=1;field.addEventListener('input',()=>{draft.text=field.value;fileToken=null;queuedFiles=null;largeConfirm=null;grow(field);const send=document.querySelector('.send');if(send)send.disabled=sending||!canSend();reportSize();});field.addEventListener('keydown',onKey);
 const draft={botId:'',text:'',paths:[],names:[],receiptId:null,remote:[],preparing:null};
+function runtimeOf(bot){return (state?.accounts??[]).find(entry=>entry.account?.id===bot?.accountId)?.runtime??state?.runtime??{};}
+function isMainBot(bot){const runtime=runtimeOf(bot);return bot?.main===true||runtime?.mainAgentId===bot?.id||(runtime?.mainAgentIds??[]).includes(bot?.id);}
+function isRunningBot(bot){return (runtimeOf(bot)?.statuses??[]).some(row=>row.agentId===bot?.id&&row.isRunning);}
 let preparingTimer;
 const $=id=>document.getElementById(id);
 const el=(tag,className,text)=>{const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;};
@@ -18,7 +21,7 @@ const prefs=()=>state?.composerPrefs??{afterSend:'hide',dismissOnOutside:true};
 const ordered=()=>{
  if(!state)return [];
  const visible=new Set(listedBots(state.bots).map(bot=>bot.id));
- return state.bots.map((bot,index)=>({bot,index,order:state.recipients.find(item=>item.botId===bot.id)?.order??0})).filter(item=>visible.has(item.bot.id)).sort((a,b)=>a.order-b.order||a.index-b.index).map(item=>item.bot);
+ return state.bots.map((bot,index)=>({bot,index,order:state.recipients.find(item=>item.botId===bot.id&&(!bot.accountId||!item.accountId||item.accountId===bot.accountId))?.order??0})).filter(item=>visible.has(item.bot.id)).sort((a,b)=>a.order-b.order||a.index-b.index).map(item=>item.bot);
 };
 const errors={
  PREVIEW_ONLY:['当前是预览，不能发送。','Messages cannot be sent in preview.'],
@@ -50,7 +53,7 @@ function pictureUrl(bot){
 }
 function paintCharacter(target,bot,size,reducedMotion,bucket){
  target.classList.remove('picture');
- requestAnimationFrame(()=>{if(!target.isConnected)return;const handle=createAvatar(target,{agentId:bot.id,shape:bot.avatarShape,color:bot.avatarColor,size,main:!reducedMotion&&state.runtime?.mainAgentId===bot.id,state:reducedMotion?'idle':state.runtime?.statuses?.some(row=>row.agentId===bot.id&&row.isRunning)?'working':'idle',theme:state.theme==='system'?'auto':state.theme,reducedMotion:reducedMotion||matchMedia('(prefers-reduced-motion:reduce)').matches});bucket.push(handle);});
+ requestAnimationFrame(()=>{if(!target.isConnected)return;const handle=createAvatar(target,{agentId:bot.id,shape:bot.avatarShape,color:bot.avatarColor,size,main:!reducedMotion&&isMainBot(bot),state:reducedMotion?'idle':isRunningBot(bot)?'working':'idle',theme:state.theme==='system'?'auto':state.theme,reducedMotion:reducedMotion||matchMedia('(prefers-reduced-motion:reduce)').matches});bucket.push(handle);});
 }
 function paintOne(bot,size,reducedMotion,bucket=handles){
  const target=el('div','avatar');target.style.width=target.style.height=`${size}px`;
@@ -76,7 +79,7 @@ function paintFace(bot,size,reducedMotion=false,bucket=handles){
  return root;
 }
 function paintAvatar(bot){
- const key=`${bot.id}:${state.theme}:${state.runtime?.mainAgentId===bot.id}:${(bot.memberAgentIds??[]).join('|')}`;
+ const key=`${bot.id}:${state.theme}:${isMainBot(bot)}:${(bot.memberAgentIds??[]).join('|')}`;
  const host=$('avatar');
  if(avatarKey===key&&host.childElementCount)return;
  avatarKey=key;host.querySelector('.avatar-stack')?.__cutout?.();host.replaceChildren();
@@ -227,7 +230,7 @@ function syncPickerSelection(bots){
 }
 function renderPicker(bots){
  const picker=$('picker');
- const stamp=`${picking}:${state.theme}:${bots.map(bot=>`${bot.id}:${bot.name??''}:${(bot.memberAgentIds??[]).join(',')}`).join('|')}`;
+ const stamp=`${picking}:${state.theme}:${bots.map(bot=>`${bot.id}:${bot.accountId??''}:${bot.name??''}:${(bot.memberAgentIds??[]).join(',')}`).join('|')}`;
  if(stamp===pickerStamp){if(picking)syncPickerSelection(bots);return;}
  pickerStamp=stamp;
  for(const handle of pickerHandles)handle.destroy();pickerHandles.length=0;
@@ -278,7 +281,7 @@ function closeBar(){
  void api.hideComposer(false).catch(()=>{});
 }
 function barInfo(receipt){
- const bot=ordered().find(item=>item.id===background?.botId);
+ const bot=ordered().find(item=>item.id===background?.botId&&(!background?.accountId||item.accountId===background.accountId));
  const name=bot?.name||t('这个 Bot','this Bot');
  if(barError){
   const pair=errors[barError];
@@ -309,7 +312,7 @@ function renderBar(){
  document.documentElement.dataset.part='bar';
  document.documentElement.dataset.theme=state.theme;
  const bar=$('bar');if(!bar)return;
- const bot=ordered().find(item=>item.id===background?.botId);
+ const bot=ordered().find(item=>item.id===background?.botId&&(!background?.accountId||item.accountId===background.accountId));
  const receipt=(state.inbox??[]).find(item=>item.id===background?.id);
  const info=barInfo(receipt);
  const key=`${background?.id??''}:${bot?.id??''}:${state.theme}`;
@@ -354,7 +357,7 @@ function render(){
  const bot=bots.find(item=>item.id===draft.botId);
  $('picker').hidden=true;$('avatar').hidden=true;$('bar').hidden=true;
  const card=$('card');card.hidden=false;
- const held=bot?(state.inbox??[]).find(item=>item.botId===bot.id&&item.status==='unconfirmed'&&!item.holdResolved):null;
+ const held=bot?(state.inbox??[]).find(item=>item.botId===bot.id&&(!bot.accountId||!item.accountId||item.accountId===bot.accountId)&&item.status==='unconfirmed'&&!item.holdResolved):null;
  const nextStamp=JSON.stringify([bot?.id??'',draft.names,draft.remote.map(file=>file.name),held?.id??'',prefs().dismissOnOutside,sending,largeConfirm?.total??0,largeConfirm?.largest?.bytes??0,draft.preparing?.id??'',draft.preparing?.timedOut??false]);
  if(!bot){cardStamp='';card.replaceChildren();card.append(el('p','issue',t('登录后才能发送。','Sign in to send.')));$('avatar').replaceChildren();avatarKey='';reportSize();return;}
  if(nextStamp===cardStamp&&card.contains(field)){const send=card.querySelector('.send');if(send)send.disabled=sending||!canSend();if(field.value!==draft.text)field.value=draft.text;if(focus){focus=false;focusField();}document.documentElement.dataset.ready='true';requestAnimationFrame(reportSize);return;}
@@ -462,11 +465,11 @@ async function send(confirmed=false){
  }
  sending=true;largeConfirm=null;barError='';render();
  try{
-  const result=await api.sendDraft(bot.id,draft.text,draft.paths,draft.receiptId,draft.receiptId?draft.remote.map(file=>file.index).filter(Number.isInteger):undefined);
+  const result=await api.sendDraft(bot.id,draft.text,draft.paths,draft.receiptId,draft.receiptId?draft.remote.map(file=>file.index).filter(Number.isInteger):undefined,bot.accountId);
   if(!result?.id)throw new Error(result?.error||'SEND_FAILED');
   draft.text='';draft.paths=[];draft.names=[];draft.remote=[];draft.receiptId=null;
-  const recipient=state?.recipients?.find(row=>row.botId===bot.id);
-  background={id:result.id,botId:bot.id,openAfter:composerAfterSend(recipient,prefs())==='open'};
+  const recipient=state?.recipients?.find(row=>row.botId===bot.id&&(!bot.accountId||!row.accountId||row.accountId===bot.accountId));
+  background={id:result.id,accountId:bot.accountId,botId:bot.id,openAfter:composerAfterSend(recipient,prefs())==='open'};
   if(earlySendError?.id===result.id){barError=earlySendError.error||'SEND_FAILED';earlySendError=null;}
   await api.keepComposerOpen(true).catch(()=>{});
   sending=false;focus=false;render();

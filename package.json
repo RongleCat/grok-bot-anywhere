@@ -1,6 +1,6 @@
 {
   "name": "grok-bot-anywhere",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Command facade for the Grok Bot Anywhere monorepo. Dependencies stay in desktop/; this file only routes commands.",
   "type": "module",

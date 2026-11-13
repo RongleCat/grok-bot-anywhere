@@ -3,25 +3,30 @@ export function isGroup(bot){
  return !!bot&&(bot.kind==='GROK_BOT_AGENT_KIND_ROOM'||(Array.isArray(bot.memberAgentIds)&&bot.memberAgentIds.length>0));
 }
 export function listedBots(bots){
- const names=new Set();
+ const scope=bot=>bot?.accountId??'';
+ const names=new Map();
  for(const bot of bots??[]){
   const name=bot?.name?.trim();
-  if(name&&isGroup(bot))names.add(name);
+  if(!name||!isGroup(bot))continue;
+  const key=scope(bot);
+  if(!names.has(key))names.set(key,new Set());
+  names.get(key).add(name);
  }
  if(!names.size)return [...(bots??[])];
  return (bots??[]).filter(bot=>{
   const name=bot?.name?.trim();
-  return isGroup(bot)||!name||!names.has(name);
+  return isGroup(bot)||!name||!names.get(scope(bot))?.has(name);
  });
 }
 export function groupMembers(bot,bots){
  if(!isGroup(bot))return [];
  const seen=new Set();
  const members=[];
+ const accountId=bot.accountId;
  for(const id of bot.memberAgentIds??[]){
   if(typeof id!=='string'||!id||id===bot.id||seen.has(id))continue;
   seen.add(id);
-  const member=bots.find(item=>item.id===id||item.serverId===id);
+  const member=bots.find(item=>(item.id===id||item.serverId===id)&&(accountId===undefined||item.accountId===undefined||item.accountId===accountId));
   if(member&&member.id!==bot.id)members.push(member);
  }
  return members;

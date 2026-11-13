@@ -12,11 +12,12 @@
 | 改 macOS 分享菜单 | [分享菜单](subsystems/share-menu.md) → [macOS](platforms/macos.md) |
 | 改 Touch Bar / 原生输入框 / 语音 | [原生伴侣](subsystems/native-companion.md) → [原生协议](reference/native-protocol.md) |
 | 改协议 SDK / CLI | [Client Protocol](subsystems/client-protocol.md) → [CLI](reference/cli.md) |
+| 改 gba 本地 API / Agent 接口 | [本地 API](subsystems/local-api.md) → [CLI](reference/cli.md) |
 | 出头像问题 | [头像](subsystems/avatar.md) |
 | 打包、签名、公证 | [打包与发布](subsystems/packaging.md) → [发布 runbook](runbooks/release.md) |
 | 上架 Microsoft Store | [Store 提交](runbooks/store-submission.md) → [Windows](platforms/windows.md) |
 | 在 Windows 上开发/验证 | [Windows](platforms/windows.md) → [换平台前必读](decisions/0005-platform-boundaries.md) |
-| 看最新版本改了什么 | [0.1.4 更新说明](updates/0.1.4.md) |
+| 看最新版本改了什么 | [0.1.5 更新说明](updates/0.1.5.md) |
 | 查历史设计 | [docs/history](history/)（只作背景，不作现状） |
 
 ## 仓库地图
@@ -29,7 +30,7 @@ desktop/                 Electron 应用（macOS / Windows 主产品）
   src/renderer/          主窗口、悬浮输入框、Tab 宫格、头像页
   src/share/             macOS 分享菜单模型、槽位、注册、顺序
   src/shell/             跨平台纯函数：窗口选项、托盘模型、深链、Explorer 转发
-  test/                  170 个 Node 测试
+  test/                  191 个 Node 测试
 native/macos/            Swift 原生伴侣（Touch Bar、原生输入框、语音、分享扩展宿主）
   Sources/               Swift Package 源码
   avatar/                Bloub 离线头像渲染源码
@@ -57,11 +58,11 @@ npm run docs:check
 
 为什么这样分层见 [ADR 0006](decisions/0006-root-command-facade.md)。
 
-## 当前状态（2026-11-05）
+## 当前状态（2026-11-12）
 
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
-| macOS | 主平台，已实机验证 | 登录、名单、悬浮输入框、12 槽微信菜单、收件与发送均跑过 |
+| macOS | 主平台，已实机验证 | 登录、名单、悬浮输入框、12 槽微信菜单、收件与发送均跑过；多账号与保存到本地为代码完成、未实机验收 |
 | Windows | 已实现，**未实机验证** | 无边框窗口、Explorer 右键、悬浮输入框、CLI、URL 协议；微信分享入口不支持 |
 | Linux | 未支持 | 没有打包目标与平台适配，见 [Linux](platforms/linux.md) |
 
@@ -76,7 +77,7 @@ npm run docs:check
 最短路径：
 
 ```sh
-npm run test:desktop           # 170 tests
+npm run test:desktop           # 191 tests
 cd native/macos && swift build  # macOS only
 cd packages/client-protocol && npm test
 node --test native/macos/avatar/renderer.test.mjs

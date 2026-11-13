@@ -2,10 +2,15 @@ import {mkdir,readdir,readFile,lstat,realpath,rename,writeFile} from 'node:fs/pr
 import {join,relative,isAbsolute,sep} from 'node:path';
 
 export class ShareInbox {
-  constructor({root,session,onReceipt=()=>{},onError=()=>{},onPreparing=()=>{}}){Object.assign(this,{root,session,onReceipt,onError,onPreparing});this.busy=false;this.preparing=new Set();}
+  constructor({root,session,sessionFor,onReceipt=()=>{},onError=()=>{},onPreparing=()=>{}}){Object.assign(this,{root,session,sessionFor,onReceipt,onError,onPreparing});this.busy=false;this.preparing=new Set();}
+  resolve(accountId){
+    const session=this.sessionFor?this.sessionFor(accountId):this.session;
+    if(!session||session.transition||session.account?.id!==accountId)return null;
+    return session;
+  }
   async initialize(){for(const folder of ['Ready','Staging','Imported','Rejected','Preparing'])await mkdir(join(this.root,folder),{recursive:true,mode:0o700});}
   async drain(){
-    if(this.busy||!this.session.account||this.session.transition)return;
+    if(this.busy)return;
     this.busy=true;
     try{
       for(const file of await readdir(join(this.root,'Preparing'))){
@@ -17,12 +22,13 @@ export class ShareInbox {
           if(!info.isFile()||info.isSymbolicLink()||info.size>64*1024)continue;
           const m=JSON.parse(await readFile(markerPath,'utf8'));
           if(m.version!==1||m.id!==id||m.source!=='wechat'||typeof m.accountId!=='string'||typeof m.botId!=='string'||!['compose','direct'].includes(m.mode))continue;
-          if(this.session.account?.id!==m.accountId||this.session.transition)continue;
-          if(typeof this.session.store.recipient==='function'){
-            const recipient=this.session.store.recipient(m.accountId,m.botId);
+          const session=this.resolve(m.accountId);
+          if(!session)continue;
+          if(typeof session.store.recipient==='function'){
+            const recipient=session.store.recipient(m.accountId,m.botId);
             if(!recipient.enabled||!recipient.sources?.wechat)continue;
           }
-          if(this.session.store.list(m.accountId).some(row=>row.sourceId===`wechat:${id}`))continue;
+          if(session.store.list(m.accountId).some(row=>row.sourceId===`wechat:${id}`))continue;
           this.preparing.add(id);
           this.onPreparing({id,accountId:m.accountId,botId:m.botId,mode:m.mode,createdAt:Number.isSafeInteger(m.createdAt)?m.createdAt:Date.now()});
         }catch{continue;}
@@ -36,9 +42,10 @@ export class ShareInbox {
           if(!info.isFile()||info.isSymbolicLink()||info.size>8*1024*1024)throw new Error('SHARE_MANIFEST_INVALID');
           const m=JSON.parse(await readFile(manifestPath,'utf8'));
           if(m.version!==1||m.id!==name||m.source!=='wechat'||typeof m.accountId!=='string'||typeof m.botId!=='string'||!['compose','direct'].includes(m.mode)||typeof m.prefix!=='string'||m.prefix.length>10000||typeof m.text!=='string'||m.text.length>2_000_000||typeof m.title!=='string'||m.title.length>1000||!Number.isSafeInteger(m.createdAt)||!Array.isArray(m.files)||m.files.length>100)throw new Error('SHARE_MANIFEST_INVALID');
-          if(this.session.account?.id!==m.accountId||this.session.transition)continue;
+          const session=this.resolve(m.accountId);
+          if(!session)continue;
           const sourceId=`wechat:${m.id}`;
-          const duplicate=this.session.store.list(m.accountId).find(row=>row.sourceId===sourceId);
+          const duplicate=session.store.list(m.accountId).find(row=>row.sourceId===sourceId);
           if(duplicate){await rename(directory,join(this.root,'Imported',name));continue;}
           const files=[];
           for(const file of m.files){
@@ -48,7 +55,7 @@ export class ShareInbox {
             files.push(path);
           }
           if(m.sessionId!==undefined&&(typeof m.sessionId!=='string'||m.sessionId.length>256))throw new Error('SHARE_MANIFEST_INVALID');
-          const item=await this.session.receive({botId:m.botId,expectedAccountId:m.accountId,source:'wechat',text:m.text,title:m.title,files,fileNames:m.files.map(f=>f.name),sourceId,policy:{mode:m.mode,prefix:m.prefix,createdAt:m.createdAt,sessionId:m.sessionId??''}});
+          const item=await session.receive({botId:m.botId,expectedAccountId:m.accountId,source:'wechat',text:m.text,title:m.title,files,fileNames:m.files.map(f=>f.name),sourceId,policy:{mode:m.mode,prefix:m.prefix,createdAt:m.createdAt,sessionId:m.sessionId??''}});
           await rename(directory,join(this.root,'Imported',name));this.onReceipt(item);
         }catch(error){
           // Configuration/identity errors leave content available for the user.

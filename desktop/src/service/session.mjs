@@ -34,13 +34,15 @@ async function readRuntime(client,bots,previous=emptyRuntime(),credentials){
 }
 
 export class AccountSession {
-  constructor({store,sdk:implementation=sdk,upload,onEvent=()=>{},now=Date.now}) {
-    Object.assign(this,{store,sdk:implementation,upload,onEvent,now});
-    const cached=store.preference('lastAccount');
-    this.account=cached?.account??null;this.bots=cached?.bots??[];
+  constructor({store,sdk:implementation=sdk,upload,onEvent=()=>{},now=Date.now,initialAccount=undefined,initialBots=undefined,persistLastAccount=true}) {
+    Object.assign(this,{store,sdk:implementation,upload,onEvent,now,persistLastAccount});
+    const cached=persistLastAccount?store.preference('lastAccount'):null;
+    this.account=initialAccount??cached?.account??null;this.bots=initialBots??cached?.bots??[];
     this.client=null;this.credentials=null;this.generation=0;this.pending=0;this.transition=false;
     this.watches=new Map();this.sendQueues=new Map();this.watchErrors={};this.runtime=emptyRuntime();
   }
+  isIdle(){return !this.pending&&!this.delivery?.active.size&&!this.delivery?.inflight.size&&!this.transition;}
+  remember(){if(this.persistLastAccount)this.store.preference('lastAccount',{account:this.account,bots:this.bots});}
   requireAccount(){if(!this.account)throw new Error('LOGIN_REQUIRED');return this.account.id;}
   requireClient(){if(this.transition)throw new Error('ACCOUNT_BUSY');if(!this.client)throw new Error('LOGIN_REQUIRED');return this.client;}
   assertIdle(){if(this.pending||this.delivery?.active.size||this.delivery?.inflight.size)throw new Error('DELIVERY_IN_PROGRESS');if(this.transition)throw new Error('ACCOUNT_BUSY');}
@@ -90,7 +92,7 @@ export class AccountSession {
       if(!this.upload)throw new Error('UPLOAD_UNAVAILABLE');
       return this.upload(file,{...context,credentials});
     },onChange:()=>this.emit()});
-    this.store.preference('lastAccount',{account:this.account,bots:this.bots});
+    this.remember();
     this.emit();
     this.transition=false;this.emit();return {credentials,state:this.snapshot()};
     }finally{if(generation===this.generation){this.transition=false;this.emit();}}
@@ -103,7 +105,7 @@ export class AccountSession {
       const runtime=await readRuntime(client,roster.bots,this.runtime,this.credentials);
       if(generation!==this.generation)throw new Error('LOGIN_CANCELLED');
       this.bots=roster.bots;this.runtime=runtime;
-      this.store.preference('lastAccount',{account:this.account,bots:this.bots});this.emit();return this.snapshot();
+      this.remember();this.emit();return this.snapshot();
     }catch(error){if(generation===this.generation)this.authFailure(error);throw error;}
   }
   configure(botId,patch){const accountId=this.requireAccount();if(!this.bots.some(b=>b.id===botId))throw new Error('BOT_NOT_FOUND');const result=this.store.saveRecipient(accountId,botId,patch);this.emit();return result;}
@@ -126,7 +128,7 @@ export class AccountSession {
     if(result?.bot?.id===botId){
       const index=this.bots.findIndex(item=>item.id===botId);
       this.bots[index]={...this.bots[index],...result.bot,id:botId,serverId:this.bots[index].serverId};
-      this.store.preference('lastAccount',{account:this.account,bots:this.bots});
+      this.remember();
       this.emit();
       return {bot:this.bots[index],state:this.snapshot()};
     }
@@ -238,7 +240,7 @@ export class AccountSession {
     })();
   }
   authFailure(error){
-    if(error?.httpStatus===401||error?.httpStatus===403){this.client=null;this.credentials=null;this.stopWatches();this.onEvent({event:'auth.expired',data:{}});this.emit();}
+    if(error?.httpStatus===401||error?.httpStatus===403){this.client=null;this.credentials=null;this.stopWatches();this.onEvent({event:'auth.expired',data:{accountId:this.account?.id??''}});this.emit();}
   }
   setTheme(theme){if(!['system','light','dark'].includes(theme))throw new Error('THEME_INVALID');this.store.preference('theme',theme);this.emit();return this.snapshot();}
   shortcutMap(){return normalizeShortcutMap(this.store.preference('shortcuts'));}
@@ -265,7 +267,8 @@ export class AccountSession {
     this.store.preference('shortcuts',{compose:current.compose,open:current.open,bots:current.bots,opens:current.opens});
     this.emit();return this.snapshot();
   }
-  async logout(){if(this.pending||this.delivery?.active.size||this.delivery?.inflight.size)throw new Error('DELIVERY_IN_PROGRESS');++this.generation;this.transition=false;this.stopWatches();this.client=null;this.credentials=null;this.account=null;this.bots=[];this.runtime=emptyRuntime();this.store.preference('lastAccount',null);this.emit();return this.snapshot();}
+  async logout(){if(this.pending||this.delivery?.active.size||this.delivery?.inflight.size)throw new Error('DELIVERY_IN_PROGRESS');++this.generation;this.transition=false;this.stopWatches();this.client=null;this.credentials=null;this.account=null;this.bots=[];this.runtime=emptyRuntime();if(this.persistLastAccount)this.store.preference('lastAccount',null);this.emit();return this.snapshot();}
+  async disconnect(){if(!this.isIdle())throw new Error('DELIVERY_IN_PROGRESS');++this.generation;this.transition=false;this.stopWatches();this.client=null;this.credentials=null;this.bots=[];this.runtime=emptyRuntime();this.emit();return this.snapshot();}
   stopWatches(){for(const control of this.watches.values())control.abort();this.watches.clear();}
   close(){this.closed=true;++this.generation;this.stopWatches();}
 }

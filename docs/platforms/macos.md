@@ -23,7 +23,7 @@ cd <repo>
 npm run setup
 npm run build
 npm run build:native    # Swift 伴侣
-npm run build:share     # 微信分享宿主 + 12 槽
+npm run build:share     # 微信分享宿主 + 12 个 Bot 槽 + 保存槽
 npm start
 ```
 
@@ -32,8 +32,11 @@ npm start
 ## 已实机验证
 
 - 浏览器登录、本机登录、Bot 名单、头像。
+- 多账号凭据分开加密保存在 `userData/accounts/<id>.enc`；旧单账号 `account.enc` 在首次成功连接后迁移。
 - 悬浮输入框、Tab 宫格、全局快捷键。
 - 微信转发菜单：2+ 接收 Bot、12 槽、ZIP/文本/媒体导入、收件状态。
+- 多账号：添加/勾选/移除、账号分组侧栏、按账号投递（2026-11-12 代码完成，单测覆盖；未用两个真实账号做实机验收）。
+- 保存到本地：设置开关、宿主构建/签名、默认/每次选择两条代码路径（**未在真实微信/Finder 上验证**）。
 - 收件 → 发送 → 回复挂载；`unconfirmed` 持锁与 `resolve`。
 - 原生伴侣：共享名单、原生输入框、草稿保护、Touch Bar 选择。
 - `Cmd+W` 关闭主窗口后进程继续运行，Dock 图标隐藏；从托盘或深链重新打开主窗口时恢复。
@@ -65,7 +68,9 @@ npm start
 
 ## 分享菜单
 
-宿主安装到 `~/Applications/Grok Bot Anywhere Menu/Contents/Helpers/DestinationNN.app`（普通文件夹；嵌在另一个 App 里会导致系统返回占位图标）。更新后重开微信。详见 [分享菜单](../subsystems/share-menu.md)。
+宿主安装到 `~/Applications/Grok Bot Anywhere Menu/Contents/Helpers/DestinationNN.app`（普通文件夹；嵌在另一个 App 里会导致系统返回占位图标）。开启保存到本地后还会安装 `DestinationSave.app`。更新后重开微信。详见 [分享菜单](../subsystems/share-menu.md)。
+
+保存到本地只处理微信转发；macOS 分享扩展无法知道宿主 App，保存扩展用前台 App 的 bundle id 判断，且系统级注册可能让 Finder 也显示该行。当前未做严格的 Finder 隐藏。
 
 ## 验证
 

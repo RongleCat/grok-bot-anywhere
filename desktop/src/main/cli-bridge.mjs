@@ -1,5 +1,4 @@
 import {execFile} from 'node:child_process';
-import {randomBytes} from 'node:crypto';
 import {chmod,cp,lstat,mkdir,readFile,readlink,rename,rm,symlink,writeFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {homedir} from 'node:os';
@@ -19,6 +18,7 @@ export function globalSkillsDir(home,exists=existsSync){
 }
 export function claudeSkillsDir(home){return join(home,'.claude','skills');}
 export function commandPathFor(home,platform){return join(home,'.local','bin',platform==='win32'?'grok-bot.cmd':'grok-bot');}
+export function localCommandPathFor(home,platform){return join(home,'.local','bin',platform==='win32'?'gba.cmd':'gba');}
 export function binDirFor(home){return join(home,'.local','bin');}
 export function skillBundleDir({packaged,resourcesPath,devRoot}){
   return join(packaged?resourcesPath:devRoot,packaged?'grok-bot-skill/grok-bot':'resources/grok-bot-skill/grok-bot');
@@ -59,69 +59,12 @@ function resolveLink(target,base,platform){
   return text;
 }
 function commandTargets(dest){
-  return [join(dest,'scripts','grok-bot'),join(dest,'scripts','grok-bot.cmd')];
+  return [join(dest,'scripts','grok-bot'),join(dest,'scripts','grok-bot.cmd'),join(dest,'scripts','gba'),join(dest,'scripts','gba.cmd')];
 }
 
-export function profileDocument(credentials){
-  if(typeof credentials?.accessToken!=='string'||!credentials.accessToken)return null;
-  const team=Number.isInteger(credentials.teamId)?credentials.teamId:Number.isInteger(credentials.selectedTeamId)?credentials.selectedTeamId:undefined;
-  return {accessToken:credentials.accessToken,...team!==undefined?{selectedTeamId:team}:{}};
-}
-export function registryDocument(now){
-  return {version:1,default:'default',accounts:[{alias:'default',label:'',addedAt:now,lastUsedAt:now}]};
-}
-
-export function posixLauncher({runtime,script,configDir}){
-  return `#!/bin/sh
-# ${MARKER}
-set -u
-runtime=${quoteSh(runtime)}
-script=${quoteSh(script)}
-config=${quoteSh(configDir)}
-want_json=0
-for arg in "$@"; do
-  if [ "$arg" = "--json" ]; then want_json=1; fi
-done
-fail() {
-  printf '%s\\n' "$1" >&2
-  if [ "$want_json" -eq 1 ]; then
-    printf '%s\\n' '{"ok":false,"error":{"code":"CLI_RUNTIME_MISSING","message":"Grok Bot Anywhere is not available."}}'
-  fi
-  exit 3
-}
-[ -x "$runtime" ] || fail "CLI_RUNTIME_MISSING: Grok Bot Anywhere is not available."
-[ -f "$script" ] || fail "CLI_RUNTIME_MISSING: The grok-bot command is not installed."
-export ELECTRON_RUN_AS_NODE=1
-export GROK_BOT_CONFIG_DIR="$config"
-export GROK_BOT_NO_AUTO_INSTALL=1
-exec "$runtime" "$script" "$@"
-`;
-}
 function batchText(value){return String(value??'').replaceAll('"','').replaceAll('%','%%');}
 export function quoteCmd(value){return `"${batchText(value)}"`;}
 function setCmd(name,value){return `set "${name}=${batchText(value)}"`;}
-export function windowsCommand({runtime,script,configDir}){
-  const runtimeQuoted=quoteCmd(runtime);
-  const lines=[
-    '@echo off',
-    `rem ${MARKER}`,
-    'setlocal DisableDelayedExpansion',
-    `for /f "tokens=2 delims=:." %%a in ('chcp') do set "_cp=%%a"`,
-    'chcp 65001 >nul',
-    setCmd('ELECTRON_RUN_AS_NODE','1'),
-    setCmd('GROK_BOT_CONFIG_DIR',configDir),
-    setCmd('GROK_BOT_NO_AUTO_INSTALL','1'),
-    `if not exist ${runtimeQuoted} ( echo CLI_RUNTIME_MISSING: Grok Bot Anywhere is not available. 1>&2 & echo {"ok":false,"error":{"code":"CLI_RUNTIME_MISSING","message":"Grok Bot Anywhere is not available."}} & chcp %_cp% >nul & exit /b 127 )`,
-    `${runtimeQuoted} ${quoteCmd(script)} %*`,
-    'set "GROK_BOT_EXIT=%ERRORLEVEL%"',
-    'chcp %_cp% >nul',
-    'exit /b %GROK_BOT_EXIT%'
-  ];
-  return `${lines.join('\r\n')}\r\n`;
-}
-export function windowsPowerShell(){
-  return '\uFEFF& "$PSScriptRoot\\grok-bot.cmd" @args; exit $LASTEXITCODE\r\n';
-}
 export function parseRegPath(stdout){
   const line=String(stdout??'').split(/\r?\n/).find(item=>/^\s*Path\s+REG_/i.test(item));
   if(!line)return null;
@@ -185,29 +128,6 @@ async function replaceSlot(slot,kind){
   if(kind==='missing')return;
   if(kind==='link'){await rm(slot,{force:true});return;}
   await rm(slot,{recursive:true,force:true});
-}
-
-async function writeAtomic(file,contents,mode){
-  const dir=dirname(file);
-  await mkdir(dir,{recursive:true,mode:0o700});
-  const tmp=join(dir,`.${randomBytes(8).toString('hex')}.tmp`);
-  try{
-    await writeFile(tmp,contents,{mode});
-    try{await chmod(tmp,mode);}catch{/* Windows ACLs are best-effort. */}
-    await rename(tmp,file);
-    try{await chmod(file,mode);}catch{/* Windows ACLs are best-effort. */}
-  }catch(error){
-    await rm(tmp,{force:true});
-    throw error;
-  }
-}
-export async function writeCliCredential(configDir,credentials,now=new Date().toISOString()){
-  const profile=join(configDir,'profiles','default.json');
-  const doc=profileDocument(credentials);
-  if(!doc){await rm(profile,{force:true});return false;}
-  await writeAtomic(profile,`${JSON.stringify(doc)}\n`,0o600);
-  await writeAtomic(join(configDir,'accounts.json'),`${JSON.stringify(registryDocument(now))}\n`,0o600);
-  return true;
 }
 
 async function ensureUserPath({home,platform,pathEnv,binDir}){
@@ -294,48 +214,95 @@ async function removeWindowsPath(dir,execFileImpl){
   await broadcastEnvironment(execFileImpl);
 }
 
-export async function enableCli({home=homedir(),platform=process.platform,pathEnv=process.env.PATH??'',bundleDir,configDir,runtime,credentials=null,now=new Date().toISOString(),execFileImpl=runFile,symlinkImpl=symlink,savedPathSnippet=false}={}){
-  if(!bundleDir||!existsSync(join(bundleDir,'SKILL.md'))||!existsSync(join(bundleDir,'bin','grok-bot.mjs')))throw new Error('CLI_BUNDLE_MISSING');
+
+export function posixLocalLauncher({runtime,script,socketPath,tokenPath}){
+  return `#!/bin/sh
+# ${MARKER}
+set -u
+runtime=${quoteSh(runtime)}
+script=${quoteSh(script)}
+socket=${quoteSh(socketPath)}
+token=${quoteSh(tokenPath)}
+export ELECTRON_RUN_AS_NODE=1
+export GBA_SOCKET="$socket"
+export GBA_TOKEN_FILE="$token"
+exec "$runtime" "$script" "$@"
+`;
+}
+export function windowsLocalCommand({runtime,script,socketPath,tokenPath}){
+  const runtimeQuoted=quoteCmd(runtime);
+  return [
+    '@echo off',
+    `rem ${MARKER}`,
+    'setlocal DisableDelayedExpansion',
+    `for /f "tokens=2 delims=:." %%a in ('chcp') do set "_cp=%%a"`,
+    'chcp 65001 >nul',
+    setCmd('ELECTRON_RUN_AS_NODE','1'),
+    setCmd('GBA_SOCKET',socketPath),
+    setCmd('GBA_TOKEN_FILE',tokenPath),
+    `if not exist ${runtimeQuoted} ( echo CLI_RUNTIME_MISSING: Grok Bot Anywhere is not available. 1>&2 & chcp %_cp% >nul & exit /b 127 )`,
+    `${runtimeQuoted} ${quoteCmd(script)} %*`,
+    'set "GROK_BOT_EXIT=%ERRORLEVEL%"',
+    'chcp %_cp% >nul',
+    'exit /b %GROK_BOT_EXIT%'
+  ].join('\r\n')+'\r\n';
+}
+
+export async function enableCli({home=homedir(),platform=process.platform,pathEnv=process.env.PATH??'',bundleDir,configDir,runtime,localApi=null,execFileImpl=runFile,symlinkImpl=symlink,savedPathSnippet=false}={}){
+  if(!bundleDir||!existsSync(join(bundleDir,'SKILL.md'))||!existsSync(join(bundleDir,'bin','gba.mjs')))throw new Error('CLI_BUNDLE_MISSING');
   if(!runtime||!existsSync(runtime))throw new Error('CLI_RUNTIME_MISSING');
+  localApi=localApi??{socketPath:join(home,'.local','gba.sock'),tokenPath:join(home,'.local','gba.token')};
+  if(!localApi.socketPath||!localApi.tokenPath)throw new Error('CLI_LOCAL_API_REQUIRED');
   const skillsDir=globalSkillsDir(home),dest=join(skillsDir,'grok-bot'),claude=join(claudeSkillsDir(home),'grok-bot');
-  const script=join(dest,'scripts','grok-bot'),ps1=join(dest,'scripts','grok-bot.ps1'),commandPath=commandPathFor(home,platform),binDir=binDirFor(home);
-  assertInside(home,dest);assertInside(home,claude);assertInside(home,commandPath);assertInside(home,configDir);
+  const localScript=join(dest,'scripts','gba'),aliasScript=join(dest,'scripts','grok-bot'),ps1=join(dest,'scripts','grok-bot.ps1');
+  const commandPath=commandPathFor(home,platform),localCommandPath=localCommandPathFor(home,platform),binDir=binDirFor(home);
+  assertInside(home,dest);assertInside(home,claude);assertInside(home,commandPath);assertInside(home,localCommandPath);assertInside(home,localScript);assertInside(home,aliasScript);
+  if(configDir)assertInside(home,configDir);
   const destKind=await skillSlot(dest,{ownTargets:[bundleDir],platform});
   if(destKind==='foreign')throw new Error('CLI_COMMAND_EXISTS');
   const claudeKind=await skillSlot(claude,{ownTargets:[dest,bundleDir],platform});
   if(claudeKind==='foreign')throw new Error('CLI_COMMAND_EXISTS');
   if(await commandKind(commandPath,dest,platform)==='foreign')throw new Error('CLI_COMMAND_EXISTS');
+  if(await commandKind(localCommandPath,dest,platform)==='foreign')throw new Error('CLI_COMMAND_EXISTS');
   await mkdir(skillsDir,{recursive:true});
   await replaceSlot(dest,destKind);
   await cp(bundleDir,dest,{recursive:true});
   await mkdir(join(dest,'scripts'),{recursive:true});
-  const bundledScript=join(dest,'bin','grok-bot.mjs');
-  await writeFile(script,posixLauncher({runtime,script:bundledScript,configDir}),{mode:0o755});
-  try{await chmod(script,0o755);}catch{/* Windows ACLs are best-effort. */}
-  const commandBody=windowsCommand({runtime,script:bundledScript,configDir});
-  await writeFile(join(dest,'scripts','grok-bot.cmd'),commandBody);
-  await writeFile(ps1,windowsPowerShell());
-  await writeFile(join(dest,MANAGED),`${JSON.stringify({app:MARKER,version:1})}\n`);
+  const body=posixLocalLauncher({runtime,script:join(dest,'bin','gba.mjs'),socketPath:localApi.socketPath,tokenPath:localApi.tokenPath});
+  const cmdBody=windowsLocalCommand({runtime,script:join(dest,'bin','gba.mjs'),socketPath:localApi.socketPath,tokenPath:localApi.tokenPath});
+  await writeFile(localScript,body,{mode:0o755});
+  await writeFile(aliasScript,body,{mode:0o755});
+  try{await chmod(localScript,0o755);await chmod(aliasScript,0o755);}catch{/* Windows ACLs are best-effort. */}
+  await writeFile(join(dest,'scripts','gba.cmd'),cmdBody);
+  await writeFile(join(dest,'scripts','grok-bot.cmd'),cmdBody);
+  await writeFile(ps1,'\uFEFF& "$PSScriptRoot\\grok-bot.cmd" @args; exit $LASTEXITCODE\r\n');
+  await writeFile(join(dest,MANAGED),`${JSON.stringify({app:MARKER,version:2})}\n`);
   await mkdir(claudeSkillsDir(home),{recursive:true});
   await replaceSlot(claude,claudeKind);
   if(platform==='win32')await symlinkImpl(dest,claude,'junction');
   else await symlinkImpl(dest,claude);
   await mkdir(binDir,{recursive:true});
-  await rm(commandPath,{force:true});
-  if(platform==='win32')await writeFile(commandPath,commandBody);
-  else await symlink(script,commandPath);
+  await rm(commandPath,{force:true});await rm(localCommandPath,{force:true});
+  if(platform==='win32'){
+    await writeFile(commandPath,cmdBody);await writeFile(localCommandPath,cmdBody);
+  }else{
+    await symlink(aliasScript,commandPath);await symlink(localScript,localCommandPath);
+  }
+  if(configDir){
+    await rm(join(configDir,'profiles'),{recursive:true,force:true}).catch(()=>{});
+    await rm(join(configDir,'accounts.json'),{force:true}).catch(()=>{});
+  }
   let pathSnippetAdded=false,pathWarning='';
   if(platform==='win32'){const pathResult=await ensureWindowsPath(binDir,home,execFileImpl);pathSnippetAdded=pathResult.added;pathWarning=pathResult.warning;}
   else pathSnippetAdded=await ensureUserPath({home,platform,pathEnv,binDir});
-  const credential=await writeCliCredential(configDir,credentials,now);
-  return {enabled:true,command:commandPath,skillsPath:dest,claudeLinked:true,credential,pathSnippet:!!(pathSnippetAdded||savedPathSnippet),warning:pathWarning,error:''};
+  return {enabled:true,command:commandPath,localCommand:localCommandPath,skillsPath:dest,claudeLinked:true,credential:false,pathSnippet:!!(pathSnippetAdded||savedPathSnippet),warning:pathWarning,error:''};
 }
 
 export async function disableCli({home=homedir(),platform=process.platform,configDir,removePath=false,execFileImpl=runFile}={}){
-  if(configDir)await writeCliCredential(configDir,null);
-  const dest=join(globalSkillsDir(home),'grok-bot'),claude=join(claudeSkillsDir(home),'grok-bot'),commandPath=commandPathFor(home,platform);
+  const dest=join(globalSkillsDir(home),'grok-bot'),claude=join(claudeSkillsDir(home),'grok-bot'),commandPath=commandPathFor(home,platform),localCommandPath=localCommandPathFor(home,platform);
   const destKind=await skillSlot(dest,{ownTargets:[],platform});
-  if(destKind!=='foreign'&&await commandKind(commandPath,dest,platform)==='ours')await rm(commandPath,{force:true});
+  try{if(await commandKind(localCommandPath,dest,platform)==='ours')await rm(localCommandPath,{force:true});}catch{}
+  try{if(destKind!=='foreign'&&await commandKind(commandPath,dest,platform)==='ours')await rm(commandPath,{force:true});}catch{}
   if(destKind==='managed'||destKind==='link'||destKind==='missing'){
     try{
       const target=resolveLink(await readlink(claude),dirname(claude),platform);
@@ -348,6 +315,10 @@ export async function disableCli({home=homedir(),platform=process.platform,confi
       const marker=JSON.parse(await readFile(join(dest,MANAGED),'utf8'));
       if(marker?.app===MARKER)await rm(dest,{recursive:true,force:true});
     }catch{/* An unrelated skill directory is left in place. */}
+  }
+  if(configDir){
+    await rm(join(configDir,'profiles'),{recursive:true,force:true}).catch(()=>{});
+    await rm(join(configDir,'accounts.json'),{force:true}).catch(()=>{});
   }
   if(removePath){
     if(platform==='win32')await removeWindowsPath(binDirFor(home),execFileImpl).catch(()=>{});

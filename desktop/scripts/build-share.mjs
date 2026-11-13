@@ -2,7 +2,7 @@ import {execFileSync} from 'node:child_process';
 import {mkdir,cp,writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
-import {plist,extensionInfo,shareEntitlements} from '../src/share/plist.mjs';
+import {plist,extensionInfo,saveExtensionInfo,shareEntitlements} from '../src/share/plist.mjs';
 if(process.platform!=='darwin')throw new Error('Mac share extensions must be built on macOS.');
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const packageRoot=join(root,'native/macos');
@@ -23,6 +23,13 @@ for(let slot=1;slot<=12;slot++){
  await writeFile(join(inside,'Resources/binding.json'),JSON.stringify({version:1,slot}));
  execFileSync('codesign',['--force','--sign','-','--entitlements',entitlements,extension],{stdio:'inherit'});
 }
+const save=join(contents,'PlugIns/GrokBotSave.appex'),saveInside=join(save,'Contents');
+await mkdir(join(saveInside,'MacOS'),{recursive:true});await mkdir(join(saveInside,'Resources'),{recursive:true});
+await cp(join(binaryRoot,'GrokBotShare'),join(saveInside,'MacOS/GrokBotSave'));
+await writeFile(join(saveInside,'Info.plist'),plist(saveExtensionInfo()));
+await writeFile(join(saveInside,'Resources/binding.json'),JSON.stringify({version:1,save:true}));
+await cp(join(root,'desktop/build/icon.icns'),join(saveInside,'Resources/AppIcon.icns')).catch(()=>{});
+execFileSync('codesign',['--force','--sign','-','--entitlements',entitlements,save],{stdio:'inherit'});
 execFileSync('codesign',['--force','--sign','-',host],{stdio:'inherit'});
 execFileSync('codesign',['--verify','--deep','--strict',host],{stdio:'inherit'});
-console.log('Built 12 offline share extension slots. No registration performed.');
+console.log('Built 12 offline share extension slots and the save extension. No registration performed.');

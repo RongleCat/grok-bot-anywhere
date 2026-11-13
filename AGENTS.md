@@ -9,13 +9,13 @@
 3. [LESSONS.md](LESSONS.md) — 已踩过的坑；改代码前读。
 4. 与你任务相关的 `docs/subsystems/*.md` 与 `docs/platforms/*.md`。
 
-## 当前状态（2026-11-05）
+## 当前状态（2026-11-13）
 
 - 主产品：`desktop/`（Electron），macOS 已验证，Windows 部分实机验证（2026-11-01，开发模式），Linux 未支持。
 - 原生：`native/macos/`（Swift），仅 macOS。
 - 协议：`packages/client-protocol/`，非官方、实验性。
 - 文档：`docs/` 是唯一事实来源；`docs/history/` 只作背景。
-- 基线（2026-11-05）：desktop 170、client-protocol 61 passed；Swift 8 passed（2026-11-01 基线）；avatar 1 passed。Windows 实机（2026-11-01）：desktop 128 passed + 2 skipped（POSIX-only 断言）、client-protocol 60 passed。
+- 基线（2026-11-13）：desktop 191、client-protocol 61 passed；Swift 8 passed（2026-11-01 基线）；avatar 1 passed。Windows 实机（2026-11-01）：desktop 128 passed + 2 skipped（POSIX-only 断言）、client-protocol 60 passed。
 - 根命令：`npm run test:all`、`npm run docs:check`、`npm run smoke`。
 
 ## 命令
@@ -48,7 +48,7 @@ desktop/                  Electron 主产品
   src/renderer/           UI（无 Node、无凭据）
   src/share/              macOS 分享槽位与注册
   src/shell/              跨平台纯函数
-  test/                   170 tests
+  test/                   191 tests
 native/macos/             Swift 伴侣 + Bloub 头像
 packages/client-protocol  非官方 SDK/CLI
 docs/                     Wiki（Current / Unverified / Historical）
@@ -68,6 +68,7 @@ vendor/bloub              Bloub 头像引擎 submodule
 | 微信菜单 | [share-menu](docs/subsystems/share-menu.md) | `desktop/src/share/`、`native/macos/Sources/GrokBotShare` |
 | Touch Bar/原生输入框 | [native-companion](docs/subsystems/native-companion.md) | `native/macos/` |
 | 协议 SDK/CLI | [client-protocol](docs/subsystems/client-protocol.md) | `packages/client-protocol/` |
+| gba 本地 API / Agent 接口 | [local-api](docs/subsystems/local-api.md) | `desktop/src/main/local-api.mjs`、`desktop/resources/grok-bot-skill/grok-bot/bin/gba.mjs` |
 | 头像 | [avatar](docs/subsystems/avatar.md) | `desktop/src/renderer/`、`native/macos/avatar/` |
 | 打包/签名 | [packaging](docs/subsystems/packaging.md) | `desktop/package.json`、`desktop/scripts/` |
 
@@ -103,5 +104,5 @@ vendor/bloub              Bloub 头像引擎 submodule
 - `npm start` 会先 build；直接 `electron .` 会用旧 `out/`。
 - 微信会缓存转发菜单：更新后重开微信。
 - Windows zip 未签名；SmartScreen/SAC 可能拦截。
-- 分享菜单最多 12 行；第 13 个 Bot 用输入框/快捷键。
+- 分享菜单最多 12 行（开启保存到本地后 11 个 Bot + 1 个保存项）；第 13 个 Bot 用输入框/快捷键。
 - 详见 [排障](docs/runbooks/troubleshooting.md)。

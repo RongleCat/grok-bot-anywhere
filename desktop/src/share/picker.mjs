@@ -12,7 +12,7 @@ export function pickerBots(state,{allSources=false}={}){
     .map((recipient,index)=>({recipient,index,bot:state.bots.find(bot=>bot.id===recipient.botId)}))
     .filter(row=>row.bot&&visible.has(row.bot.id))
     .sort((a,b)=>a.recipient.order-b.recipient.order||a.index-b.index)
-    .map(({recipient,bot})=>({botId:bot.id,name:bot.name||'Bot',mode:recipient.mode,prefix:recipient.prefix}));
+    .map(({recipient,bot})=>({botId:bot.id,accountId:bot.accountId??state.account?.id??'',accountName:bot.accountName??'',name:bot.name||'Bot',mode:recipient.mode,prefix:recipient.prefix}));
 }
 
 // One row is always selected so 确定 and 双击 both have a target.

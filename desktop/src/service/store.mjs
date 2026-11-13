@@ -69,6 +69,15 @@ export class InboxStore {
     this.db.prepare('UPDATE receipts SET value=? WHERE id=? AND account=?').run(JSON.stringify(value),id,accountId);
     return value;
   }
+  getAny(id) {const row=this.db.prepare('SELECT account,value FROM receipts WHERE id=?').get(id);if(!row)return null;return {...JSON.parse(row.value),accountId:row.account};}
+  listFor(accountIds) {
+    const ids=(accountIds??[]).filter(id=>typeof id==='string'&&id);
+    if(!ids.length)return [];
+    const placeholders=ids.map(()=>'?').join(',');
+    return this.db.prepare(`SELECT value FROM receipts WHERE account IN (${placeholders}) ORDER BY rowid DESC`).all(...ids).map(row=>JSON.parse(row.value));
+  }
+  accounts(){const value=this.preference('accounts');return Array.isArray(value)?value:[];}
+  saveAccounts(accounts){this.preference('accounts',Array.isArray(accounts)?accounts:[]);}
   preference(key,value) {
     if(value!==undefined)this.db.prepare('INSERT OR REPLACE INTO preferences VALUES (?,?)').run(key,JSON.stringify(value));
     const row=this.db.prepare('SELECT value FROM preferences WHERE key=?').get(key);return row?JSON.parse(row.value):null;

@@ -5,8 +5,10 @@ import {fileURLToPath} from 'node:url';
 import {dirname,isAbsolute,join} from 'node:path';
 import {appendFile,mkdir,readFile,readdir,stat,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
+import {setTimeout as delay} from 'node:timers/promises';
 import {RpcClient} from './rpc.mjs';
-import {CredentialVault} from './credentials.mjs';
+import {LocalApiServer,localApiPaths} from './local-api.mjs';
+import {CredentialVault,AccountVault} from './credentials.mjs';
 import {NativeCompanion} from './companion.mjs';
 import {existsSync,mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
 import {homedir} from 'node:os';
@@ -16,11 +18,12 @@ import {MenuReconciler} from '../share/reconciler.mjs';
 import {menuHostTemplate,sharingApplicationPath} from '../share/host-path.mjs';
 import {shareHandoff} from '../share/handoff.mjs';
 import {pickerBots} from '../share/picker.mjs';
+import {SaveInbox} from '../share/save.mjs';
 import {frontmostFiles,prepareExplorerSelection,regularFiles,stopExplorerSelection,warmExplorerSelection} from './selection.mjs';
 import {menuEntries} from '../share/model.mjs';
 import {matchShareTitles} from '../share/order.mjs';
 import {grokBotAgentUrl} from '../grok-link.mjs';
-import {disableCli,enableCli,skillBundleDir,writeCliCredential} from './cli-bridge.mjs';
+import {disableCli,enableCli,skillBundleDir} from './cli-bridge.mjs';
 import {applyExplorerRegistry,applyLoginItem,composerBounds,createExplorerBatch,createExplorerSync,explorerLogLine,explorerRegistryOps,explorerRejectNotice,floatingComposerTraits,loginItemStartup,openedAsLoginItem,parseExplorerForward,resolveExplorerForward,shareResultNotice,shouldApplyLoginItem,touchBarChoice,touchBarPinPayload,trayCommand,trayMenuModel,trimExplorerLog,windowCloseAction} from '../shell/actions.mjs';
 import {coalBallAppPng,coalBallIcon,coalBallPng,trayIconImages} from '../shell/coal-ball.mjs';
 import {acceptWindowControl,editCommand,mainWindowOptions,maximizedContentInset} from '../shell/window-chrome.mjs';
@@ -35,19 +38,20 @@ const smoke=process.argv.includes('--smoke-test');
 const preview=smoke||process.argv.includes('--preview');
 const backgroundShare=process.argv.includes('--share-intake');
 const quietLaunch=backgroundShare||process.argv.includes('--explorer-forward')||process.argv.some(arg=>String(arg).includes('grokbotanywhere://'));
-let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,companion,shareMenu,menuReconciler,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null,suppressActivate=false,composerReadyState=null;
+let window,floatWindow,avatarWindow,pickerWindow,worker,rpc,vault,legacyVault,companion,shareMenu,menuReconciler,saveInbox,localApi,localApiInfo,temporaryRoot,tray,quitting=false,accountBusy=false,finderRefreshTimer=null,suppressActivate=false,composerReadyState=null;
 let openAtLogin=false,loginItemKnown=false,explorerMenu=true,explorerSettled=false,touchBarPinned=false,touchBarSelection='',touchBarKey='';
+let savePrefs={enabled:false,mode:'default',defaultDir:'',lastDir:''};
 if(preview){temporaryRoot=mkdtempSync(join(tmpdir(),'grok-anywhere-preview-'));app.setPath('userData',temporaryRoot);app.setPath('sessionData',temporaryRoot);}
 let latestState={},hostIssue=null,windowMaterial='none',activeBotId='',pendingFloat=null,suspendFloatDismiss=false,keepFloatOpen=false,ipcSender=null,dockHidden=false;
 let composerPrefs={afterSend:'hide',dismissOnOutside:true},floatShownAt=0,pickerOpen=false,pickerSize={width:760,height:188},composeGeneration=0,floatMoved=false,lastFloatBounds=null,composerBar=false;
-let cliStatus={enabled:false,command:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:''};
+let cliStatus={enabled:false,command:'',localCommand:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:''};
 const pendingSharedComposers=new Set();let openingSharedComposer=false,shortcutsSuppressed=false;
 const pendingLinks=[];let deeplinkReady=false,deeplinkChain=Promise.resolve();
 const registeredShortcuts=new Map();
 const zh=app.getLocale?.().startsWith('zh');
 const notify=(event,data)=>{const payload={event,data};for(const target of [window,floatWindow,avatarWindow,pickerWindow])if(target&&!target.isDestroyed())target.webContents.send('anywhere:event',payload);};
-const cliPublic=()=>({enabled:!!cliStatus.enabled,command:cliStatus.command??'',skillsPath:cliStatus.skillsPath??'',claudeLinked:!!cliStatus.claudeLinked,credential:!!cliStatus.credential,error:cliStatus.error??''});
-const publicState=()=>({...latestState,activeBotId,composerPrefs,host:{platform:process.platform,locale:app.getLocale(),material:windowMaterial,companion:!!companion?.ready,preview,issue:hostIssue,openAtLogin,explorerMenu,touchBarPinned,menu:shareMenu?.status??{available:false,needsUpdate:true,registered:0},cli:cliPublic()}});
+const cliPublic=()=>({enabled:!!cliStatus.enabled,command:cliStatus.command??'',localCommand:cliStatus.localCommand??'',skillsPath:cliStatus.skillsPath??'',claudeLinked:!!cliStatus.claudeLinked,credential:!!cliStatus.credential,error:cliStatus.error??''});
+const publicState=()=>({...latestState,activeBotId,composerPrefs,host:{platform:process.platform,locale:app.getLocale(),material:windowMaterial,companion:!!companion?.ready,preview,issue:hostIssue,openAtLogin,explorerMenu,touchBarPinned,menu:shareMenu?.status??{available:false,needsUpdate:true,registered:0},cli:cliPublic(),save:savePublic()}});
 const update=()=>{notify('state',publicState());refreshTouchBar();};
 const issue=code=>{if(!code||code==='ACCOUNT_BUSY')return;hostIssue=code;update();};
 const errorCode=error=>/^[A-Z][A-Z0-9_]{1,70}$/.test(error?.message??'')?error.message:'OPERATION_FAILED';
@@ -69,6 +73,61 @@ function loadShellPrefs(){
 }
 function saveExplorerPref(){try{writeFileSync(join(app.getPath('userData'),'explorer-menu.json'),JSON.stringify({enabled:explorerMenu===true}));}catch{}}
 function saveLoginPref(){try{writeFileSync(join(app.getPath('userData'),'login-item.json'),JSON.stringify({enabled:openAtLogin}));}catch{}}
+function savePublic(){return {enabled:!!savePrefs.enabled,mode:savePrefs.mode==='choose'?'choose':'default',defaultDir:savePrefs.defaultDir??'',lastDir:savePrefs.lastDir??''};}
+function loadSavePrefs(){
+  const fallback={enabled:false,mode:'default',defaultDir:join(app.getPath('downloads'),'Grok Bot Anywhere'),lastDir:''};
+  try{const value=JSON.parse(readFileSync(join(app.getPath('userData'),'save-prefs.json'),'utf8'));savePrefs={...fallback,...value,mode:value.mode==='choose'?'choose':'default'};}
+  catch{savePrefs=fallback;}
+  if(typeof savePrefs.defaultDir!=='string'||!isAbsolute(savePrefs.defaultDir))savePrefs.defaultDir=fallback.defaultDir;
+  if(typeof savePrefs.lastDir!=='string'||!isAbsolute(savePrefs.lastDir))savePrefs.lastDir='';
+}
+function saveSavePrefs(){try{writeFileSync(join(app.getPath('userData'),'save-prefs.json'),JSON.stringify(savePrefs));}catch{}}
+function menuState(){return {...latestState,saveToLocal:savePrefs.enabled===true};}
+async function chooseSaveDirectory(kind='default'){
+  if(preview)throw new Error('PREVIEW_ONLY');
+  try{app.focus({steal:true});}catch{}
+  const options={properties:['openDirectory','createDirectory'],defaultPath:kind==='default'?savePrefs.defaultDir:savePrefs.lastDir||savePrefs.defaultDir};
+  const owner=ownerWindow();const picked=owner?await dialog.showOpenDialog(owner,options):await dialog.showOpenDialog(options);
+  if(picked.canceled||!picked.filePaths?.[0])return {path:null};
+  const path=picked.filePaths[0];
+  if(kind==='default')savePrefs.defaultDir=path;else savePrefs.lastDir=path;
+  saveSavePrefs();update();
+  return {path};
+}
+async function pickSaveDirectory(defaultPath){
+  try{app.focus({steal:true});}catch{}
+  const options={properties:['openDirectory','createDirectory'],defaultPath:defaultPath||savePrefs.defaultDir};
+  const owner=ownerWindow();const picked=owner?await dialog.showOpenDialog(owner,options):await dialog.showOpenDialog(options);
+  if(picked.canceled||!picked.filePaths?.[0])return null;
+  savePrefs.lastDir=picked.filePaths[0];saveSavePrefs();
+  return picked.filePaths[0];
+}
+function ensureSaveInbox(){
+  if(saveInbox||preview)return saveInbox;
+  saveInbox=new SaveInbox({
+    root:join(app.getPath('userData'),'ShareInbox','Save'),
+    getPrefs:()=>({...savePrefs}),
+    pickDirectory:defaultPath=>pickSaveDirectory(defaultPath),
+    onSaved:({destination,files})=>{
+      const body=zh?`已保存 ${files.length} 个文件到 ${destination}`:`Saved ${files.length} file${files.length===1?'':'s'} to ${destination}`;
+      if(Notification.isSupported())systemNotification({title:'Grok Bot Anywhere',body}).show();
+    },
+    onError:code=>{issue('SAVE_FAILED');if(Notification.isSupported())systemNotification({title:'Grok Bot Anywhere',body:zh?`保存失败：${code}`:`Could not save: ${code}`}).show();},
+    onCancel:()=>{}
+  });
+  return saveInbox;
+}
+async function drainSaveInbox(){
+  if(preview)return;
+  try{const inbox=ensureSaveInbox();await inbox?.initialize();await inbox?.drain();}catch(error){issue(errorCode(error));}
+}
+function findBot(botId,accountId){
+  return (latestState.bots??[]).find(bot=>bot.id===botId&&(!accountId||bot.accountId===accountId))??null;
+}
+function accountForBot(botId,accountId){
+  const bot=findBot(botId,accountId);if(!bot)return null;
+  return (latestState.accounts??[]).find(entry=>entry.account?.id===bot.accountId)??null;
+}
 function saveTouchPref(){try{writeFileSync(join(app.getPath('userData'),'touchbar.json'),JSON.stringify({pinned:touchBarPinned}));}catch{}}
 let notifyIcon;
 function notificationIcon(){
@@ -197,7 +256,8 @@ async function deliverExplorer(forward){
   const appArg=app.isPackaged?'':app.getAppPath();
   const files=(forward.files??[]).filter(file=>typeof file==='string'&&isAbsolute(file)&&file!==appArg);
   if(!files.length)return;
-  const item=await rpc.call('receive',{botId:verdict.botId,source:'share',files,manual:true},RECEIVE_TIMEOUT);
+  const bot=findBot(verdict.botId);if(!bot)return;
+  const item=await rpc.call('receive',{accountId:bot.accountId,botId:verdict.botId,source:'share',files,manual:true},RECEIVE_TIMEOUT);
   await openComposer(verdict.botId,item);
 }
 const explorerBatch=createExplorerBatch();
@@ -260,6 +320,7 @@ function sharePickerPayload(){
     const bot=(latestState.bots??[]).find(item=>item.id===entry.botId)??{};
     return {
       botId:entry.botId,
+      accountName:entry.accountName??'',
       name:entry.name,
       avatarShape:bot.avatarShape,
       avatarColor:bot.avatarColor,
@@ -274,10 +335,12 @@ async function confirmShare(botId){
   const {files,text,dir}=sharePending;
   // The Bot decides where this lands: "先放进输入框" must open the composer,
   // only a direct Bot submits straight away.
-  const recipient=(latestState.recipients??[]).find(row=>row.botId===botId);
+  const bot=findBot(botId);
+  if(!bot)return {ok:false};
+  const recipient=(latestState.recipients??[]).find(row=>row.botId===botId&&(!row.accountId||row.accountId===bot.accountId));
   const mode=recipient?.mode==='direct'?'direct':'compose';
   try{
-    const receipt=await rpc.call('receive',{botId,source:'wechat',text,files,manual:mode!=='direct'},RECEIVE_TIMEOUT);
+    const receipt=await rpc.call('receive',{accountId:bot.accountId,botId,source:'wechat',text,files,manual:mode!=='direct'},RECEIVE_TIMEOUT);
     if(mode==='direct'){
       // receive() already sends direct receipts when the account is connected.
       // Submit only when it could not start (offline/transition), or the same
@@ -311,7 +374,7 @@ async function handleDeeplink(raw){
       const recipient=(latestState.recipients??[]).find(item=>item.botId===bot.id);
       if(!shortcutSourceAllowed(recipient)){deeplinkIssue('SOURCE_DISABLED');return;}
     }
-    try{await openComposer(bot.id,undefined,{text:parsed.hasText?parsed.text:undefined,captureSelection:!parsed.hasText});}
+    try{await openComposer(bot.id,undefined,{text:parsed.hasText?parsed.text:undefined,captureSelection:!parsed.hasText,accountId:bot.accountId});}
     catch(error){deeplinkIssue(errorCode(error));}
     return;
   }
@@ -321,23 +384,13 @@ async function handleDeeplink(raw){
   const recipient=(latestState.recipients??[]).find(item=>item.botId===bot.id);
   if(!shortcutSourceAllowed(recipient)){deeplinkIssue('SOURCE_DISABLED');return;}
   try{
-    const item=await rpc.call('receive',{botId:bot.id,source:'shortcuts',text:parsed.text,manual:true},RECEIVE_TIMEOUT);
+    const item=await rpc.call('receive',{accountId:bot.accountId,botId:bot.id,source:'shortcuts',text:parsed.text,manual:true},RECEIVE_TIMEOUT);
     if(item?.error)deeplinkIssue(item.error);
     if(item?.mode==='compose')await openComposer(bot.id,item);
   }catch(error){deeplinkIssue(errorCode(error));}
 }
 if(process.platform!=='darwin')for(const arg of process.argv)if(String(arg).includes('grokbotanywhere://'))acceptDeeplink(arg);
 function cliBundle(){return skillBundleDir({packaged:app.isPackaged,resourcesPath:process.resourcesPath,devRoot:join(here,'../..')});}
-async function syncCliCredential(credentials){
-  if(!cliStatus.enabled||preview)return;
-  cliStatus.credential=await writeCliCredential(cliConfigDir(),credentials);
-  cliStatus.error='';
-}
-async function forgetCliCredential(){
-  if(preview)return;
-  try{await writeCliCredential(cliConfigDir(),null);cliStatus.credential=false;}
-  catch(error){cliStatus.error=errorCode(error);}
-}
 async function setCliEnabled(enabled){
   if(preview)throw new Error('PREVIEW_ONLY');
   if(!enabled){
@@ -348,9 +401,8 @@ async function setCliEnabled(enabled){
     return cliPublic();
   }
   const saved=loadCliPref();
-  let credentials=null;
-  try{credentials=await vault.load();}catch(error){if(error?.message==='CREDENTIAL_STORAGE_UNAVAILABLE')throw error;}
-  cliStatus=await enableCli({home:homedir(),platform:process.platform,pathEnv:process.env.PATH??'',bundleDir:cliBundle(),configDir:cliConfigDir(),runtime:process.execPath,credentials,savedPathSnippet:saved.pathSnippet});
+  if(!localApiInfo)localApiInfo=localApiPaths({userData:app.getPath('userData')});
+  cliStatus=await enableCli({home:homedir(),platform:process.platform,pathEnv:process.env.PATH??'',bundleDir:cliBundle(),configDir:cliConfigDir(),runtime:process.execPath,localApi:localApiInfo,savedPathSnippet:saved.pathSnippet});
   saveCliPref({enabled:true,pathSnippet:!!cliStatus.pathSnippet});
   update();
   return cliPublic();
@@ -526,11 +578,11 @@ function applyShortcuts(map){
   else if(hostIssue==='SHORTCUT_UNAVAILABLE'){hostIssue=null;update();}
 }
 async function readShareOrder(){
-  const current=()=>menuEntries(latestState).map(entry=>entry.botId);
+  const current=()=>menuEntries(menuState()).map(entry=>entry.botId);
   if(process.platform==='darwin'){
     try{
       const {stdout}=await runProcess('swift',[join(here,'../../scripts/probe-share.swift')],{timeout:25000,maxBuffer:1024*1024});
-      const ids=matchShareTitles(stdout.split('\n'),menuEntries(latestState));
+      const ids=matchShareTitles(stdout.split('\n'),menuEntries(menuState()));
       if(ids.length)return {ids,source:'wechat'};
     }catch{}
     const known=new Set((latestState.bots??[]).map(bot=>bot.id));
@@ -546,9 +598,11 @@ async function openInGrokBot(botId){
   return {ok:true};
 }
 async function openComposer(botId,receipt,options={}){
-  if(latestState.accountBusy)throw new Error('ACCOUNT_BUSY');
-  if(receipt&&(receipt.accountId!==latestState.account?.id||receipt.botId!==botId))throw new Error('RECEIPT_SCOPE_MISMATCH');
-  const bot=latestState.bots?.find(item=>item.id===botId);if(!bot)throw new Error('BOT_NOT_FOUND');
+  const bot=findBot(botId,receipt?.accountId??options.accountId);
+  if(!bot)throw new Error('BOT_NOT_FOUND');
+  const account=accountForBot(botId,bot.accountId);
+  if(account?.busy)throw new Error('ACCOUNT_BUSY');
+  if(receipt&&(receipt.accountId!==bot.accountId||receipt.botId!==botId))throw new Error('RECEIPT_SCOPE_MISMATCH');
   const mainWasVisible=!!window&&!window.isDestroyed()&&window.isVisible();
   const dismissWasSuspended=suspendFloatDismiss;
   keepFloatOpen=options.keepOpen===true;
@@ -572,7 +626,7 @@ async function openComposer(botId,receipt,options={}){
   const draftText=typeof options.text==='string'?options.text:undefined;
   const attachToken=deferFiles?generation:0;
   composerBar=false;
-  pendingFloat=receipt?{id:receipt.id,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes},index)=>({name,bytes,index})),botName:receipt.botName??bot.name}:preparing?{botId,text:'',preparing,botName:bot.name}:{botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
+  pendingFloat=receipt?{id:receipt.id,accountId:bot.accountId,botId,text:receipt.text??'',title:receipt.title??'',files:(receipt.files??[]).map(({name,bytes},index)=>({name,bytes,index})),botName:receipt.botName??bot.name}:preparing?{accountId:bot.accountId,botId,text:'',preparing,botName:bot.name}:{accountId:bot.accountId,botId,focus:true,localPaths,...attachToken?{attachToken}:{},...draftText!==undefined?{text:draftText}:{}};
   composerReadyState={generation,card:null,avatar:false};
   const float=await ensureFloat();
   const entering=!float.isVisible();
@@ -621,7 +675,8 @@ async function openComposer(botId,receipt,options={}){
 }
 async function intake(botId,files){
   if(!Array.isArray(files)||files.length>100||files.some(p=>typeof p!=='string'))throw new Error('ATTACHMENT_INVALID');
-  const item=await rpc.call('receive',{botId,source:'drop',files},RECEIVE_TIMEOUT);
+  const bot=findBot(botId);if(!bot)throw new Error('BOT_NOT_FOUND');
+  const item=await rpc.call('receive',{accountId:bot.accountId,botId,source:'drop',files},RECEIVE_TIMEOUT);
   if(item.mode==='compose')await openComposer(botId,item);
   return {id:item.id};
 }
@@ -634,14 +689,15 @@ function presentPendingComposer(){
   const item=pending.sort((a,b)=>a.createdAt-b.createdAt).at(-1);
   if(item)void presentShare(item.id);
 }
-async function sendDraft(botId,text,files,receiptId,remoteKeep){
+async function sendDraft(botId,text,files,receiptId,remoteKeep,accountId){
   if(preview)throw new Error('PREVIEW_ONLY');
   if(typeof text!=='string'||text.length>2_000_000)throw new Error('MESSAGE_INVALID');
   if(files!=null&&(!Array.isArray(files)||files.length>100||files.some(path=>typeof path!=='string'||!path)))throw new Error('ATTACHMENT_INVALID');
+  const bot=findBot(botId,accountId);if(!bot)throw new Error('BOT_NOT_FOUND');
   const extra=files??[];
   if(receiptId){
     const item=await rpc.call('composer',{id:receiptId});
-    if(item.botId!==botId)throw new Error('RECEIPT_SCOPE_MISMATCH');
+    if(item.botId!==botId||item.accountId!==bot.accountId)throw new Error('RECEIPT_SCOPE_MISMATCH');
     const selected=Array.isArray(remoteKeep)?new Set(remoteKeep.filter(index=>Number.isSafeInteger(index)&&index>=0)):null;
     const kept=selected?item.files.filter((_file,index)=>selected.has(index)):item.files;
     const merged=selected?[...kept.map(file=>file.path),...extra]:(extra.length?[...item.files.map(file=>file.path),...extra]:undefined);
@@ -650,7 +706,7 @@ async function sendDraft(botId,text,files,receiptId,remoteKeep){
     return {id:result.id,status:'sending',error:null};
   }
   if(!text.trim()&&!extra.length)throw new Error('RECEIPT_EMPTY');
-  const created=await rpc.call('receive',{botId,source:'drop',manual:true,text,files:extra},RECEIVE_TIMEOUT);
+  const created=await rpc.call('receive',{accountId:bot.accountId,botId,source:'drop',manual:true,text,files:extra},RECEIVE_TIMEOUT);
   const result=await rpc.call('submitAsync',{id:created.id,text},0);
   pendingFloat=null;
   return {id:result.id,status:'sending',error:null};
@@ -668,7 +724,10 @@ async function accountAction(method){
   if(accountBusy)throw new Error('ACCOUNT_BUSY');accountBusy=true;
   try{
     const result=await rpc.call(method,{},600000);
-    await vault.save(result.credentials);latestState=result.state;hostIssue=null;try{await syncCliCredential(result.credentials);}catch(error){cliStatus.error=errorCode(error);}update();
+    await vault.save(result.accountId,result.credentials);
+    latestState=result.state;hostIssue=null;
+    if(menuReconciler)menuReconciler.request(menuState());
+    update();
     void rpc.call('resume').catch(error=>issue(errorCode(error)));
     return publicState();
   }finally{accountBusy=false;}
@@ -678,7 +737,7 @@ function tailText(value,limit){
   return value.length>limit?`… ${value.length-limit} characters omitted …\n${value.slice(-limit)}`:value;
 }
 function menuSummary(installed){
-  const entries=(installed?.entries??[]).map(entry=>({slot:entry.slot,botName:entry.botName,generation:entry.generation??1,extensionId:entry.extensionId??'',mode:entry.mode??''}));
+  const entries=(installed?.entries??[]).map(entry=>({slot:entry.slot,accountId:entry.accountId??'',botName:entry.botName,generation:entry.generation??1,extensionId:entry.extensionId??'',mode:entry.mode??''}));
   return {layoutVersion:installed?.layoutVersion??null,hostPath:installed?.hostPath??'',build:installed?.build??null,entries};
 }
 async function copyDiagnostics(){
@@ -692,7 +751,9 @@ async function copyDiagnostics(){
     `packaged=${app.isPackaged}`,
     `hostIssue=${hostIssue??''}`,
     `shareMenu=${JSON.stringify({available:!!status.available,registered:status.registered??0,enabled:status.enabled??0,needsUpdate:!!status.needsUpdate,busy:!!status.busy,error:status.error??''})}`,
-    `installed=${JSON.stringify(menuSummary(shareMenu?.installed))}`
+    `installed=${JSON.stringify(menuSummary(shareMenu?.installed))}`,
+    `save=${JSON.stringify(savePublic())}`,
+    `accounts=${JSON.stringify((latestState.accounts??[]).map(entry=>({id:entry.account?.id??'',name:entry.account?.name??'',checked:!!entry.checked,connected:!!entry.connected}))) }`
   ];
   try{
     const finderPid=(await runProcess('/usr/bin/pgrep',['-x','Finder'])).stdout.trim().split('\n')[0];
@@ -746,6 +807,147 @@ async function refreshFinderIfStale(){
     if(Number.isFinite(started)&&started<state.mtimeMs)scheduleFinderRefresh();
   }catch{}
 }
+
+const LOCAL_API_METHODS=[
+ 'app.status','app.show','api.methods',
+ 'accounts.list','accounts.get','accounts.add','accounts.refresh','accounts.check','accounts.uncheck','accounts.remove',
+ 'bots.list','bots.get','bots.duplicate','bots.updateAvatar','recipients.list','recipients.get','recipients.configure',
+ 'inbox.list','inbox.get','inbox.create','inbox.submit','inbox.retry','inbox.resolve','inbox.dismiss',
+ 'messages.send','messages.wait','runtime.status','share.status','share.update','share.order',
+ 'settings.get','settings.theme','settings.composer','settings.openAtLogin','settings.touchBar','settings.shortcut','settings.save','settings.cli'
+];
+function localAccount(idOrName){
+ const rows=latestState.accounts??[];
+ if(!idOrName)return null;
+ return rows.find(entry=>entry.account?.id===idOrName)??rows.find(entry=>entry.account?.name===idOrName)??null;
+}
+function localBot(idOrName,accountId){
+ if(!idOrName)return null;
+ const rows=(latestState.bots??[]).filter(bot=>!accountId||bot.accountId===accountId);
+ return rows.find(bot=>bot.id===idOrName)??rows.find(bot=>bot.name===idOrName)??null;
+}
+function localRecipient(botId,accountId){
+ return (latestState.recipients??[]).find(row=>row.botId===botId&&(!accountId||!row.accountId||row.accountId===accountId))??null;
+}
+async function localApiCall(method,p={}){
+ if(!LOCAL_API_METHODS.includes(method))throw new Error('LOCAL_API_METHOD_UNKNOWN');
+ switch(method){
+  case 'api.methods':return {methods:[...LOCAL_API_METHODS]};
+  case 'app.status':return {version:app.getVersion(),platform:process.platform,preview,connected:latestState.connected===true,accountBusy:latestState.accountBusy===true,accounts:latestState.accounts??[],menu:shareMenu?.status??null,cli:cliPublic(),save:savePublic()};
+  case 'app.show':showMainWindow();return {ok:true};
+  case 'accounts.list':return {accounts:latestState.accounts??[]};
+  case 'accounts.get':{
+   const entry=localAccount(p.accountId??p.id??p.name);if(!entry)throw new Error('ACCOUNT_NOT_FOUND');return {account:entry};
+  }
+  case 'accounts.add':{
+   if(preview)throw new Error('PREVIEW_ONLY');
+   const result=await dispatch('addAccount',{method:p.method==='desktop'?'desktop':'browser'});
+   return {state:result};
+  }
+  case 'accounts.refresh':return {state:await dispatch('refresh',{})};
+  case 'accounts.check':case 'accounts.uncheck':{
+   const entry=localAccount(p.accountId??p.id??p.name);if(!entry)throw new Error('ACCOUNT_NOT_FOUND');
+   return {state:await dispatch('setAccountChecked',{accountId:entry.account.id,checked:method==='accounts.check'})};
+  }
+  case 'accounts.remove':{
+   const entry=localAccount(p.accountId??p.id??p.name);if(!entry)throw new Error('ACCOUNT_NOT_FOUND');
+   return {state:await dispatch('removeAccount',{accountId:entry.account.id})};
+  }
+  case 'bots.list':{
+   const account=localAccount(p.accountId);
+   if(p.accountId&&!account)throw new Error('ACCOUNT_NOT_FOUND');
+   const bots=(latestState.bots??[]).filter(bot=>!account||bot.accountId===account.account.id);
+   return {bots};
+  }
+  case 'bots.get':{
+   const account=localAccount(p.accountId);
+   if(p.accountId&&!account)throw new Error('ACCOUNT_NOT_FOUND');
+   const bot=localBot(p.botId??p.id??p.name,account?.account.id);
+   if(!bot)throw new Error('BOT_NOT_FOUND');
+   return {bot,recipient:localRecipient(bot.id,bot.accountId)};
+  }
+  case 'bots.duplicate':{
+   const bot=localBot(p.botId??p.id??p.name,p.accountId);if(!bot)throw new Error('BOT_NOT_FOUND');
+   const result=await dispatch('duplicateBot',{accountId:bot.accountId,botId:bot.id});return {state:result,botId:result?.duplicatedBotId??''};
+  }
+  case 'bots.updateAvatar':{
+   const bot=localBot(p.botId??p.id??p.name,p.accountId);if(!bot)throw new Error('BOT_NOT_FOUND');
+   const result=await dispatch('updateBotAvatar',{accountId:bot.accountId,botId:bot.id,shape:p.shape,color:p.color});return {state:result,botId:result?.updatedBotId??bot.id};
+  }
+  case 'recipients.list':{
+   const account=localAccount(p.accountId);
+   if(p.accountId&&!account)throw new Error('ACCOUNT_NOT_FOUND');
+   return {recipients:(latestState.recipients??[]).filter(row=>!account||row.accountId===account.account.id)};
+  }
+  case 'recipients.get':{
+   const bot=localBot(p.botId,p.accountId);if(!bot)throw new Error('BOT_NOT_FOUND');
+   const recipient=localRecipient(bot.id,bot.accountId);if(!recipient)throw new Error('RECIPIENT_NOT_FOUND');return {recipient};
+  }
+  case 'recipients.configure':{
+   const bot=localBot(p.botId,p.accountId);if(!bot)throw new Error('BOT_NOT_FOUND');
+   const recipient=await dispatch('configure',{accountId:bot.accountId,botId:bot.id,patch:p.patch??{}});
+   return {recipient};
+  }
+  case 'inbox.list':{
+   const account=localAccount(p.accountId);
+   if(p.accountId&&!account)throw new Error('ACCOUNT_NOT_FOUND');
+   const limit=Math.min(Math.max(Number(p.limit)||50,1),500);
+   const rows=(latestState.inbox??[]).filter(row=>(!account||row.accountId===account.account.id)&&(!p.botId||row.botId===p.botId)&&(!p.status||row.status===p.status)).slice(0,limit);
+   return {receipts:rows};
+  }
+  case 'inbox.get':{
+   if(typeof p.id!=='string'||!p.id)throw new Error('RECEIPT_NOT_FOUND');
+   const receipt=await rpc.call('receipt',{id:p.id},30000);if(!receipt)throw new Error('RECEIPT_NOT_FOUND');return {receipt};
+  }
+  case 'inbox.create':{
+   const bot=localBot(p.botId,p.accountId);if(!bot)throw new Error('BOT_NOT_FOUND');
+   const receipt=await rpc.call('receive',{accountId:bot.accountId,botId:bot.id,source:'drop',manual:true,text:p.text??'',title:p.title??'',files:p.files??[]},RECEIVE_TIMEOUT);
+   return {receipt};
+  }
+  case 'inbox.submit':{
+   if(typeof p.id!=='string'||!p.id)throw new Error('RECEIPT_NOT_FOUND');
+   return {receipt:await rpc.call('submit',{id:p.id,text:p.text??'',files:p.files??[]},600000)};
+  }
+  case 'inbox.retry':return {receipt:await rpc.call('retry',{id:p.id},600000)};
+  case 'inbox.resolve':return {receipt:await rpc.call('resolve',{id:p.id},30000)};
+  case 'inbox.dismiss':return {receipt:await rpc.call('dismissComposer',{id:p.id},30000)};
+  case 'messages.send':{
+   const bot=localBot(p.botId,p.accountId);if(!bot)throw new Error('BOT_NOT_FOUND');
+   const base={accountId:bot.accountId,botId:bot.id,source:'drop',text:p.text??'',title:p.title??'',files:p.files??[]};
+   if(p.mode==='direct'){
+    const receipt=await rpc.call('receive',{...base,manual:false},RECEIVE_TIMEOUT);return {receipt};
+   }
+   const created=await rpc.call('receive',{...base,manual:true},RECEIVE_TIMEOUT);
+   if(p.mode==='compose')return {receipt:created};
+   return {receipt:await rpc.call('submit',{id:created.id,text:p.text??'',files:p.files??[]},600000)};
+  }
+  case 'messages.wait':{
+   if(typeof p.id!=='string'||!p.id)throw new Error('RECEIPT_NOT_FOUND');
+   const timeout=Math.min(Math.max(Number(p.timeout)||60,1),600)*1000,deadline=Date.now()+timeout;
+   let receipt=await rpc.call('receipt',{id:p.id},30000);
+   while(receipt&&!['sent','unconfirmed','failed','expired'].includes(receipt.status)&&Date.now()<deadline){
+    await delay(400);
+    receipt=await rpc.call('receipt',{id:p.id},30000);
+   }
+   if(!receipt)throw new Error('RECEIPT_NOT_FOUND');
+   return {receipt,timedOut:!['sent','unconfirmed','failed','expired'].includes(receipt.status)};
+  }
+  case 'runtime.status':return {runtime:latestState.runtime??{},accounts:(latestState.accounts??[]).map(entry=>({account:entry.account,connected:entry.connected,busy:entry.busy,checked:entry.checked,runtime:entry.runtime}))};
+  case 'share.status':return {menu:shareMenu?.status??null};
+  case 'share.update':return {menu:await dispatch('updateMenu',{})};
+  case 'share.order':return await dispatch('menuOrder',{});
+  case 'settings.get':return {theme:latestState.theme??'system',composerPrefs,openAtLogin,touchBarPinned,shortcuts:latestState.shortcuts??null,cli:cliPublic(),save:savePublic()};
+  case 'settings.theme':return {state:await dispatch('theme',{theme:p.theme})};
+  case 'settings.composer':return {prefs:await dispatch('setComposerPrefs',p)};
+  case 'settings.openAtLogin':return {state:await dispatch('setOpenAtLogin',{enabled:p.enabled===true})};
+  case 'settings.touchBar':return {state:await dispatch('setTouchBarPinned',{pinned:p.pinned===true})};
+  case 'settings.shortcut':return {state:await dispatch('setShortcut',{slot:p.slot,accelerator:p.accelerator})};
+  case 'settings.save':return {state:await dispatch('setSaveToLocal',p)};
+  case 'settings.cli':return {state:await dispatch('setCli',{enabled:p.enabled===true})};
+  default:throw new Error('LOCAL_API_METHOD_UNKNOWN');
+ }
+}
+
 async function nativeRequest(method,p){
   switch(method){
     case 'list':return {bots:latestState.bots,truncated:false};
@@ -755,15 +957,16 @@ async function nativeRequest(method,p){
     case 'compose':return openComposer(p.botId);
     case 'unwatch':return {};
     case 'resolve':{
-      for(const item of latestState.inbox.filter(row=>row.botId===p.botId&&row.status==='unconfirmed'&&!row.holdResolved))await rpc.call('resolve',{id:item.id});
+      for(const item of latestState.inbox.filter(row=>row.botId===p.botId&&(!p.accountId||row.accountId===p.accountId)&&row.status==='unconfirmed'&&!row.holdResolved))await rpc.call('resolve',{id:item.id});
       return {};
     }
-    case 'watch':return rpc.call('watch',{botId:p.botId,sessionId:p.sessionId});
+    case 'watch':{const bot=findBot(p.botId,p.accountId);return rpc.call('watch',{accountId:bot?.accountId,botId:p.botId,sessionId:p.sessionId});}
     case 'send':{
       if(preview)throw new Error('PREVIEW_ONLY');
+      const bot=findBot(p.botId,p.accountId);if(!bot)throw new Error('BOT_NOT_FOUND');
       let id=p.receiptId;
-      if(id){const receipt=await rpc.call('composer',{id});if(receipt.botId!==p.botId)throw new Error('RECEIPT_SCOPE_MISMATCH');}
-      else{id=(await rpc.call('receive',{botId:p.botId,source:'drop',manual:true,text:p.text,files:p.files},RECEIVE_TIMEOUT)).id;}
+      if(id){const receipt=await rpc.call('composer',{id});if(receipt.botId!==p.botId||receipt.accountId!==bot.accountId)throw new Error('RECEIPT_SCOPE_MISMATCH');}
+      else{id=(await rpc.call('receive',{accountId:bot.accountId,botId:p.botId,source:'drop',manual:true,text:p.text,files:p.files},RECEIVE_TIMEOUT)).id;}
       const result=await rpc.call('submit',{id,text:p.text,files:p.files},0);
       if(result.status!=='sent')throw new Error(result.status==='unconfirmed'?'SEND_UNCONFIRMED':result.error??'SEND_FAILED');
       return result;
@@ -797,19 +1000,36 @@ async function dispatch(method,p){
     }
     case 'login':return accountAction('login');
     case 'desktopLogin':return accountAction('desktopLogin');
+    case 'addAccount':return accountAction(p.method==='desktop'?'desktopLogin':'login');
+    case 'removeAccount':{
+      if(accountBusy)throw new Error('ACCOUNT_BUSY');
+      accountBusy=true;
+      try{
+        const state=await rpc.call('removeAccount',{accountId:p.accountId});
+        await vault.remove(p.accountId);
+        latestState=state;if(menuReconciler)menuReconciler.request(menuState());await companion?.call('state',state);update();return publicState();
+      }finally{accountBusy=false;}
+    }
+    case 'setAccountChecked':{
+      const state=await rpc.call('setAccountChecked',{accountId:p.accountId,checked:p.checked===true});
+      latestState=state;if(menuReconciler)menuReconciler.request(menuState());update();return publicState();
+    }
     case 'logout':{
       if(accountBusy)throw new Error('ACCOUNT_BUSY');
-      const state=await rpc.call('logout');await vault.remove();await forgetCliCredential();latestState=state;await companion?.call('state',state);update();return publicState();
+      accountBusy=true;
+      try{
+        const state=await rpc.call('logout');await vault.clear();latestState=state;if(menuReconciler)menuReconciler.request(menuState());await companion?.call('state',state);update();return publicState();
+      }finally{accountBusy=false;}
     }
     case 'refresh':await rpc.call('refresh');return publicState();
-    case 'duplicateBot':{const result=await rpc.call('duplicateBot',{botId:p.botId});return {...publicState(),duplicatedBotId:result?.bot?.id??''};}
+    case 'duplicateBot':{const result=await rpc.call('duplicateBot',{accountId:p.accountId,botId:p.botId});return {...publicState(),duplicatedBotId:result?.bot?.id??''};}
     case 'updateBotAvatar':{
       if(preview)throw new Error('PREVIEW_ONLY');
-      const result=await rpc.call('updateBotAvatar',{botId:p.botId,shape:p.shape,color:p.color});
+      const result=await rpc.call('updateBotAvatar',{accountId:p.accountId,botId:p.botId,shape:p.shape,color:p.color});
       latestState={...latestState,...(result?.state??{})};update();
       return {...publicState(),updatedBotId:result?.bot?.id??p.botId};
     }
-    case 'configure':return rpc.call('configure',{botId:p.botId,patch:p.patch});
+    case 'configure':return rpc.call('configure',{accountId:p.accountId,botId:p.botId,patch:p.patch});
     case 'disableAllReceive':return rpc.call('disableAllReceive');
     case 'explorerMenu':{
       if(preview)throw new Error('PREVIEW_ONLY');
@@ -826,13 +1046,24 @@ async function dispatch(method,p){
     case 'copyDiagnostics':return copyDiagnostics();
     case 'updateMenu':{
       if(!shareMenu||preview)throw new Error('MENU_UNAVAILABLE');
-      if(!latestState.account?.id||latestState.accountBusy)throw new Error('ACCOUNT_BUSY');
-      menuReconciler.request(latestState);await menuReconciler.flush({force:true});return shareMenu.status;
+      if(!(latestState.accounts??[]).some(entry=>entry.checked)&&!savePrefs.enabled)throw new Error('ACCOUNT_BUSY');
+      if(latestState.accountBusy&&!savePrefs.enabled)throw new Error('ACCOUNT_BUSY');
+      menuReconciler.request(menuState());await menuReconciler.flush({force:true});return shareMenu.status;
     }
     case 'menuOrder':return readShareOrder();
     case 'theme':nativeTheme.themeSource=p.theme;return rpc.call('theme',{theme:p.theme});
     case 'setShortcut':return rpc.call('setShortcut',{slot:p.slot,accelerator:p.accelerator});
     case 'setCli':return setCliEnabled(!!p.enabled);
+    case 'setSaveToLocal':{
+      if(preview)throw new Error('PREVIEW_ONLY');
+      if(typeof p.enabled==='boolean')savePrefs.enabled=p.enabled;
+      if(p.mode==='default'||p.mode==='choose')savePrefs.mode=p.mode;
+      if(typeof p.defaultDir==='string'&&isAbsolute(p.defaultDir))savePrefs.defaultDir=p.defaultDir;
+      saveSavePrefs();update();
+      if(shareMenu&&menuReconciler){menuReconciler.request(menuState());await menuReconciler.flush().catch(()=>{});}
+      return {save:savePublic(),menu:shareMenu?.status??null};
+    }
+    case 'chooseSaveDir':return chooseSaveDirectory(p.kind==='last'?'last':'default');
     case 'setOpenAtLogin':{
       const next=!!p.enabled;
       if(shouldApplyLoginItem({preview,packaged:app.isPackaged})){try{applyLoginItem(next,app);}catch{throw new Error('LOGIN_ITEM_FAILED');}}
@@ -892,10 +1123,10 @@ async function dispatch(method,p){
       clipboard.writeText(link);return {ok:true};
     }
     case 'openBot':return openInGrokBot(p.botId);
-    case 'compose':return openComposer(p.botId);
-    case 'openReceipt':{const item=await rpc.call('composer',{id:p.id});return openComposer(item.botId,item);}
+    case 'compose':return openComposer(p.botId,undefined,{accountId:p.accountId});
+    case 'openReceipt':{const item=await rpc.call('composer',{id:p.id});return openComposer(item.botId,item,{accountId:item.accountId});}
     case 'sendReceipt':{const item=await rpc.call('composer',{id:p.id});return rpc.call('submit',{id:p.id,text:item.text??''},0);}
-    case 'sendDraft':return sendDraft(p.botId,p.text??'',p.files,p.receiptId);
+    case 'sendDraft':return sendDraft(p.botId,p.text??'',p.files,p.receiptId,p.remoteKeep,p.accountId);
     case 'retry':if(preview)throw new Error('PREVIEW_ONLY');return rpc.call('retry',{id:p.id});
     case 'resolve':return rpc.call('resolve',{id:p.id});
     case 'fileSizes':{
@@ -918,7 +1149,7 @@ async function dispatch(method,p){
 function serviceEvent(message){
   if(message.event==='state'){
     latestState=message.data;applyShortcuts(latestState.shortcuts);update();
-    if(menuReconciler)menuReconciler.request(latestState);
+    if(menuReconciler)menuReconciler.request(menuState());
     if(process.platform==='win32')syncExplorer();
     if(companion?.ready)void companion.call('state',latestState).catch(()=>{});
     if(pendingSharedComposers.size)void flushSharedComposers();
@@ -926,12 +1157,17 @@ function serviceEvent(message){
   if(message.event==='login.url'){
     try{const url=new URL(message.data.url);if(url.origin!=='https://cursor.com'||url.pathname!=='/loginDeepControl')throw new Error();void shell.openExternal(url.href).catch(()=>issue('BROWSER_OPEN_FAILED'));}catch{issue('LOGIN_URL_INVALID');}
   }
-  if(message.event==='auth.expired'){hostIssue='LOGIN_REQUIRED';void vault.remove().catch(()=>{});void forgetCliCredential().then(()=>update()).catch(()=>update());}
+  if(message.event==='auth.expired'){
+    const accountId=typeof message.data?.accountId==='string'?message.data.accountId:'';
+    if(accountId)void vault.remove(accountId).catch(()=>{});
+    if(!(latestState.accounts??[]).some(entry=>entry.connected))hostIssue='LOGIN_REQUIRED';
+    update();
+  }
   if(message.event==='reply'&&!preview&&Notification.isSupported())systemNotification({title:message.data.name||'Grok Bot',body:zh?'收到新回复':'New reply'}).show();
   if(message.event==='share.preparing'){
     const data=message.data;
     if(data?.mode==='compose'&&!preview&&!composerBar&&!composerVisible()){
-      void openComposer(data.botId,undefined,{preparing:data,captureSelection:false,keepOpen:true}).catch(error=>{const code=errorCode(error);if(!['BOT_NOT_FOUND','ACCOUNT_BUSY'].includes(code))issue(code);});
+      void openComposer(data.botId,undefined,{preparing:data,captureSelection:false,keepOpen:true,accountId:data.accountId}).catch(error=>{const code=errorCode(error);if(!['BOT_NOT_FOUND','ACCOUNT_BUSY'].includes(code))issue(code);});
     }
   }
   if(message.event==='share.received'){
@@ -952,7 +1188,12 @@ function serviceEvent(message){
   }
 }
 function ownerWindow(){const owner=ipcSender?BrowserWindow.fromWebContents(ipcSender):null;return owner&&!owner.isDestroyed()?owner:window;}
-function trusted(event){const contents=event.sender;if(event.senderFrame!==contents.mainFrame)return false;return [window,floatWindow,avatarWindow,pickerWindow,sharePickerWindow].some(target=>target&&contents===target.webContents);}
+function trusted(event){
+  try{
+    const contents=event.sender;if(!contents||event.senderFrame!==contents.mainFrame)return false;
+    return [window,floatWindow,avatarWindow,pickerWindow,sharePickerWindow].some(target=>target&&!target.isDestroyed()&&contents===target.webContents);
+  }catch{return false;}
+}
 // win32 去掉应用菜单后，编辑快捷键不再由菜单 accelerator 派发，这里补回输入框命令
 // 2026-11-01 before-input-event：selectAll/copy/paste/cut/undo/redo，contents 无返回值
 function bindWindowsEditKeys(contents){
@@ -1002,6 +1243,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   const link=(argv??[]).map(item=>String(item).trim().replace(/^"(.*)"$/,'$1')).find(item=>item.startsWith('grokbotanywhere://'));
   if(forward){forward.argv=argv;explorerBatch.push(forward);}
   if(link){if(!window||window.isDestroyed()||!window.isVisible())hideDock();acceptDeeplink(link);}
+  if(argv.includes('--share-intake'))void drainSaveInbox();
   if(forward||link||argv.includes('--share-intake')||openedAsLoginItem({argv:argv}))return;
   showMainWindow();
  });
@@ -1018,7 +1260,9 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
     else app.setAsDefaultProtocolClient('grokbotanywhere',process.execPath,[app.getAppPath()]);
   }
   if(process.platform==='win32'&&!preview)warmExplorerSelection();
-  vault=new CredentialVault(join(app.getPath('userData'),'account.enc'),safeStorage);
+  vault=new AccountVault(join(app.getPath('userData'),'accounts'),safeStorage);
+  legacyVault=new CredentialVault(join(app.getPath('userData'),'account.enc'),safeStorage);
+  localApiInfo=localApiPaths({userData:app.getPath('userData')});
   if(!preview&&loadCliPref().enabled){try{await setCliEnabled(true);}catch(error){cliStatus={enabled:false,command:'',skillsPath:'',claudeLinked:false,credential:false,pathSnippet:false,error:errorCode(error)};}}
   if(!preview&&process.platform==='darwin'){
     const template=menuHostTemplate({packaged:app.isPackaged,resourcesPath:process.resourcesPath,devRoot:join(here,'../..')});
@@ -1045,11 +1289,24 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   worker.stderr?.on('data',bytes=>{if(smoke)process.stderr.write(bytes);});
   loadComposerPrefs();
   loadShellPrefs();
+  loadSavePrefs();
   const loginStartup=loginItemStartup({known:loginItemKnown,enabled:openAtLogin});
   if(loginStartup&&shouldApplyLoginItem({preview,packaged:app.isPackaged})){try{applyLoginItem(loginStartup.openAtLogin,app);}catch{/* Keep the saved preference when the system rejects it. */}}
-  latestState=await rpc.call('initialize',{root:join(app.getPath('userData'),'inbox'),shareRoot:shareMenu?.root,preview,locale:app.getLocale()});
+  let storedAccounts=[];
+  try{storedAccounts=await vault.list();}catch(error){if(error?.message==='CREDENTIAL_STORAGE_UNAVAILABLE')throw error;}
+  let legacyCredentials=null;
+  if(!storedAccounts.length){try{legacyCredentials=await legacyVault.load();}catch(error){if(error?.message==='CREDENTIAL_STORAGE_UNAVAILABLE')throw error;}}
+  latestState=await rpc.call('initialize',{root:join(app.getPath('userData'),'inbox'),shareRoot:shareMenu?.root,preview,locale:app.getLocale(),accounts:[...storedAccounts,...legacyCredentials?[{credentials:legacyCredentials}]:[]]});
+  localApi=new LocalApiServer({userData:app.getPath('userData'),handler:(method,params)=>localApiCall(method,params)});
+  try{await localApi.start();}catch(error){localApi=null;issue(errorCode(error));}
+  if(legacyCredentials){
+    const account=latestState.accounts?.[0];
+    if(account?.connected&&account.account?.id){await vault.save(account.account.id,legacyCredentials);await legacyVault.remove().catch(()=>{});}
+  }
   applyShortcuts(latestState.shortcuts);
-  if(menuReconciler)menuReconciler.request(latestState);
+  void drainSaveInbox();
+  setInterval(()=>void drainSaveInbox(),2000);
+  if(menuReconciler)menuReconciler.request(menuState());
   void refreshFinderIfStale();
   nativeTheme.themeSource=latestState.theme;
   ipcMain.handle('anywhere:call',async(event,method,params)=>{
@@ -1109,7 +1366,7 @@ if(!app.requestSingleInstanceLock({argv:process.argv})&&!smoke){app.quit();}else
   }
   if(!preview){
     explorerBatch.arm(async(botId,files,meta)=>{try{await deliverExplorer({botId,files,argv:meta?.argv??[]});}catch(error){issue(errorCode(error));}});
-    try{const credentials=await vault.load();if(credentials){const result=await rpc.call('connect',credentials);latestState=result.state;applyShortcuts(latestState.shortcuts);update();void rpc.call('resume').catch(error=>issue(errorCode(error)));presentPendingComposer();}}
+    try{void rpc.call('resume').catch(error=>issue(errorCode(error)));presentPendingComposer();}
     catch(error){issue(errorCode(error));}
     explorerSettled=true;
     deeplinkReady=true;
@@ -1128,6 +1385,6 @@ app.on('activate',()=>{
 });
 app.on('window-all-closed',()=>{if(smoke)app.quit();});
 app.on('session-end',()=>{quitting=true;});
-app.on('before-quit',()=>{quitting=true;if(tray){tray.destroy();tray=null;}stopExplorerSelection();unregisterShortcuts();menuReconciler?.close();companion?.stop();worker?.kill();rpc?.close();});
+app.on('before-quit',()=>{quitting=true;if(tray){tray.destroy();tray=null;}stopExplorerSelection();unregisterShortcuts();menuReconciler?.close();saveInbox?.stop();void localApi?.close();companion?.stop();worker?.kill();rpc?.close();});
 // Preview data uses an OS temporary directory. Do not delete Chromium's cache
 // while its helper processes are still shutting down.

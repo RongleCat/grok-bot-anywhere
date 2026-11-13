@@ -69,6 +69,12 @@
 - 规则：所有平台入口统一走 `regularFiles`；不是普通文件就丢弃并提示。
 - Seen 1×（2026-10-30，`main.mjs` + `selection.mjs`）。
 
+**分享扩展无法知道宿主 App，系统级注册会同时出现在 Finder。**
+- 2026-11-12：macOS 没有公开 API 暴露触发分享的宿主（openradar 48001368）；保存到本地只能用 `NSWorkspace.frontmostApplication` 的 bundle id 猜测微信，扩展本身仍是全局注册，Finder 共享里可能显示该行。
+- 规则：保存/来源判断必须做运行时校验并允许拒绝；不要承诺“只出现在微信”，除非同时实现按前台 App 动态 `pluginkit` 启停。
+- 证据：`native/macos/Sources/GrokBotShare/GrokBotSaveViewController.swift`、`docs/subsystems/share-menu.md`。
+- Seen 1×（2026-11-12）。
+
 **微信会缓存转发菜单；更新后必须重开微信。**
 - 2026-10-29 起：菜单已注册但微信仍显示旧项/少项；退出微信再开才刷新。
 - 规则：UI 文案写清“更新后重开微信”；排障第一步就是完全退出微信。
@@ -135,6 +141,12 @@
 - 规则：菜单图标只传形状/颜色/图片/group members，`main:false`；`avatarKey` 不包含主 Bot 或运行状态。
 - 证据：`desktop/src/main/menu-icons.mjs`、`desktop/src/share/model.mjs`；测试断言主 Bot 状态不改变 key。
 - Seen 1×（2026-11-01）。
+
+**多账号的 Bot 去重和群成员查找必须按账号作用域。**
+- 2026-11-12：`listedBots()` 原来按名字全局去重；两个账号都有同名分组时，一个账号的分组会把另一个账号的同名 Bot 隐藏；`groupMembers()` 也会跨账号找成员。
+- 规则：任何 `listedBots` / `groupMembers` / 菜单条目循环都先按 `accountId` 分组；扁平状态只用于展示，不用于跨账号匹配。
+- 证据：`desktop/src/renderer/group-avatar.mjs`、`desktop/src/share/model.mjs`。
+- Seen 1×（2026-11-12）。
 
 **更新请求不能被正在进行的安装吞掉；手动「重新同步」必须是强制重建。**
 - 2026-11-01：切账号或连续改顺序时，安装前的 `isCurrent` 检查会抛 `MENU_SUPERSEDED`；旧实现把它当失败，且安装期间到达的新状态请求被 `running` 吞掉，结果是红色横幅 + 微信仍是旧菜单。手动按钮只 bump revision，菜单状态被判定为最新时不会重建。

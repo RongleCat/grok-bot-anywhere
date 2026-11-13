@@ -15,13 +15,13 @@ Electron main (desktop/src/main/main.mjs)
 ├─ BrowserWindow 头像窗           out/composer.html?part=avatar
 ├─ BrowserWindow Tab 宫格         out/composer.html?part=picker
 ├─ utilityProcess 服务            src/service/worker.mjs
-│   └─ SQLite inbox.sqlite + 上传 + 发送队列 + 分享收件箱 drain
+│   └─ 多账号 AccountManager + SQLite inbox.sqlite + 上传 + 发送队列 + 分享收件箱 drain
 ├─ Native companion (macOS)       native/macos → desktop/native/GrokBotCompanion.app
 └─ Share extensions (macOS)       desktop/native/GrokBotMenuHost.app + 12 appex
 ```
 
 - **主进程**只做窗口、系统集成、IPC 白名单和编排；不直接持有 Bot 凭据以外的业务状态。
-- **服务进程**是唯一拥有收件库、发送队列和 SDK 客户端的地方。主进程通过 `RpcClient`（`src/main/rpc.mjs`）发 JSON 请求，通过 `anywhere:event` 推状态。
+- **服务进程**是唯一拥有收件库、发送队列、账号注册表和 SDK 客户端的地方。主进程通过 `RpcClient`（`src/main/rpc.mjs`）发 JSON 请求，通过 `anywhere:event` 推状态；凭据仍由主进程 safeStorage 持有，启动时把各账号凭据交给服务连接。
 - **渲染进程**没有 Node 集成、没有凭据。`preload.cjs` 暴露 `call`、事件订阅、窗口控制等有限方法；主进程 `trusted()` 校验发送者是四个本地窗口之一的主 frame。
 - **原生伴侣**只在 macOS 启动，通过 stdin/stdout NDJSON 通信；它不读账号凭据，不联网发消息，所有发送都回到服务进程。见 [原生伴侣](subsystems/native-companion.md)。
 
@@ -31,7 +31,8 @@ Electron main (desktop/src/main/main.mjs)
 
 | 入口 | 路径 | 第一落点 |
 | --- | --- | --- |
-| 微信转发（macOS） | 分享扩展复制 ZIP/文本/媒体到 `ShareInbox/Ready/<id>/` | 服务进程 `ShareInbox.drain()`，1.5s 轮询 |
+| 微信转发（macOS） | 分享扩展复制 ZIP/文本/媒体到 `ShareInbox/Ready/<id>/` | 服务进程 `ShareInbox.drain()`，250ms 轮询 |
+| 微信分享保存（macOS） | 保存扩展复制文件到 `ShareInbox/Save/Ready/<id>/` | 主进程 `SaveInbox`，不创建 receipt |
 | 快捷指令 / URL | `grokbotanywhere://compose|send` | 主进程深链解析 → 服务 `receive` |
 | Explorer 右键（Windows） | `--explorer-forward --bot=<id> -- <file>` | 主进程 `parseExplorerForward` → 服务 `receive` |
 | 悬浮输入框 | 全局快捷键 / 托盘 / `composer.open` | 主进程 `openComposer` → 用户确认后 `sendDraft` |
@@ -71,7 +72,7 @@ Electron main (desktop/src/main/main.mjs)
 1. **单一写入者**：收件库、凭据、发送队列只由服务进程写；主进程不写 SQLite。
 2. **先落地再联网**：任何入口都先产生本地 receipt/文件，网络失败不丢内容。
 3. **结果不明确 ≠ 失败**：`unconfirmed` 会暂停该 Bot，禁止自动重发；用户 `resolve` 后才解锁。
-4. **账号隔离**：receipt、recipient、分享批次都带 `accountId`；账号变化清空原生草稿与绑定。
+4. **账号隔离**：receipt、recipient、分享批次都带 `accountId`；多账号时每个账号有独立 client/Delivery，分享批次按 `accountId` 路由，不跨账号投递。
 5. **渲染层无权限**：渲染进程拿不到 Node、token、文件系统；所有动作走白名单 IPC。
 6. **平台差异止于边界**：`shell/actions.mjs`、`share/`、`native/` 吸收平台差异；业务逻辑保持可移植。
 

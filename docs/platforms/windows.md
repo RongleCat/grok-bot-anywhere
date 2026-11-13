@@ -33,7 +33,7 @@
 
 清单必须写成腾讯自家分享包那种宽声明（`SupportsAnyFileType` + `StorageItems`/`Text`/`URI`/`Bitmap`），窄声明会被微信宿主在枚举阶段过滤；改完必须杀掉 `Weixin`/`WeChatAppEx` 进程，菜单结果由 `WeChatAppEx` 缓存。
 
-macOS 仍是每个 Bot 一个签名 appex，见[分享菜单](../subsystems/share-menu.md)。
+macOS 仍是每个 Bot 一个签名 appex，见[分享菜单](../subsystems/share-menu.md)。「保存到本地」只做在 macOS 微信分享里，Windows 的微信/资源管理器分享不增加该入口。
 
 ## 分发与签名
 
@@ -128,7 +128,7 @@ Windows 11、Node v22.22.0、开发模式（`npm run dev`，非 `--preview`）�
 | Explorer 级联注册 | 通过（结构） | 父键 `*\shell\GrokBotAnywhere`（`MUIVerb=Grok Bot`、`ExtendedSubCommandsKey=GrokBotAnywhere.Menu`、`MultiSelectModel=Document`），子键 `01_<botId>` 的 command 形如 `--explorer-forward --bot=<id> -- "%1"`；只注册 enabled 的 Bot |
 | `npm test`（desktop） | 128 通过 / 2 跳过（共 130） | 跳过的两项是 POSIX-only 断言（rc 文件、ENOTDIR） |
 | `npm run test:client` | 60 通过 | — |
-| 随包 `grok-bot.cmd --version` | 通过 | `grok-bot 0.3.0` / `grok-bot-target 0.78.1` / `runtime node v22.22.0` |
+| 随包 `grok-bot.cmd --version` | 通过（替换前） | 旧 0.3.0；现在 `grok-bot` 是 `gba` 别名，Windows 未重测 |
 
 实机发现并已修复（见 [LESSONS](../../LESSONS.md)）：`core.autocrlf=true`（Git for Windows 默认）会把 `bin/grok-bot.mjs` 检出成 CRLF，使随包校验失败，**Windows 上 `grok-bot` 的所有调用都以 `CLI_CHECKSUM_MISMATCH` 退出 3**。`.gitattributes` 已把 `desktop/resources/grok-bot-skill/**` 标为 `-text`。
 

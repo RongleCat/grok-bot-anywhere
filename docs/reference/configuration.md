@@ -9,6 +9,10 @@
 | `inbox/inbox.sqlite` (+ `-wal`, `-shm`) | receipts、recipients、preferences | 删 = 丢收件历史；先备份 |
 | `inbox/files/<receiptId>/` | 该条收件的附件副本（0600） | 随 receipt 清理 |
 | `ShareInbox/Ready|Staging|Imported|Rejected/` | 分享扩展投递批次 | `Imported` 可清；`Ready` 未导入不要删 |
+| `ShareInbox/Save/Ready|Staging|Saved|Failed/` | 微信「保存到本地」批次 | `Saved` 可清；`Ready` 未保存不要删 |
+| `accounts/<id>.enc` | 每个账号一份 safeStorage 加密凭据 | 删 = 退出该账号 |
+| `local-api.sock` / `local-api.token` | `gba` 本地 socket 与一次性 token | 应用退出后 socket 消失；token 可删，重启重生成 |
+| `save-prefs.json` | 保存到本地开关、默认位置、上次目录 | 可删，回默认 |
 | `cli/` | `grok-bot` 的明文凭据副本与 profile | 关开关/退出登录会自动删 |
 | `composer-prefs.json` | 发送后保留、点击外部收起 | 可删，回默认 |
 | `cli-enabled.json` | 命令行开关 | 可删 |
@@ -28,10 +32,10 @@ Windows 根：`%APPDATA%\Grok Bot Anywhere\`
 
 | 凭据 | 位置 | 说明 |
 | --- | --- | --- |
-| 应用登录 | Electron `safeStorage`（macOS 落在 Keychain） | 无明文回退 |
-| CLI 副本 | `userData/cli`（Windows `%LOCALAPPDATA%`） | 明文，仅开关开启时存在 |
+| 应用登录 | Electron `safeStorage`（macOS 落在 Keychain），每个账号一个 `accounts/<id>.enc` | 无明文回退；旧 `account.enc` 迁移后删除 |
+| 旧 CLI 目录 | `userData/cli` | 旧版本遗留；开关启用/关闭时清理，`gba` 不使用 |
 | 本机 Grok Bot 登录 | 系统 Keychain，`Grok Bot Safe Storage` | 只在用户主动点“使用本机登录”时读 |
-| 分享扩展 | 无 | 扩展无网络权限，只写本地文件 |
+| 分享扩展 / 保存扩展 | 无 | 扩展无网络权限，只写本地文件 |
 
 ## 不要做
 
@@ -43,7 +47,7 @@ Windows 根：`%APPDATA%\Grok Bot Anywhere\`
 ## 备份与恢复
 
 1. 退出应用（托盘 → 退出）。
-2. 复制整个 `userData/inbox/` 与 `ShareInbox/`。
+2. 复制整个 `userData/inbox/`、`ShareInbox/` 与 `accounts/`。
 3. 恢复时放回同一路径，权限保持 `0700`/`0600`。
 4. 启动后检查收件页；`phase=sending` 的条目会被标为 `unconfirmed`，这是预期。
 

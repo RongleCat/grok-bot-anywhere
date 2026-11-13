@@ -21,7 +21,10 @@ final class ShareViewController: NSViewController {
             let bindingURL = Bundle.main.url(forResource: "binding", withExtension: "json")!
             let binding = try JSONSerialization.jsonObject(with: Data(contentsOf: bindingURL)) as? [String: Any] ?? [:]
             let configuration = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("configuration.json"))) as? [String: Any] ?? [:]
-            guard let accountID = binding["accountId"] as? String, configuration["accountId"] as? String == accountID,
+            let configuredAccounts: [String] = (configuration["accounts"] as? [String])
+                ?? (configuration["accountId"] as? String).map { [$0] }
+                ?? []
+            guard let accountID = binding["accountId"] as? String, configuredAccounts.contains(accountID),
                   let botID = binding["botId"] as? String,
                   let entry = (configuration["entries"] as? [[String: Any]])?.first(where: { $0["botId"] as? String == botID && $0["accountId"] as? String == accountID }) else { throw failure("此接收单位已关闭或账号已切换，请更新微信转发菜单。") }
             let id = UUID().uuidString.lowercased(), fileManager = FileManager.default

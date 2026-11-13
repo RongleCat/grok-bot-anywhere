@@ -28,6 +28,12 @@ function row(bot,position){
   name.className='name';
   name.textContent=bot.name;
   element.append(name);
+  if(bot.accountName){
+    const account=document.createElement('span');
+    account.className='account';
+    account.textContent=bot.accountName;
+    element.append(account);
+  }
 
   element.addEventListener('click',()=>select(position));
   element.addEventListener('dblclick',()=>confirm(bot.botId));

@@ -9,6 +9,28 @@ test('share menu and local importer are implemented',()=>assert.ok(loaded.every(
 const model=loaded[0].value,ShareInbox=loaded[1].value?.ShareInbox;
 const state={account:{id:'a'},bots:Array.from({length:14},(_,i)=>({id:`bot-${i}`,name:`Bot ${i}`,avatarShape:'cloud',avatarColor:'brown'})),recipients:Array.from({length:14},(_,i)=>({botId:`bot-${i}`,enabled:true,order:i,mode:'compose',prefix:'',sources:{wechat:true}}))};
 if(model&&ShareInbox){
+
+ test('multiple checked accounts keep their own order and configuration accounts',()=>{
+  const input=structuredClone(state);
+  input.bots=input.bots.slice(0,4).map((bot,index)=>({...bot,accountId:index<2?'a':'b',accountName:index<2?'A':'B'}));
+  input.recipients=input.recipients.slice(0,4).map((recipient,index)=>({...recipient,accountId:index<2?'a':'b'}));
+  input.accounts=[
+   {account:{id:'a'},checked:true,runtime:{mainAgentId:null,statuses:[],pinnedAgentIds:[],sections:[]}},
+   {account:{id:'b'},checked:true,runtime:{mainAgentId:null,statuses:[],pinnedAgentIds:[],sections:[]}}
+  ];
+  const entries=model.menuEntries(input);
+  assert.deepEqual(entries.map(entry=>entry.accountId),['a','a','b','b']);
+  const configuration=model.shareConfiguration(input);
+  assert.equal(configuration.version,2);
+  assert.deepEqual(configuration.accounts,['a','b']);
+  assert.equal(configuration.accountId,null);
+ });
+ test('the save slot leaves at most eleven Bot rows',()=>{
+  const input=structuredClone(state);
+  input.saveToLocal=true;
+  assert.equal(model.menuEntries(input).length,11);
+  assert.equal(model.menuPlan(input,{entries:[]}).saveEnabled,true);
+ });
  test('a same-named single bot is not a second share row for the group',()=>{
   const input=structuredClone(state);
   input.bots[0].kind='GROK_BOT_AGENT_KIND_ROOM';

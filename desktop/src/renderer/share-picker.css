@@ -87,6 +87,7 @@ body {
 }
 .avatar img, .avatar canvas { width: 100%; height: 100%; display: block; object-fit: cover; }
 .avatar-fallback { width: 100%; height: 100%; display: block; border-radius: 50%; }
+.account { width: 100%; font-size: 9px; line-height: 1.1; text-align: center; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .name {
   width: 100%;
   min-height: 24px;
