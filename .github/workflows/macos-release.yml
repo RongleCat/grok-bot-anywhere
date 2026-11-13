@@ -145,4 +145,5 @@ jobs:
             gh release create "$tag" --title "Grok Bot Anywhere $tag" --notes-file "$notes" --verify-tag \
               || gh release view "$tag" >/dev/null
           fi
+          gh release edit "$tag" --title "Grok Bot Anywhere $tag" --notes-file "$notes"
           gh release upload "$tag" desktop/release/*.dmg --clobber

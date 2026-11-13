@@ -41,6 +41,8 @@ gh workflow run macos-release.yml -f version=0.1.5
 
 CI 会验证 App 的签名、架构、App ticket 和 DMG ticket，并上传 `macos-arm64` / `macos-x64` artifact。
 
+**Tag 构建会自动发布 Release**：push `v*` tag 时，macOS 与 Windows workflow 都会用 `gh release create/upload` 把资产挂到同名 Release；手动 `workflow_dispatch` 只上传 Actions artifact，不创建 Release。Release notes 来自 `docs/updates/<tag去掉v>.md`，缺失会直接失败。
+
 ## macOS
 
 ```sh
@@ -95,6 +97,23 @@ npm run package:win
 ```
 
 产物 `release/Grok Bot Anywhere-0.1.5-win.zip`，未签名；由用户拉取后自行签名或放行。自签只影响本机信任，公共分发仍会被 SmartScreen/SAC 拦。**发布前必须在 Windows 机器上解压启动一次**；当前没有这条证据。
+
+## 0.1.5 发布记录
+
+```text
+Commit: 7c0fbe6 (tag v0.1.5)
+macOS: arm64 DMG 125,399,008 bytes (~119.6 MiB); x64 DMG 131,972,190 bytes (~125.9 MiB); Developer ID signed, notarized, stapled
+GitHub Actions: macOS release 43434824232 success (both arches); Windows release 43434824254 success
+Windows: x64 zip 153,789,560 bytes (~146.7 MiB); unsigned; Windows install/self-sign not run
+SHA256: arm64 75ef9aab4da1a9b849a251b3c5a9f354bc1c5a3350046611a4823e4cd0a3fc65
+SHA256: x64 2a8a3cf91dd319b2af50b61add7b471b07ab774e07165fb3bae2a1ab62301cc2
+SHA256: win 9d121459e216ecadf49af06ee42d665b8f37f6cee186385718d35e6f9fc38488
+GitHub Release: https://github.com/RongleCat/grok-bot-anywhere/releases/tag/v0.1.5
+Tests: desktop 191 passed; client-protocol 61 passed; docs check passed; smoke passed
+Not run: Swift test suite (CommandLineTools lacks SwiftUIMacros), avatar test (vendor/bloub submodule not initialized), Windows real-device install, live WeChat/Finder save flow, real two-account send/share
+```
+
+0.1.5 的更新说明见 [0.1.5 更新说明](../updates/0.1.5.md)。
 
 ## 0.1.4 发布记录
 
