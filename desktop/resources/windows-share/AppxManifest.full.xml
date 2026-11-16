@@ -24,7 +24,6 @@
   </Dependencies>
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
-    <rescap:Capability Name="unvirtualizedResources" />
   </Capabilities>
   <Applications>
     <Application Id="GrokBot" Executable="app\Grok Bot Anywhere.exe" uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
